@@ -1,3 +1,23 @@
 # System
 .DS_Store
 
+# Development
+docs/reference/
+
+# Reference
+NAMDRun-python/
+
+# Dependencies
+node_modules
+
+# Builds
+/build
+/.svelte-kit
+/package
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Environment
+.env
+.env.*
+!.env.example
