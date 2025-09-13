@@ -1,28 +1,53 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
 
+/**
+ * Playwright configuration for NAMDRunner
+ * 
+ * NOTE: This configuration is for the Agent Debug Toolkit only.
+ * For full E2E testing of the built Tauri app, use WebdriverIO instead.
+ * See docs/testing-spec.md for complete testing strategy.
+ */
 export default defineConfig({
-  testDir: './tests/e2e',
-  fullyParallel: true,
+  testDir: './tests/ui', // UI testing with agent debug toolkit
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
+  workers: 1,
+  timeout: 30000,
+  reporter: [
+    ['html'],
+    ['json', { outputFile: 'test-results/playwright-results.json' }],
+    process.env.CI ? ['github'] : ['list']
+  ],
+  
   use: {
-    baseURL: 'http://127.0.0.1:1420',
+    // Configuration for web UI testing only
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+    headless: !!process.env.CI,
+    viewport: { width: 1280, height: 720 },
+    storageState: undefined, // Fresh state for each test
   },
 
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: 'web-ui-tests',
+      testDir: './tests/ui',
+      use: {
+        // For future web UI tests if needed
+        // Agent debug toolkit uses its own setup
+      },
     },
   ],
 
-  webServer: {
-    command: 'npm run dev',
-    port: 1420,
-    reuseExistingServer: !process.env.CI,
+  // Output directories
+  outputDir: 'tests/ui/test-results/',
+  
+  // Expect configuration for visual testing
+  expect: {
+    threshold: 0.2,
+    toHaveScreenshot: { threshold: 0.2 },
+    toMatchScreenshot: { threshold: 0.2 },
   },
 });

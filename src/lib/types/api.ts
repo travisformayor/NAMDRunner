@@ -46,7 +46,9 @@ export interface SlurmConfig {
 export interface InputFile {
   name: string;
   localPath: string;
-  fileType: 'pdb' | 'psf' | 'prm' | 'other';
+  remoteName?: string;
+  type?: 'pdb' | 'psf' | 'prm' | 'other';
+  fileType?: 'pdb' | 'psf' | 'prm' | 'other';
 }
 
 export interface FileUpload {
@@ -81,7 +83,7 @@ export interface DisconnectResult {
 
 export interface ConnectionStatusResult {
   state: ConnectionState;
-  sessionInfo?: SessionInfo;
+  sessionInfo: SessionInfo | undefined;
 }
 
 export interface CreateJobParams {
