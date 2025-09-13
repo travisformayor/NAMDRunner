@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -22,6 +21,15 @@ pub enum JobStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileType {
+    Input,
+    Output,
+    Config,
+    Log,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobInfo {
     #[serde(rename = "jobId")]
     pub job_id: String,
@@ -31,13 +39,13 @@ pub struct JobInfo {
     #[serde(rename = "slurmJobId")]
     pub slurm_job_id: Option<String>,
     #[serde(rename = "createdAt")]
-    pub created_at: DateTime<Utc>,
+    pub created_at: String,
     #[serde(rename = "updatedAt")]
-    pub updated_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<String>,
     #[serde(rename = "submittedAt")]
-    pub submitted_at: Option<DateTime<Utc>>,
+    pub submitted_at: Option<String>,
     #[serde(rename = "completedAt")]
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<String>,
     #[serde(rename = "projectDir")]
     pub project_dir: Option<String>,
     #[serde(rename = "scratchDir")]
@@ -81,7 +89,7 @@ pub struct SessionInfo {
     pub host: String,
     pub username: String,
     #[serde(rename = "connectedAt")]
-    pub connected_at: DateTime<Utc>,
+    pub connected_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,7 +105,7 @@ pub struct RemoteFile {
     pub name: String,
     pub size: u64,
     #[serde(rename = "modifiedAt")]
-    pub modified_at: DateTime<Utc>,
+    pub modified_at: String,
     #[serde(rename = "fileType")]
-    pub file_type: String,
+    pub file_type: FileType,
 }

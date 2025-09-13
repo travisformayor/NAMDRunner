@@ -21,3 +21,8 @@ vite.config.ts.timestamp-*
 .env
 .env.*
 !.env.example
+
+# Testing artifacts
+tests/*/screenshots/
+tests/*/videos/
+tests/*/test-results/
