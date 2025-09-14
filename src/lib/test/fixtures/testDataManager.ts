@@ -18,7 +18,11 @@ import type { JobInfo, ConnectionState, SessionInfo } from '../../types/api';
 export type TestScenario = 
   | 'clean_slate'        // Reset to clean state
   | 'basic_workflow'     // User with jobs in basic states
-  | 'connection_issues'; // Basic connection problems
+  | 'connection_issues'  // Basic connection problems
+  | 'state_transitions'  // Connection state transition testing
+  | 'error_recovery'     // Error handling and recovery scenarios
+  | 'session_expiry'     // Session expiration testing
+  | 'network_instability'; // Intermittent connection issues
 
 export interface TestScenarioConfig {
   name: string;
@@ -90,6 +94,75 @@ export const testScenarios: Record<TestScenario, TestScenarioConfig> = {
       errorRate: 0.2, // 20% error rate for connection testing
     },
   },
+
+  state_transitions: {
+    name: 'State Transitions',
+    description: 'Test connection state machine transitions and validation',
+    connectionState: 'Disconnected',
+    jobs: [],
+    mockBehavior: {
+      connectionLatency: 500,
+      fileOperationLatency: 300,
+      slurmLatency: 200,
+      errorRate: 0.1, // Some errors to test recovery
+    },
+  },
+
+  error_recovery: {
+    name: 'Error Recovery',
+    description: 'Test error handling and automatic recovery mechanisms',
+    connectionState: 'Disconnected',
+    jobs: [
+      jobFixtures.freshJob.jobInfo,
+    ],
+    mockBehavior: {
+      connectionLatency: 800,
+      fileOperationLatency: 600,
+      slurmLatency: 400,
+      errorRate: 0.3, // High error rate for testing recovery
+    },
+  },
+
+  session_expiry: {
+    name: 'Session Expiry',
+    description: 'Test session expiration and refresh scenarios',
+    connectionState: 'Connected',
+    sessionInfo: {
+      host: 'mock.cluster.test',
+      username: 'mockuser',
+      connectedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), // 4 hours ago (expired)
+    },
+    jobs: [
+      jobFixtures.runningJob.jobInfo,
+    ],
+    mockBehavior: {
+      connectionLatency: 600,
+      fileOperationLatency: 400,
+      slurmLatency: 300,
+      errorRate: 0.15,
+    },
+  },
+
+  network_instability: {
+    name: 'Network Instability',
+    description: 'Test intermittent connection issues and resilience',
+    connectionState: 'Connected',
+    sessionInfo: {
+      host: 'unstable.cluster.test',
+      username: 'mockuser',
+      connectedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(), // 45 minutes ago
+    },
+    jobs: [
+      jobFixtures.runningJob.jobInfo,
+      jobFixtures.pendingJob.jobInfo,
+    ],
+    mockBehavior: {
+      connectionLatency: 1500, // High latency
+      fileOperationLatency: 1200,
+      slurmLatency: 800,
+      errorRate: 0.4, // Very high error rate for instability testing
+    },
+  },
 };
 
 /**
@@ -120,17 +193,44 @@ export class TestDataManager {
     return { ...this.scenarioData };
   }
 
-  // Connection fixtures
-  getConnectionFixture(type: 'success' | 'failure' | 'timeout' = 'success') {
+  // Enhanced connection fixtures
+  getConnectionFixture(type: 'success' | 'failure' | 'timeout' | 'network_error' | 'auth_error' = 'success') {
     switch (type) {
       case 'success':
         return connectionFixtures.successfulConnection;
       case 'failure':
+      case 'auth_error':
         return connectionFixtures.wrongPassword;
       case 'timeout':
         return connectionFixtures.connectionTimeout;
+      case 'network_error':
+        return connectionFixtures.networkUnreachable || connectionFixtures.connectionTimeout;
       default:
         return connectionFixtures.successfulConnection;
+    }
+  }
+
+  // Get connection parameters that will trigger specific behaviors
+  getConnectionParams(behavior: 'success' | 'invalid_host' | 'timeout' | 'auth_fail'): {
+    host: string;
+    username: string;
+    password: string;
+  } {
+    const baseParams = {
+      username: 'testuser',
+      password: 'testpass',
+    };
+
+    switch (behavior) {
+      case 'invalid_host':
+        return { ...baseParams, host: 'invalid.cluster.test' };
+      case 'timeout':
+        return { ...baseParams, host: 'timeout.cluster.test' };
+      case 'auth_fail':
+        return { ...baseParams, host: 'login.cluster.test', password: 'wrongpassword' };
+      case 'success':
+      default:
+        return { ...baseParams, host: 'login.cluster.test' };
     }
   }
 
@@ -240,6 +340,151 @@ export class TestDataManager {
     }
 
     return job;
+  }
+
+  // State transition testing
+  getStateTransitionScenario(): Array<{
+    from: ConnectionState;
+    to: ConnectionState;
+    shouldSucceed: boolean;
+    reason: string;
+  }> {
+    return [
+      { from: 'Disconnected', to: 'Connecting', shouldSucceed: true, reason: 'Valid initial connection' },
+      { from: 'Connecting', to: 'Connected', shouldSucceed: true, reason: 'Successful authentication' },
+      { from: 'Connecting', to: 'Disconnected', shouldSucceed: true, reason: 'Connection failed' },
+      { from: 'Connected', to: 'Disconnected', shouldSucceed: true, reason: 'User disconnect' },
+      { from: 'Connected', to: 'Expired', shouldSucceed: true, reason: 'Session timeout' },
+      { from: 'Expired', to: 'Connecting', shouldSucceed: true, reason: 'Reconnection attempt' },
+      { from: 'Expired', to: 'Disconnected', shouldSucceed: true, reason: 'Reset connection' },
+      
+      // Invalid transitions that should fail
+      { from: 'Disconnected', to: 'Connected', shouldSucceed: false, reason: 'Cannot skip connecting state' },
+      { from: 'Disconnected', to: 'Expired', shouldSucceed: false, reason: 'Cannot expire without connecting' },
+      { from: 'Connecting', to: 'Expired', shouldSucceed: false, reason: 'Cannot expire during connection' },
+      { from: 'Connected', to: 'Connecting', shouldSucceed: false, reason: 'Already connected' },
+    ];
+  }
+
+  // Validation testing scenarios
+  getValidationTestCases(): Array<{
+    name: string;
+    description: string;
+    config: {
+      host: string;
+      username: string;
+      password: string;
+    };
+    expectedResults: {
+      connectivity: boolean;
+      sshAccess: boolean;
+      sftpAccess: boolean;
+      slurmAccess: boolean;
+    };
+  }> {
+    return [
+      {
+        name: 'Valid Cluster',
+        description: 'All systems accessible and functional',
+        config: {
+          host: 'login.cluster.test',
+          username: 'testuser',
+          password: 'testpass'
+        },
+        expectedResults: {
+          connectivity: true,
+          sshAccess: true,
+          sftpAccess: true,
+          slurmAccess: true
+        }
+      },
+      {
+        name: 'Network Issue',
+        description: 'Host unreachable due to network problems',
+        config: {
+          host: 'unreachable.cluster.test',
+          username: 'testuser',
+          password: 'testpass'
+        },
+        expectedResults: {
+          connectivity: false,
+          sshAccess: false,
+          sftpAccess: false,
+          slurmAccess: false
+        }
+      },
+      {
+        name: 'Authentication Failure',
+        description: 'Invalid credentials provided',
+        config: {
+          host: 'login.cluster.test',
+          username: 'testuser',
+          password: 'wrongpass'
+        },
+        expectedResults: {
+          connectivity: true,
+          sshAccess: false,
+          sftpAccess: false,
+          slurmAccess: false
+        }
+      },
+      {
+        name: 'SLURM Unavailable',
+        description: 'SSH/SFTP work but SLURM not available',
+        config: {
+          host: 'no-slurm.cluster.test',
+          username: 'testuser',
+          password: 'testpass'
+        },
+        expectedResults: {
+          connectivity: true,
+          sshAccess: true,
+          sftpAccess: true,
+          slurmAccess: false
+        }
+      }
+    ];
+  }
+
+  // Error recovery test scenarios
+  getErrorRecoveryScenarios(): Array<{
+    errorType: string;
+    shouldRetry: boolean;
+    maxRetries: number;
+    recoveryAction: string;
+  }> {
+    return [
+      {
+        errorType: 'network_timeout',
+        shouldRetry: true,
+        maxRetries: 3,
+        recoveryAction: 'retry_with_backoff'
+      },
+      {
+        errorType: 'authentication_failed',
+        shouldRetry: false,
+        maxRetries: 0,
+        recoveryAction: 'request_new_credentials'
+      },
+      {
+        errorType: 'session_expired',
+        shouldRetry: true,
+        maxRetries: 1,
+        recoveryAction: 'refresh_session'
+      },
+      {
+        errorType: 'permission_denied',
+        shouldRetry: false,
+        maxRetries: 0,
+        recoveryAction: 'contact_administrator'
+      },
+      {
+        errorType: 'connection_dropped',
+        shouldRetry: true,
+        maxRetries: 5,
+        recoveryAction: 'reconnect'
+      }
+    ];
   }
 
   // Utility methods
