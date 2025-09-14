@@ -1,0 +1,5 @@
+# Exclude Development Files
+docs/** merge=ours
+tasks/** merge=ours
+.claude/** merge=ours
+CLAUDE.md merge=ours
