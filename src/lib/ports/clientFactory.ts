@@ -1,6 +1,7 @@
 import type { ICoreClient } from './coreClient';
 import { TauriCoreClient } from './coreClient-tauri';
 import { MockCoreClient } from './coreClient-mock';
+import { createMockServiceContainer } from '../services/serviceContainer';
 
 /**
  * Client factory for creating the appropriate IPC client
@@ -25,7 +26,9 @@ export class CoreClientFactory {
 
       if (useMock) {
         console.log('🔧 Using mock core client for development');
-        this.instance = new MockCoreClient();
+        const mockServiceContainer = createMockServiceContainer();
+        const services = mockServiceContainer.createDependencies();
+        this.instance = new MockCoreClient(services);
       } else {
         console.log('🚀 Using production Tauri core client');
         this.instance = new TauriCoreClient();

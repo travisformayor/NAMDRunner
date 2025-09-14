@@ -60,6 +60,62 @@ pub async fn connect_to_cluster(params: ConnectParams) -> ConnectResult {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_connect_with_valid_params() {
+        let params = ConnectParams {
+            host: "test.cluster.com".to_string(),
+            username: "testuser".to_string(),
+            password: "testpass".to_string(),
+        };
+
+        let result = connect_to_cluster(params).await;
+
+        assert!(result.success);
+        assert!(result.session_info.is_some());
+        assert!(result.error.is_none());
+
+        let session = result.session_info.unwrap();
+        assert_eq!(session.host, "test.cluster.com");
+        assert_eq!(session.username, "testuser");
+    }
+
+    #[tokio::test]
+    async fn test_connect_with_invalid_host() {
+        let params = ConnectParams {
+            host: "invalid.cluster.com".to_string(),
+            username: "testuser".to_string(),
+            password: "testpass".to_string(),
+        };
+
+        let result = connect_to_cluster(params).await;
+
+        assert!(!result.success);
+        assert!(result.session_info.is_none());
+        assert!(result.error.is_some());
+        assert!(result.error.unwrap().contains("Host unreachable"));
+    }
+
+    #[tokio::test]
+    async fn test_connect_with_missing_params() {
+        let params = ConnectParams {
+            host: "".to_string(),
+            username: "testuser".to_string(),
+            password: "testpass".to_string(),
+        };
+
+        let result = connect_to_cluster(params).await;
+
+        assert!(!result.success);
+        assert!(result.session_info.is_none());
+        assert!(result.error.is_some());
+        assert!(result.error.unwrap().contains("Missing required connection parameters"));
+    }
+}
+
 #[tauri::command] 
 pub async fn disconnect() -> DisconnectResult {
     // Enhanced mock implementation - simulate realistic disconnection

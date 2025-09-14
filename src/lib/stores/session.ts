@@ -1,6 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { ConnectionState, SessionInfo } from '../types/api';
-import { coreClient } from '../ports/clientFactory';
+import { CoreClientFactory } from '../ports/clientFactory';
 
 // Session state store
 interface SessionState {
@@ -38,7 +38,7 @@ export const sessionActions = {
     }));
 
     try {
-      const result = await coreClient.connect({ host, username, password });
+      const result = await CoreClientFactory.getClient().connect({ host, username, password });
       
       if (result.success) {
         sessionStore.update((state) => ({
@@ -74,7 +74,7 @@ export const sessionActions = {
   // Disconnect from cluster
   async disconnect(): Promise<boolean> {
     try {
-      const result = await coreClient.disconnect();
+      const result = await CoreClientFactory.getClient().disconnect();
       
       sessionStore.update((state) => ({
         ...state,
@@ -96,7 +96,7 @@ export const sessionActions = {
   // Check connection status
   async checkStatus(): Promise<void> {
     try {
-      const result = await coreClient.getConnectionStatus();
+      const result = await CoreClientFactory.getClient().getConnectionStatus();
       
       sessionStore.update((state) => ({
         ...state,

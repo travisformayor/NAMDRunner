@@ -1,31 +1,42 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 pub enum ConnectionState {
+    #[serde(rename = "Disconnected")]
     Disconnected,
+    #[serde(rename = "Connecting")]
     Connecting,
+    #[serde(rename = "Connected")]
     Connected,
+    #[serde(rename = "Expired")]
     Expired,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum JobStatus {
+    #[serde(rename = "CREATED")]
     Created,
+    #[serde(rename = "PENDING")]
     Pending,
+    #[serde(rename = "RUNNING")]
     Running,
+    #[serde(rename = "COMPLETED")]
     Completed,
+    #[serde(rename = "FAILED")]
     Failed,
+    #[serde(rename = "CANCELLED")]
     Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum FileType {
+    #[serde(rename = "input")]
     Input,
+    #[serde(rename = "output")]
     Output,
+    #[serde(rename = "config")]
     Config,
+    #[serde(rename = "log")]
     Log,
 }
 
@@ -80,8 +91,12 @@ pub struct InputFile {
     pub name: String,
     #[serde(rename = "localPath")]
     pub local_path: String,
+    #[serde(rename = "remoteName")]
+    pub remote_name: Option<String>,
+    #[serde(rename = "type")]
+    pub type_field: Option<String>, // 'pdb' | 'psf' | 'prm' | 'other'
     #[serde(rename = "fileType")]
-    pub file_type: String,
+    pub file_type: Option<String>, // 'pdb' | 'psf' | 'prm' | 'other'
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
