@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { sessionActions, connectionState, isConnected } from './session';
 import { CoreClientFactory } from '../ports/clientFactory';
+import type { MockCoreClient } from '../ports/coreClient-mock';
 
 describe('Session Store', () => {
   beforeEach(() => {
@@ -9,6 +10,11 @@ describe('Session Store', () => {
     CoreClientFactory.reset();
     // Reset session state
     sessionActions.reset();
+    
+    // Get mock client and disable error injection for predictable tests
+    const mockClient = CoreClientFactory.getClient(true) as MockCoreClient;
+    mockClient.enableErrorInjection(false);
+    mockClient.resetToCleanState();
   });
 
   it('should initialize with disconnected state', () => {
@@ -36,13 +42,15 @@ describe('Session Store', () => {
 
   it('should handle disconnection', async () => {
     // First connect
-    await sessionActions.connect('test.host', 'testuser', 'testpass');
+    const connectSuccess = await sessionActions.connect('test.host', 'testuser', 'testpass');
+    expect(connectSuccess).toBe(true);
+    expect(get(connectionState)).toBe('Connected');
     expect(get(isConnected)).toBe(true);
     
     // Then disconnect
-    const success = await sessionActions.disconnect();
+    const disconnectSuccess = await sessionActions.disconnect();
     
-    expect(success).toBe(true);
+    expect(disconnectSuccess).toBe(true);
     expect(get(connectionState)).toBe('Disconnected');
     expect(get(isConnected)).toBe(false);
   });
