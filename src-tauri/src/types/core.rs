@@ -1,6 +1,79 @@
 use serde::{Deserialize, Serialize};
 
+/// Consistent API result type for all Tauri commands
+/// Provides type safety and predictable error handling across the IPC boundary
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiResult<T> {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl<T> ApiResult<T> {
+    /// Create a successful result with data
+    pub fn success(data: T) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+        }
+    }
+
+    /// Create an error result with message
+    pub fn error(message: String) -> Self {
+        Self {
+            success: false,
+            data: None,
+            error: Some(message),
+        }
+    }
+
+    /// Create an error result from any error type
+    pub fn from_error(error: impl std::fmt::Display) -> Self {
+        Self::error(error.to_string())
+    }
+
+    /// Create an error result from SSH error with structured information
+    pub fn from_ssh_error(error: crate::ssh::SSHError) -> Self {
+        let conn_error = crate::ssh::map_ssh_error(&error);
+        // Create a detailed error message with recovery suggestions
+        let detailed_message = format!(
+            "{}: {} [Code: {}] - Suggestions: {}",
+            conn_error.message,
+            conn_error.details.unwrap_or_default(),
+            conn_error.code,
+            conn_error.suggestions.join("; ")
+        );
+        Self::error(detailed_message)
+    }
+
+    /// Create an error result from anyhow::Error, using SSH error handling if possible
+    pub fn from_anyhow_error(error: anyhow::Error) -> Self {
+        // Check if this is an SSH error for enhanced error handling
+        if let Some(ssh_err) = error.downcast_ref::<crate::ssh::SSHError>() {
+            Self::from_ssh_error(ssh_err.clone())
+        } else {
+            Self::from_error(error)
+        }
+    }
+
+    /// Map to Result type for easier interop
+    pub fn into_result(self) -> Result<T, String> {
+        if self.success {
+            if let Some(data) = self.data {
+                Ok(data)
+            } else {
+                Err("Success result missing data".to_string())
+            }
+        } else {
+            Err(self.error.unwrap_or("Unknown error".to_string()))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ConnectionState {
     #[serde(rename = "Disconnected")]
     Disconnected,
@@ -123,4 +196,34 @@ pub struct RemoteFile {
     pub modified_at: String,
     #[serde(rename = "fileType")]
     pub file_type: FileType,
+}
+
+/// Command execution result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandResult {
+    pub stdout: String,
+    pub stderr: String,
+    #[serde(rename = "exitCode")]
+    pub exit_code: i32,
+}
+
+/// Connection status response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionStatusResponse {
+    pub state: ConnectionState,
+    #[serde(rename = "sessionInfo")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_info: Option<SessionInfo>,
+}
+
+/// File information for SFTP operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileInfo {
+    pub name: String,
+    pub path: String,
+    pub size: u64,
+    #[serde(rename = "modifiedAt")]
+    pub modified_at: String,
+    #[serde(rename = "isDirectory")]
+    pub is_directory: bool,
 }

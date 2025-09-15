@@ -1,6 +1,8 @@
 mod types;
 pub mod commands;
 mod mock_state;
+pub mod ssh;
+mod security;
 
 pub use types::*;
 
@@ -13,6 +15,14 @@ pub fn run() {
             commands::connection::connect_to_cluster,
             commands::connection::disconnect,
             commands::connection::get_connection_status,
+            // SSH/SFTP operations for Phase 1 integration
+            commands::connection::ssh_execute_command,
+            commands::connection::sftp_upload_file,
+            commands::connection::sftp_download_file,
+            commands::connection::sftp_list_files,
+            commands::connection::sftp_exists,
+            commands::connection::sftp_create_directory,
+            commands::connection::sftp_get_file_info,
             // Job management
             commands::jobs::create_job,
             commands::jobs::submit_job,

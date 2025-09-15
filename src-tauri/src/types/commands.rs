@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 use super::core::*;
+use crate::security::SecurePassword;
 
 // Connection management command parameters and results
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
     pub host: String,
     pub username: String,
-    pub password: String,
+    pub password: SecurePassword,
 }
 
 #[derive(Debug, Serialize)]

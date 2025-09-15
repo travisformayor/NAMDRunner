@@ -1,30 +1,18 @@
-import type { 
-  ConnectionStateManager,
-  SessionManager,
-  SSHConnection,
-  SFTPConnection 
-} from '../types/connection';
 import type { RemoteDirectoryManager } from './directoryManager';
 import type { ConnectionValidator } from './connectionValidator';
-import { ConnectionStateMachine } from './connectionState';
-import { SSHSessionManager } from './sessionManager';
 import { SLURMDirectoryManager } from './directoryManager';
 import { SLURMConnectionValidator } from './connectionValidator';
 import { PathResolver, createPathResolver } from './pathResolver';
 
 /**
- * Service container for dependency injection
- * Provides a clean way to manage service dependencies and testing
+ * Simplified service container for remaining services
+ * SSH/SFTP now use direct service imports instead of dependency injection
  */
 
 export interface ServiceDependencies {
-  stateManager: ConnectionStateManager;
-  sessionManager: SessionManager;
   directoryManager: RemoteDirectoryManager;
   connectionValidator: ConnectionValidator;
   pathResolver: PathResolver;
-  sshConnection?: SSHConnection;
-  sftpConnection?: SFTPConnection;
 }
 
 export class ServiceContainer {
@@ -74,45 +62,33 @@ export class ServiceContainer {
   }
 
   /**
-   * Create dependencies bundle for easy injection
+   * Create dependencies bundle for simplified services
    */
   createDependencies(): ServiceDependencies {
     return {
-      stateManager: this.get<ConnectionStateManager>('stateManager'),
-      sessionManager: this.get<SessionManager>('sessionManager'),
       directoryManager: this.get<RemoteDirectoryManager>('directoryManager'),
       connectionValidator: this.get<ConnectionValidator>('connectionValidator'),
       pathResolver: this.get<PathResolver>('pathResolver'),
-      sshConnection: this.has('sshConnection') ? this.get<SSHConnection>('sshConnection') : undefined,
-      sftpConnection: this.has('sftpConnection') ? this.get<SFTPConnection>('sftpConnection') : undefined,
     };
   }
 }
 
 /**
- * Default service container with standard implementations
+ * Simplified service container
+ * SSH/SFTP now use direct service imports
  */
 export function createServiceContainer(): ServiceContainer {
   const container = new ServiceContainer();
 
-  // Register core services
-  container.register('stateManager', () => new ConnectionStateMachine());
-  container.register('sessionManager', () => new SSHSessionManager());
+  // Register remaining services (SSH/SFTP removed)
   container.register('pathResolver', () => createPathResolver());
-  
-  // Directory manager depends on SSH/SFTP connections
+
+  // Directory manager now uses direct SSH/SFTP service imports
   container.register('directoryManager', () => {
-    const ssh = container.has('sshConnection') ? container.get<SSHConnection>('sshConnection') : null;
-    const sftp = container.has('sftpConnection') ? container.get<SFTPConnection>('sftpConnection') : null;
     const pathResolver = container.get<PathResolver>('pathResolver');
-    
-    if (!ssh || !sftp) {
-      throw new Error('SSH and SFTP connections required for directory manager');
-    }
-    
-    return new SLURMDirectoryManager(ssh, sftp, pathResolver);
+    return new SLURMDirectoryManager(pathResolver);
   });
-  
+
   // Connection validator
   container.register('connectionValidator', () => new SLURMConnectionValidator());
 
@@ -120,44 +96,21 @@ export function createServiceContainer(): ServiceContainer {
 }
 
 /**
- * Mock service container for testing
+ * Simplified mock service container
+ * SSH/SFTP now use direct service imports with mock mode
  */
 export function createMockServiceContainer(): ServiceContainer {
   const container = new ServiceContainer();
 
-  // Register mock implementations
-  container.register('stateManager', () => new ConnectionStateMachine());
-  container.register('sessionManager', () => new SSHSessionManager());
+  // Register simplified mock implementations
   container.register('pathResolver', () => createPathResolver());
-  
-  // Mock connections
-  container.register('sshConnection', () => ({
-    connect: async () => ({ success: true, data: {} }),
-    disconnect: async () => ({ success: true, data: undefined }),
-    executeCommand: async () => ({ success: true, data: { stdout: 'mock', stderr: '', exitCode: 0, duration: 100, timedOut: false } }),
-    validateConnection: async () => ({ success: true, data: true }),
-    getStatus: () => 'Connected',
-    isConnected: () => true,
-  }));
 
-  container.register('sftpConnection', () => ({
-    uploadFile: async () => ({ success: true, data: {} }),
-    downloadFile: async () => ({ success: true, data: {} }),
-    listFiles: async () => ({ success: true, data: { files: [], totalCount: 0, path: '/' } }),
-    createDirectory: async () => ({ success: true, data: { path: '/', created: true, existed: false } }),
-    deleteFile: async () => ({ success: true, data: {} }),
-    exists: async () => ({ success: true, data: true }),
-    getFileInfo: async () => ({ success: true, data: { name: 'mock', path: '/', size: 0, modifiedAt: '', permissions: '', isDirectory: false } }),
-  }));
-
-  // Directory manager with mock connections
+  // Directory manager with simplified dependencies
   container.register('directoryManager', () => {
-    const ssh = container.get<SSHConnection>('sshConnection');
-    const sftp = container.get<SFTPConnection>('sftpConnection');
     const pathResolver = container.get<PathResolver>('pathResolver');
-    return new SLURMDirectoryManager(ssh, sftp, pathResolver);
+    return new SLURMDirectoryManager(pathResolver);
   });
-  
+
   // Connection validator
   container.register('connectionValidator', () => new SLURMConnectionValidator());
 
@@ -221,11 +174,4 @@ export function withDependenciesAsync<T extends any[], R>(
 }
 
 
-/**
- * Register connections with the global service container
- */
-export function registerConnections(ssh: SSHConnection, sftp: SFTPConnection): void {
-  const container = getServiceContainer();
-  container.register('sshConnection', () => ssh, true);
-  container.register('sftpConnection', () => sftp, true);
-}
+// registerConnections function removed - SSH/SFTP now use direct service imports

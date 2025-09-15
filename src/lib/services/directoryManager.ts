@@ -1,7 +1,8 @@
-import type { SSHConnection, SFTPConnection, Result } from '../types/connection';
+import type { Result } from '../types/connection';
 import type { ConnectionError } from '../types/errors';
 import { ErrorBuilder, CONNECTION_ERRORS } from '../types/errors';
 import { PathResolver, createPathResolver, type JobPaths as PathResolverJobPaths } from './pathResolver';
+import { sshService, sftpService } from './index';
 
 /**
  * Remote directory structure patterns and management
@@ -67,11 +68,7 @@ export type JobPaths = PathResolverJobPaths;
 export class SLURMDirectoryManager implements RemoteDirectoryManager {
   private pathResolver: PathResolver;
 
-  constructor(
-    private sshConnection: SSHConnection,
-    private sftpConnection: SFTPConnection,
-    pathResolver?: PathResolver
-  ) {
+  constructor(pathResolver?: PathResolver) {
     this.pathResolver = pathResolver || createPathResolver();
   }
 
@@ -99,7 +96,7 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
       };
 
       // Check if base directory exists (should exist on SLURM clusters)
-      const baseExists = await this.sftpConnection.exists(basePath);
+      const baseExists = await sftpService.exists(basePath);
       if (!baseExists.success || !baseExists.data) {
         return {
           success: false,
@@ -111,14 +108,14 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
       }
 
       // Ensure namdrunner root directory exists
-      const namdrunnerExists = await this.sftpConnection.exists(namdrunnerPath);
+      const namdrunnerExists = await sftpService.exists(namdrunnerPath);
       if (!namdrunnerExists.success) {
         result.errors.push(`Failed to check namdrunner directory: ${namdrunnerExists.error}`);
         return { success: false, error: namdrunnerExists.error };
       }
 
       if (!namdrunnerExists.data) {
-        const createResult = await this.sftpConnection.createDirectory(namdrunnerPath);
+        const createResult = await sftpService.createDirectory(namdrunnerPath);
         if (createResult.success) {
           result.created.push(namdrunnerPath);
         } else {
@@ -148,13 +145,13 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
 
   async ensureDirectoryExists(path: string): Promise<Result<boolean>> {
     try {
-      const exists = await this.sftpConnection.exists(path);
+      const exists = await sftpService.exists(path);
       if (!exists.success) {
         return { success: false, error: exists.error };
       }
 
       if (!exists.data) {
-        const createResult = await this.sftpConnection.createDirectory(path);
+        const createResult = await sftpService.createDirectory(path);
         if (!createResult.success) {
           return { success: false, error: createResult.error };
         }
@@ -185,7 +182,7 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
       };
 
       // List job directories
-      const listResult = await this.sftpConnection.listFiles(namdrunnerPath);
+      const listResult = await sftpService.listFiles(namdrunnerPath);
       if (!listResult.success) {
         return { success: false, error: listResult.error };
       }
@@ -254,7 +251,7 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
       };
 
       // Check base directory
-      const baseInfo = await this.sftpConnection.getFileInfo(basePath);
+      const baseInfo = await sftpService.getFileInfo(basePath);
       if (!baseInfo.success) {
         result.valid = false;
         result.issues.push(`Cannot access base directory: ${basePath}`);
@@ -265,7 +262,7 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
       }
 
       // Check namdrunner directory
-      const namdrunnerExists = await this.sftpConnection.exists(namdrunnerPath);
+      const namdrunnerExists = await sftpService.exists(namdrunnerPath);
       if (!namdrunnerExists.success || !namdrunnerExists.data) {
         result.valid = false;
         result.issues.push(`NAMDRunner directory does not exist: ${namdrunnerPath}`);
@@ -274,7 +271,7 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
       // Check disk space using SSH command
       try {
         const dfCommand = `df -h "${basePath}" | tail -1`;
-        const dfResult = await this.sshConnection.executeCommand(dfCommand);
+        const dfResult = await sshService.executeCommand(dfCommand);
         
         if (dfResult.success) {
           const diskInfo = this.parseDiskUsage(dfResult.data.stdout);
@@ -316,7 +313,7 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
         return namdrunnerPathResult;
       }
       const namdrunnerPath = namdrunnerPathResult.data;
-      const listResult = await this.sftpConnection.listFiles(namdrunnerPath);
+      const listResult = await sftpService.listFiles(namdrunnerPath);
       
       if (!listResult.success) {
         return { success: false, error: listResult.error };
@@ -341,7 +338,7 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
       
       // Use SSH command for recursive delete (more reliable than SFTP)
       const rmCommand = `rm -rf "${jobDir}"`;
-      const result = await this.sshConnection.executeCommand(rmCommand);
+      const result = await sshService.executeCommand(rmCommand);
       
       if (!result.success || result.data.exitCode !== 0) {
         return {
@@ -407,11 +404,8 @@ export class SLURMDirectoryManager implements RemoteDirectoryManager {
   }
 }
 
-// Factory function
-export function createDirectoryManager(
-  sshConnection: SSHConnection,
-  sftpConnection: SFTPConnection
-): RemoteDirectoryManager {
-  return new SLURMDirectoryManager(sshConnection, sftpConnection);
+// Simplified factory function
+export function createDirectoryManager(pathResolver?: PathResolver): RemoteDirectoryManager {
+  return new SLURMDirectoryManager(pathResolver);
 }
 

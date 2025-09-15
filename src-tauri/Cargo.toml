@@ -29,4 +29,5 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 anyhow = "1.0"
 lazy_static = "1.4"
 rand = "0.8"
+secstr = "0.5"
 
