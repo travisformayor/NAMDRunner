@@ -629,3 +629,199 @@ fn main() {
 5. **Test with mock data** to eliminate external factors
 6. **Add debug logging** to narrow down the issue
 7. **Create minimal test case** to verify fix
+
+## Testing Anti-Patterns to Avoid
+*Critical anti-patterns that waste development time*
+
+### Don't Test Language Features
+Avoid testing obvious programming language capabilities.
+
+```rust
+// ❌ Anti-pattern - testing language features
+#[test]
+fn test_string_operations() {
+    let test_string = "hello world";
+    assert_eq!(test_string.len(), 11); // Tests String::len(), not our code
+}
+
+#[test]
+fn test_struct_field_assignment() {
+    let info = RemoteFileInfo {
+        name: "test.txt".to_string(),
+        size: 1024,
+    };
+    assert_eq!(info.name, "test.txt"); // Tests struct assignment, not our logic
+}
+
+// ✅ Test business logic instead
+#[test]
+fn test_file_size_formatting() {
+    let formatter = FileSizeFormatter::new();
+    assert_eq!(formatter.format_bytes(1024), "1.0 KB");
+    assert_eq!(formatter.format_bytes(1048576), "1.0 MB");
+}
+```
+
+### Don't Test Mock Return Values
+Avoid testing that mocks return what you configured them to return.
+
+```rust
+// ❌ Anti-pattern - testing mock configuration
+#[test]
+fn test_mock_returns_configured_value() {
+    let mut mock_ssh = MockSSHManager::new();
+    mock_ssh.expect_execute_command()
+        .returning(|_| Ok(CommandResult { stdout: "success".to_string(), .. }));
+
+    let result = mock_ssh.execute_command("test").unwrap();
+    assert_eq!(result.stdout, "success"); // Just tests mock setup
+}
+
+// ✅ Test how your code uses the mock
+#[test]
+fn test_command_output_parsing() {
+    let mut mock_ssh = MockSSHManager::new();
+    mock_ssh.expect_execute_command()
+        .returning(|_| Ok(CommandResult {
+            stdout: "Submitted batch job 12345678".to_string(),
+            exit_code: 0,
+            ..
+        }));
+
+    let service = SlurmService::new(mock_ssh);
+    let job_id = service.submit_job(&job_config).unwrap();
+    assert_eq!(job_id, "12345678"); // Tests our parsing logic
+}
+```
+
+### Focus on Business Logic
+Test the logic you wrote, not external library behavior.
+
+```rust
+// ✅ Business logic testing examples
+#[test]
+fn test_error_categorization() {
+    let ssh_error = SSHError::NetworkError("Connection refused".to_string());
+    let categorized = map_ssh_error(&ssh_error);
+
+    assert_eq!(categorized.category, "Network");
+    assert!(categorized.retryable);
+    assert!(categorized.suggestions.contains(&"Check your network connection".to_string()));
+}
+
+#[test]
+fn test_path_sanitization() {
+    assert_eq!(sanitize_job_id("valid_job_123"), Ok("valid_job_123".to_string()));
+    assert!(sanitize_job_id("../../../etc").is_err());
+    assert!(sanitize_job_id("job; rm -rf /").is_err());
+}
+
+#[test]
+fn test_retry_logic_respects_max_attempts() {
+    let mut attempt_count = 0;
+    let result = retry_with_backoff(3, Duration::from_millis(1), || {
+        attempt_count += 1;
+        Err(anyhow::anyhow!("Network error"))
+    });
+
+    assert!(result.is_err());
+    assert_eq!(attempt_count, 3);
+}
+```
+
+### Network/SSH Testing Strategy
+Never make real network calls in unit tests.
+
+```rust
+// ✅ SSH testing with mocks
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ssh::test_utils::MockConnectionManager;
+
+    #[tokio::test]
+    async fn test_directory_creation_workflow() {
+        let mut mock_manager = MockConnectionManager::new();
+
+        // Test the sequence of calls our code makes
+        mock_manager.expect_create_directory()
+            .with(eq("/projects/testuser/namdrunner_jobs/job_001"))
+            .times(1)
+            .returning(|_| Ok(()));
+
+        mock_manager.expect_create_directory()
+            .with(eq("/projects/testuser/namdrunner_jobs/job_001/inputs"))
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let service = JobService::new(mock_manager);
+        let result = service.setup_job_workspace("testuser", "job_001").await;
+
+        assert!(result.is_ok());
+        // Mock manager automatically verifies all expectations were met
+    }
+}
+```
+
+## Feature Behavior Investigation Process
+*Systematic methodology for validating feature completeness*
+
+### Question Expected Behavior First
+Always question how features *should* work before validating implementation.
+
+**Key Questions:**
+- Does the feature handle the complete lifecycle (create → use → cleanup)?
+- Are error cases properly handled with appropriate retry logic?
+- Do interfaces match their actual implementations?
+
+### Trace and Validate Implementation
+Follow code execution paths to identify gaps between intended and actual behavior.
+
+```rust
+// ✅ Validate implementation completeness
+trait FileOperations {
+    async fn upload_file(&self, local: &str, remote: &str) -> Result<()>;
+    async fn file_exists(&self, remote: &str) -> Result<bool>;
+}
+
+// Check: Does upload_file use file_exists for optimization?
+// Check: Are all trait methods actually implemented?
+```
+
+### Check Integration and Security
+Verify tools are integrated and validate input handling.
+
+```rust
+// ✅ Verify complete integration
+pub async fn submit_job(job_id: &str) -> SubmitJobResult {
+    if let Some(scratch_dir) = &job_info.scratch_dir {
+        connection_manager.create_directory(scratch_dir).await?;
+    }
+}
+
+#[test]
+fn test_dangerous_inputs() {
+    let inputs = vec!["../../../etc", "job; rm -rf /", "job\x00hidden"];
+    for input in inputs {
+        assert!(create_job_with_name(&input).is_err());
+    }
+}
+```
+
+### Document Findings
+Turn investigation results into actionable roadmap items.
+
+```markdown
+### Typical Issues Found
+- **Missing Lifecycle Steps**: Features store state but don't perform required actions
+- **Retry Logic Gaps**: Errors marked retryable without implementation
+- **Input Validation Missing**: No sanitization for user-provided data
+```
+
+## Related Documentation
+
+For architectural principles and service development patterns, see [`docs/developer-guidelines.md`](developer-guidelines.md).
+
+For SSH/Network operations and security implementation details, see [`docs/api-spec.md`](api-spec.md).
+
+For Rust development patterns and backend configuration, see [`docs/technical-spec.md`](technical-spec.md).

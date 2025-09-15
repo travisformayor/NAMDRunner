@@ -396,6 +396,298 @@ const MOCK_SBATCH_SUCCESS: &str = "Submitted batch job 12345678";
 
 > **For complete SLURM command patterns and response formats, see [`docs/cluster-guide.md`](cluster-guide.md)**.
 
+## SSH/Network Operations Implementation
+*Implementation patterns for SSH/SFTP development*
+
+### Security Implementation Guidelines
+*Critical security lessons for secure implementation*
+
+#### Secure Credential Handling
+Always use SecStr for passwords and sensitive data with proper memory management.
+
+```rust
+use crate::security::SecurePassword;
+use secstr::SecStr;
+
+// ✅ Complete secure password implementation
+#[derive(Clone)]
+pub struct SecurePassword(SecStr);
+
+impl SecurePassword {
+    pub fn new(password: String) -> Self {
+        Self(SecStr::from(password))
+    }
+
+    pub fn with_password<F, R>(&self, f: F) -> R
+    where F: FnOnce(&str) -> R
+    {
+        let bytes = self.0.unsecure();
+        let password_str = std::str::from_utf8(bytes).unwrap_or("");
+        f(password_str)
+    }
+}
+
+impl Drop for SecurePassword {
+    fn drop(&mut self) {
+        // SecStr handles secure memory clearing automatically
+    }
+}
+
+impl std::fmt::Debug for SecurePassword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SecurePassword([REDACTED])")
+    }
+}
+
+// ✅ Secure connection implementation
+impl ConnectionManager {
+    pub async fn connect(&self, host: String, username: String, password: &SecurePassword) -> Result<ConnectionInfo> {
+        // Use password only within closure to minimize exposure time
+        password.with_password(|pwd| {
+            // Connect using the password string temporarily
+            connection.authenticate_password(&username, pwd)
+        })?;
+        // Password is automatically cleared from memory
+        Ok(connection_info)
+    }
+}
+
+// ❌ Insecure password handling
+fn connect_insecure(password: String) {
+    // Don't store passwords as String - no automatic cleanup
+}
+```
+
+**Safe Logging**: Never log credentials or sensitive data.
+
+```typescript
+// ✅ Safe logging
+logger.info('Connecting to cluster', {
+  host: config.host,
+  username: config.username
+  // Never log password
+});
+
+// ❌ Dangerous logging
+logger.info('Connection attempt', { config }); // May contain password
+```
+
+#### Path Security & Input Validation
+**Sanitize All User Inputs**: Never use user input directly in path construction or shell commands.
+
+```rust
+// ❌ DANGEROUS - Direct user input in path construction
+pub fn create_job_directory(username: &str, job_name: &str) -> String {
+    format!("/projects/{}/jobs/{}", username, job_name)
+    // Risk: username="../../../etc" or job_name="important_file; rm -rf /"
+}
+
+// ✅ SECURE - Sanitize all inputs before use
+pub fn create_job_directory(username: &str, job_name: &str) -> Result<String> {
+    let clean_username = sanitize_path_component(username)?;
+    let clean_job_name = sanitize_path_component(job_name)?;
+
+    validate_no_traversal(&clean_username)?;
+    validate_no_traversal(&clean_job_name)?;
+
+    Ok(format!("/projects/{}/jobs/{}", clean_username, clean_job_name))
+}
+
+fn sanitize_path_component(input: &str) -> Result<String> {
+    // Remove dangerous characters
+    let cleaned = input
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+        .collect::<String>();
+
+    if cleaned.is_empty() {
+        return Err(anyhow::anyhow!("Invalid path component"));
+    }
+
+    Ok(cleaned)
+}
+
+fn validate_no_traversal(path: &str) -> Result<()> {
+    if path.contains("..") || path.contains('/') || path.contains('\\') {
+        return Err(anyhow::anyhow!("Path traversal detected"));
+    }
+    Ok(())
+}
+```
+
+**Command Injection Prevention**: Always escape shell parameters when executing remote commands.
+
+```rust
+// ❌ DANGEROUS - Command injection vulnerability
+pub async fn run_slurm_command(job_name: &str) -> Result<String> {
+    let command = format!("sbatch {}.slurm", job_name);
+    ssh_manager.execute_command(&command).await
+}
+
+// ✅ SECURE - Properly escape shell parameters
+pub async fn run_slurm_command(job_name: &str) -> Result<String> {
+    let sanitized_name = sanitize_filename(job_name)?;
+    let escaped_name = shell_escape::escape(std::borrow::Cow::Borrowed(&sanitized_name));
+    let command = format!("sbatch {}.slurm", escaped_name);
+    ssh_manager.execute_command(&command).await
+}
+
+fn sanitize_filename(filename: &str) -> Result<String> {
+    let cleaned = filename
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-' || *c == '.')
+        .collect::<String>();
+
+    if cleaned.is_empty() || cleaned.starts_with('.') {
+        return Err(anyhow::anyhow!("Invalid filename"));
+    }
+
+    Ok(cleaned)
+}
+```
+
+**Path Validation**: Implement comprehensive validation for all user inputs.
+
+```rust
+// ✅ Essential path validation
+pub fn validate_path_component(input: &str) -> Result<()> {
+    if input.contains('\0') || input.contains("..") || input.starts_with('/') {
+        return Err(anyhow::anyhow!("Invalid path component"));
+    }
+
+    if input.len() > 64 || input.is_empty() {
+        return Err(anyhow::anyhow!("Path component length invalid"));
+    }
+
+    let allowed = |c: char| c.is_alphanumeric() || c == '_' || c == '-';
+    if !input.chars().all(allowed) {
+        return Err(anyhow::anyhow!("Invalid characters in path"));
+    }
+
+    Ok(())
+}
+```
+
+### Connection Lifecycle Management
+Always clean up connections properly.
+
+```rust
+// ✅ Proper connection cleanup
+impl ConnectionManager {
+    pub async fn disconnect(&self) -> Result<()> {
+        let mut conn = self.connection.lock().await;
+        if let Some(mut connection) = conn.take() {
+            // Explicitly disconnect and clean up
+            connection.disconnect().await?;
+        }
+        Ok(())
+    }
+
+    pub async fn connect(&self, params: ConnectParams) -> Result<ConnectionInfo> {
+        // Always clean up existing connection first
+        self.disconnect().await?;
+
+        // Create new connection
+        let connection = SSHConnection::new(params.host, params.port, params.username, config);
+        // ... rest of connection logic
+    }
+}
+```
+
+### Error Mapping for User Experience
+Convert technical errors to actionable user messages.
+
+```rust
+// ✅ User-friendly error mapping
+pub fn map_ssh_error(error: &SSHError) -> ConnectionError {
+    match error {
+        SSHError::NetworkError(msg) => ConnectionError {
+            category: "Network".to_string(),
+            message: "Cannot reach cluster host".to_string(),
+            retryable: true,
+            suggestions: vec!["Check network connection", "Verify hostname"]
+        },
+        SSHError::AuthenticationError(_) => ConnectionError {
+            category: "Authentication".to_string(),
+            message: "Authentication failed".to_string(),
+            retryable: false,
+            suggestions: vec!["Check username and password"]
+        },
+        // ... other mappings
+    }
+}
+```
+
+### Mock vs Real Implementation Switching
+Environment-based service selection.
+
+```rust
+// ✅ Clean mock/real switching
+fn use_mock_mode() -> bool {
+    if let Ok(val) = env::var("USE_MOCK_SSH") {
+        return val.to_lowercase() == "true" || val == "1";
+    }
+
+    #[cfg(debug_assertions)]
+    { true }  // Default to mock in debug
+
+    #[cfg(not(debug_assertions))]
+    { false } // Default to real in release
+}
+
+#[tauri::command]
+pub async fn connect_to_cluster(params: ConnectParams) -> ConnectResult {
+    if use_mock_mode() {
+        return connect_mock(params).await;
+    }
+    connect_real(params).await
+}
+```
+
+### Async Operations with Blocking Libraries
+Handle ssh2's blocking nature.
+
+```rust
+// ✅ Proper async/blocking integration
+impl ConnectionManager {
+    pub async fn connect(&self, password: &SecurePassword) -> Result<ConnectionInfo> {
+        password.with_password(|pwd| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async { connection.connect(pwd).await })
+        })
+    }
+}
+```
+
+### Retry Logic Implementation
+Implement exponential backoff for retryable operations.
+
+```rust
+// ✅ Complete retry implementation
+pub async fn connect_with_retry(params: ConnectParams) -> Result<ConnectionInfo> {
+    let mut attempts = 0;
+    let max_attempts = 3;
+    let mut delay = Duration::from_millis(1000);
+
+    loop {
+        match connection_manager.connect(params.clone()).await {
+            Ok(info) => return Ok(info),
+            Err(e) => {
+                let conn_error = map_ssh_error(&e);
+
+                attempts += 1;
+                if !conn_error.retryable || attempts >= max_attempts {
+                    return Err(e);
+                }
+
+                tokio::time::sleep(delay).await;
+                delay *= 2;
+            }
+        }
+    }
+}
+```
+
 ## Important Implementation Notes
 
 1. **Always use full paths** for working directories
@@ -408,3 +700,9 @@ const MOCK_SBATCH_SUCCESS: &str = "Submitted batch job 12345678";
 8. **Use working directory pattern** to identify NAMDRunner jobs: `/scratch/alpine/$USER/namdrunner_jobs/*`
 
 These patterns are proven to work with the CURC Alpine cluster and provide the foundation for reliable SLURM integration in the Tauri implementation.
+
+## Related Documentation
+
+For architectural principles, clean architecture patterns, and development best practices, see [`docs/developer-guidelines.md`](developer-guidelines.md).
+
+For testing strategies and infrastructure setup, see [`docs/testing-spec.md`](testing-spec.md).

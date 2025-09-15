@@ -17,6 +17,101 @@
 * **SQLite** via `rusqlite` (or the Tauri SQL plugin).
 * **Templating** (NAMD `.conf` + Slurm scripts) via `tera` or `handlebars`.
 
+#### Rust Development Patterns
+*Essential patterns for SSH/SFTP backend implementation*
+
+**Error Chaining with Anyhow**: Use anyhow for complex error handling in Rust services.
+
+```rust
+use anyhow::{Result, Context};
+
+// ✅ Proper error chaining
+impl ConnectionManager {
+    pub async fn setup_job_workspace(&self, username: &str, job_id: &str) -> Result<WorkspaceInfo> {
+        let project_dir = format!("/projects/{}/namdrunner_jobs/{}", username, job_id);
+
+        self.create_directory(&project_dir)
+            .await
+            .context("Failed to create project directory")?;
+
+        self.create_directory(&format!("{}/inputs", project_dir))
+            .await
+            .context("Failed to create inputs directory")?;
+
+        Ok(WorkspaceInfo { project_dir, inputs_dir: format!("{}/inputs", project_dir) })
+    }
+}
+```
+
+**Memory Management for Credentials**: Always wrap passwords and sensitive data in secure types. See [`docs/api-spec.md`](api-spec.md) for complete SecurePassword implementation.
+
+**Module Organization**: Organize Rust modules by responsibility layers.
+
+```rust
+pub mod ssh {
+    pub mod connection;    // Low-level SSH connection handling
+    pub mod manager;       // Connection lifecycle management
+    pub mod commands;      // Command execution utilities
+    pub mod sftp;         // File transfer operations
+    pub mod errors;       // Error types and mapping
+    pub mod test_utils;   // Testing infrastructure
+
+    // Re-export main interfaces
+    pub use manager::ConnectionManager;
+    pub use connection::{SSHConnection, ConnectionConfig};
+}
+```
+
+**Async/Blocking Integration**: Handle ssh2's blocking nature properly.
+
+```rust
+impl ConnectionManager {
+    pub async fn connect(&self, password: &SecurePassword) -> Result<ConnectionInfo> {
+        // Use tokio's spawn_blocking for CPU-intensive blocking operations
+        let connection_info = tokio::task::spawn_blocking({
+            let password = password.clone();
+            let host = self.host.clone();
+
+            move || -> Result<ConnectionInfo> {
+                password.with_password(|pwd| {
+                    // ssh2 blocking operations happen here
+                    let session = Session::new()?;
+                    session.userauth_password(&username, pwd)?;
+                    Ok(ConnectionInfo { host, connected: true })
+                })
+            }
+        }).await??;
+        Ok(connection_info)
+    }
+}
+```
+
+**Type Safety for IPC**: Keep Rust and TypeScript types in sync with proper serde attributes.
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobInfo {
+    #[serde(rename = "jobId")]
+    pub job_id: String,
+    #[serde(rename = "jobName")]
+    pub job_name: String,
+    pub status: JobStatus,
+    #[serde(rename = "createdAt")]
+    pub created_at: String, // ISO 8601 format
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum JobStatus {
+    #[serde(rename = "CREATED")]
+    Created,
+    #[serde(rename = "PENDING")]
+    Pending,
+    // ... other statuses
+}
+```
+
+For complete Rust development standards and anti-patterns, see [`docs/developer-guidelines.md`](developer-guidelines.md).
+
 ### Slurm Integration
 * Submit with **`sbatch`** (parse returned JobID).
 * Poll with **`squeue`** for queued/running and **`sacct`** for terminal states.
@@ -223,3 +318,11 @@ Key areas covered:
 - [Playwright](https://playwright.dev/) - Web testing framework
 - [Continuous Integration | Tauri](https://v2.tauri.app/develop/tests/webdriver/ci/) - Tauri CI setup for testing
 - [How to Run Your Tests Headless with Xvfb](https://elementalselenium.com/tips/38-headless) - Xvfb configuration for CI
+
+## Related Documentation
+
+For architectural principles and service development patterns, see [`docs/developer-guidelines.md`](developer-guidelines.md).
+
+For SSH/Network operations implementation and security guidelines, see [`docs/api-spec.md`](api-spec.md).
+
+For testing strategies and infrastructure setup, see [`docs/testing-spec.md`](testing-spec.md).

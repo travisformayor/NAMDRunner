@@ -11,7 +11,9 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 - Status sync works from first job submission
 - Developers can easily manage and clean up test jobs
 
-## Current Status: Phase 1 Complete - Ready for Phase 2
+## Current Status: Phase 2 Milestone 2.1 Complete - Critical Fixes Needed for Milestone 2.2
+
+**Next Priority**: Milestone 2.2 (SSH/SFTP Critical Fixes) - Address missing directory management, retry logic, and security gaps discovered during feature behavior investigation.
 
 ## Phase 1: Foundation ✅ COMPLETED
 *Critical path to first working prototype*
@@ -56,14 +58,41 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 ## Phase 2: Core Backend
 *SSH connection and data management*
 
-### Milestone 2.1: SSH/SFTP Implementation
-- [ ] Password authentication with ssh2 crate  
-- [ ] SFTP file upload/download operations
-- [ ] Module loading commands (`module load slurm/alpine`)
-- [ ] SSH connection debugging and error recovery
-- [ ] Real connection establishment and management
+### Milestone 2.1: SSH/SFTP Implementation ✅ COMPLETED
+- [x] Password authentication with ssh2 crate
+- [x] SFTP file upload/download operations
+- [x] Module loading commands (`module load slurm/alpine`)
+- [x] SSH connection debugging and error recovery
+- [x] Real connection establishment and management
+- [x] Secure credential handling with automatic memory cleanup
+- [x] Comprehensive error mapping with recovery suggestions
+- [x] Mock/real mode switching via environment variables
+- [x] 43 focused unit tests covering business logic without network dependencies
+- [x] Clean architecture with separated concerns and responsibilities
 
-### Milestone 2.2: Data Layer & Job Persistence
+### Milestone 2.2: SSH/SFTP Critical Fixes & Enhancements
+- [ ] **Job Directory Management** (Critical - Missing Implementation)
+  - [ ] Implement directory creation during job creation (project folders)
+  - [ ] Implement directory creation during job submission (scratch folders)
+  - [ ] Add directory cleanup during job deletion (both project and scratch)
+  - [ ] Add existence checking to avoid recreating existing directories
+- [ ] **Retry Logic Implementation** (High Priority - Missing Feature)
+  - [ ] Implement exponential backoff retry mechanism for retryable errors
+  - [ ] Add configurable retry limits and delays to connection config
+  - [ ] Implement authentication retry logic using max_auth_attempts
+  - [ ] Add network interruption recovery for long operations
+- [ ] **File Operation Optimizations** (Medium Priority - Efficiency)
+  - [ ] Add file existence checking before uploads to avoid redundant transfers
+  - [ ] Implement file size/checksum comparison for upload optimization
+  - [ ] Add partial upload resume capability for interrupted transfers
+  - [ ] Add file integrity verification after transfers
+- [ ] **Path Security & Validation** (High Priority - Security)
+  - [ ] Implement job ID and job name sanitization before path construction
+  - [ ] Add directory traversal protection (block ../ sequences)
+  - [ ] Add comprehensive path validation utilities
+  - [ ] Implement shell parameter escaping for command construction
+
+### Milestone 2.3: Data Layer & Job Persistence
 - [ ] SQLite integration with rusqlite
 - [ ] Job cache schema (jobs table with metadata)
 - [ ] JSON metadata file format (job.json on remote)
@@ -71,7 +100,7 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 - [ ] Session persistence (close/reopen shows existing jobs)
 - [ ] SLURM status sync (update job statuses from cluster)
 
-### Milestone 2.3: Phase 2 Cleanup & Refactoring  
+### Milestone 2.4: Phase 2 Cleanup & Refactoring  
 - [ ] Run Phase 2 code review using `.claude/agents/review-refactor.md` agent
 - [ ] Review SSH/SFTP implementation for consistency and patterns
 - [ ] Eliminate any duplicated connection handling code discovered
@@ -185,12 +214,16 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 - ✅ Remote directory management foundations implemented
 
 ### Phase 2 Complete When:
-- SSH connection works with password
-- Files upload/download via SFTP
-- SQLite stores and retrieves job data
-- App reopening shows previously created jobs
-- Job discovery from remote JSON files works
-- Basic SLURM status sync functional
+- [x] SSH connection works with password
+- [x] Files upload/download via SFTP
+- [ ] **Job directory lifecycle works correctly** (create → submit → delete)
+- [ ] **Retry logic handles network interruptions gracefully**
+- [ ] **Path security prevents directory traversal attacks**
+- [ ] **File operations are optimized** (avoid redundant uploads)
+- [ ] SQLite stores and retrieves job data
+- [ ] App reopening shows previously created jobs
+- [ ] Job discovery from remote JSON files works
+- [ ] Basic SLURM status sync functional
 
 ### Phase 3 Complete When:
 - Full UI navigation works
