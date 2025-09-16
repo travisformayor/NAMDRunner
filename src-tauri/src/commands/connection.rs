@@ -1,51 +1,39 @@
 use crate::types::*;
 use crate::mock_state::{with_mock_state, get_mock_state};
 use crate::ssh::get_connection_manager;
+use crate::mode_switching::{is_mock_mode, execute_with_mode};
 use chrono::Utc;
-use std::env;
-
-/// Check if we should use mock implementation
-fn use_mock_mode() -> bool {
-    // Check environment variable
-    if let Ok(val) = env::var("USE_MOCK_SSH") {
-        return val.to_lowercase() == "true" || val == "1";
-    }
-
-    // In debug builds, default to mock unless explicitly disabled
-    #[cfg(debug_assertions)]
-    {
-        if let Ok(val) = env::var("USE_REAL_SSH") {
-            return !(val.to_lowercase() == "true" || val == "1");
-        }
-        true // Default to mock in debug
-    }
-
-    // In release builds, default to real SSH
-    #[cfg(not(debug_assertions))]
-    {
-        false
-    }
-}
 
 
 #[tauri::command]
 pub async fn connect_to_cluster(params: ConnectParams) -> ConnectResult {
-    // Validate parameters
-    if params.host.is_empty() || params.username.is_empty() || params.password.is_empty() {
+    // Simple validation
+    if params.host.trim().is_empty() {
         return ConnectResult {
             success: false,
             session_info: None,
-            error: Some("Missing required connection parameters".to_string()),
+            error: Some("Host is required".to_string()),
+        };
+    }
+    if params.username.trim().is_empty() {
+        return ConnectResult {
+            success: false,
+            session_info: None,
+            error: Some("Username is required".to_string()),
+        };
+    }
+    if params.password.is_empty() {
+        return ConnectResult {
+            success: false,
+            session_info: None,
+            error: Some("Password is required".to_string()),
         };
     }
 
-    // Use mock implementation if in development mode or explicitly requested
-    if use_mock_mode() {
-        return connect_to_cluster_mock(params).await;
-    }
-
-    // Real SSH implementation
-    connect_to_cluster_real(params).await
+    execute_with_mode(
+        connect_to_cluster_mock(params.clone()),
+        connect_to_cluster_real(params)
+    ).await
 }
 
 /// Mock implementation for development
@@ -138,11 +126,10 @@ async fn connect_to_cluster_real(params: ConnectParams) -> ConnectResult {
 
 #[tauri::command]
 pub async fn disconnect() -> DisconnectResult {
-    if use_mock_mode() {
-        return disconnect_mock().await;
-    }
-
-    disconnect_real().await
+    execute_with_mode(
+        disconnect_mock(),
+        disconnect_real()
+    ).await
 }
 
 async fn disconnect_mock() -> DisconnectResult {
@@ -188,11 +175,10 @@ async fn disconnect_real() -> DisconnectResult {
 
 #[tauri::command]
 pub async fn get_connection_status() -> ConnectionStatusResult {
-    if use_mock_mode() {
-        return get_connection_status_mock().await;
-    }
-
-    get_connection_status_real().await
+    execute_with_mode(
+        get_connection_status_mock(),
+        get_connection_status_real()
+    ).await
 }
 
 async fn get_connection_status_mock() -> ConnectionStatusResult {
@@ -234,7 +220,7 @@ async fn get_connection_status_real() -> ConnectionStatusResult {
 // SSH Connection implementation for Phase 1 SSHConnection interface
 #[tauri::command]
 pub async fn ssh_execute_command(command: String, timeout: Option<u32>) -> ApiResult<CommandResult> {
-    if use_mock_mode() {
+    if is_mock_mode() {
         return ssh_execute_command_mock(command).await;
     }
 
@@ -277,7 +263,7 @@ async fn ssh_execute_command_real(command: String, timeout: Option<u32>) -> ApiR
 // SFTP Connection implementation for Phase 1 SFTPConnection interface
 #[tauri::command]
 pub async fn sftp_upload_file(local_path: String, remote_path: String) -> ApiResult<String> {
-    if use_mock_mode() {
+    if is_mock_mode() {
         return sftp_upload_file_mock(local_path, remote_path).await;
     }
 
@@ -305,7 +291,7 @@ async fn sftp_upload_file_real(local_path: String, remote_path: String) -> ApiRe
 
 #[tauri::command]
 pub async fn sftp_download_file(remote_path: String, local_path: String) -> ApiResult<String> {
-    if use_mock_mode() {
+    if is_mock_mode() {
         return sftp_download_file_mock(remote_path, local_path).await;
     }
 
@@ -328,7 +314,7 @@ async fn sftp_download_file_real(remote_path: String, local_path: String) -> Api
 
 #[tauri::command]
 pub async fn sftp_list_files(remote_path: String) -> ApiResult<Vec<FileInfo>> {
-    if use_mock_mode() {
+    if is_mock_mode() {
         return sftp_list_files_mock(remote_path).await;
     }
 
@@ -385,7 +371,7 @@ async fn sftp_list_files_real(remote_path: String) -> ApiResult<Vec<FileInfo>> {
 
 #[tauri::command]
 pub async fn sftp_exists(remote_path: String) -> ApiResult<bool> {
-    if use_mock_mode() {
+    if is_mock_mode() {
         ApiResult::success(true) // Mock always exists
     } else {
         sftp_exists_real(remote_path).await
@@ -416,7 +402,7 @@ async fn sftp_exists_real(remote_path: String) -> ApiResult<bool> {
 
 #[tauri::command]
 pub async fn sftp_create_directory(remote_path: String) -> ApiResult<String> {
-    if use_mock_mode() {
+    if is_mock_mode() {
         ApiResult::success(format!("Mock created directory: {}", remote_path))
     } else {
         sftp_create_directory_real(remote_path).await
@@ -433,7 +419,7 @@ async fn sftp_create_directory_real(remote_path: String) -> ApiResult<String> {
 
 #[tauri::command]
 pub async fn sftp_get_file_info(remote_path: String) -> ApiResult<FileInfo> {
-    if use_mock_mode() {
+    if is_mock_mode() {
         let mock_file = FileInfo {
             name: "mock_file".to_string(),
             path: remote_path.clone(),
@@ -474,6 +460,7 @@ async fn sftp_get_file_info_real(remote_path: String) -> ApiResult<FileInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
 
     #[tokio::test]
     async fn test_connect_with_valid_params() {
@@ -533,23 +520,23 @@ mod tests {
     }
 
     #[test]
-    fn test_use_mock_mode() {
+    fn test_is_mock_mode() {
         // Test with environment variable
         env::set_var("USE_MOCK_SSH", "true");
-        assert!(use_mock_mode());
+        assert!(is_mock_mode());
 
         env::set_var("USE_MOCK_SSH", "false");
-        assert!(!use_mock_mode());
+        assert!(!is_mock_mode());
 
         env::remove_var("USE_MOCK_SSH");
 
         // In debug mode, should default to mock
         #[cfg(debug_assertions)]
-        assert!(use_mock_mode());
+        assert!(is_mock_mode());
 
         // In release mode, should default to real
         #[cfg(not(debug_assertions))]
-        assert!(!use_mock_mode());
+        assert!(!is_mock_mode());
     }
 
     #[tokio::test]
@@ -739,10 +726,10 @@ mod tests {
         let original_value = env::var("USE_MOCK_SSH").ok();
 
         env::set_var("USE_MOCK_SSH", "true");
-        assert!(use_mock_mode());
+        assert!(is_mock_mode());
 
         env::set_var("USE_MOCK_SSH", "false");
-        assert!(!use_mock_mode());
+        assert!(!is_mock_mode());
 
         // Restore original value
         match original_value {
@@ -757,14 +744,14 @@ mod tests {
 
         // Start in mock mode
         env::set_var("USE_MOCK_SSH", "true");
-        assert!(use_mock_mode());
+        assert!(is_mock_mode());
 
         let mock_result = ssh_execute_command("echo test".to_string(), None).await;
         assert!(mock_result.success);
 
         // Switch to real mode (but commands will fail without actual connection)
         env::set_var("USE_MOCK_SSH", "false");
-        assert!(!use_mock_mode());
+        assert!(!is_mock_mode());
 
         // Note: Real mode commands will fail without actual SSH connection
         // but we can test that the mode switching works

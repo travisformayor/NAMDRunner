@@ -30,47 +30,12 @@ impl<T> ApiResult<T> {
         }
     }
 
-    /// Create an error result from any error type
-    pub fn from_error(error: impl std::fmt::Display) -> Self {
+
+    /// Create an error result from anyhow::Error
+    pub fn from_anyhow_error(error: anyhow::Error) -> Self {
         Self::error(error.to_string())
     }
 
-    /// Create an error result from SSH error with structured information
-    pub fn from_ssh_error(error: crate::ssh::SSHError) -> Self {
-        let conn_error = crate::ssh::map_ssh_error(&error);
-        // Create a detailed error message with recovery suggestions
-        let detailed_message = format!(
-            "{}: {} [Code: {}] - Suggestions: {}",
-            conn_error.message,
-            conn_error.details.unwrap_or_default(),
-            conn_error.code,
-            conn_error.suggestions.join("; ")
-        );
-        Self::error(detailed_message)
-    }
-
-    /// Create an error result from anyhow::Error, using SSH error handling if possible
-    pub fn from_anyhow_error(error: anyhow::Error) -> Self {
-        // Check if this is an SSH error for enhanced error handling
-        if let Some(ssh_err) = error.downcast_ref::<crate::ssh::SSHError>() {
-            Self::from_ssh_error(ssh_err.clone())
-        } else {
-            Self::from_error(error)
-        }
-    }
-
-    /// Map to Result type for easier interop
-    pub fn into_result(self) -> Result<T, String> {
-        if self.success {
-            if let Some(data) = self.data {
-                Ok(data)
-            } else {
-                Err("Success result missing data".to_string())
-            }
-        } else {
-            Err(self.error.unwrap_or("Unknown error".to_string()))
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -114,6 +79,18 @@ pub enum FileType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NAMDFileType {
+    #[serde(rename = "pdb")]
+    Pdb,
+    #[serde(rename = "psf")]
+    Psf,
+    #[serde(rename = "prm")]
+    Prm,
+    #[serde(rename = "other")]
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobInfo {
     #[serde(rename = "jobId")]
     pub job_id: String,
@@ -136,6 +113,44 @@ pub struct JobInfo {
     pub scratch_dir: Option<String>,
     #[serde(rename = "errorInfo")]
     pub error_info: Option<String>,
+    #[serde(rename = "namdConfig")]
+    pub namd_config: NAMDConfig,
+    #[serde(rename = "slurmConfig")]
+    pub slurm_config: SlurmConfig,
+    #[serde(rename = "inputFiles")]
+    pub input_files: Vec<InputFile>,
+    #[serde(rename = "remoteDirectory")]
+    pub remote_directory: String,
+}
+
+impl JobInfo {
+    /// Create a new JobInfo with default timestamps
+    pub fn new(
+        job_id: String,
+        job_name: String,
+        namd_config: NAMDConfig,
+        slurm_config: SlurmConfig,
+        input_files: Vec<InputFile>,
+        remote_directory: String,
+    ) -> Self {
+        Self {
+            job_id,
+            job_name,
+            status: JobStatus::Created,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: None,
+            submitted_at: None,
+            completed_at: None,
+            slurm_job_id: None,
+            project_dir: None,
+            scratch_dir: None,
+            error_info: None,
+            namd_config,
+            slurm_config,
+            input_files,
+            remote_directory,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,10 +181,8 @@ pub struct InputFile {
     pub local_path: String,
     #[serde(rename = "remoteName")]
     pub remote_name: Option<String>,
-    #[serde(rename = "type")]
-    pub type_field: Option<String>, // 'pdb' | 'psf' | 'prm' | 'other'
     #[serde(rename = "fileType")]
-    pub file_type: Option<String>, // 'pdb' | 'psf' | 'prm' | 'other'
+    pub file_type: Option<NAMDFileType>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

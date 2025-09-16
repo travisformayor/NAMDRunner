@@ -36,6 +36,15 @@ mod job_workflow_integration_tests {
     /// Ensure we're in mock mode for integration tests
     fn setup_test_environment() {
         env::set_var("USE_MOCK_SSH", "true");
+
+        // Initialize fresh database for tests
+        let _ = crate::database::initialize_database(":memory:");
+
+        // Reset and set mock state to connected so job submission works
+        crate::mock_state::reset_mock_state();
+        crate::mock_state::with_mock_state(|state| {
+            state.connection_state = crate::types::ConnectionState::Connected;
+        });
     }
 
     /// Test complete job lifecycle: create -> submit -> delete
@@ -55,6 +64,9 @@ mod job_workflow_integration_tests {
 
         // Step 2: Verify job status after creation
         let status_result = get_job_status(job_id.clone()).await;
+        if !status_result.success {
+            println!("Job status error: {:?}", status_result.error);
+        }
         assert!(status_result.success, "Should get job status successfully");
         assert!(status_result.job_info.is_some(), "Should return job info");
 

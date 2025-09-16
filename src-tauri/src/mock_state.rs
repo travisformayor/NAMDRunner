@@ -253,23 +253,43 @@ impl MockStateManager {
         let job_id = format!("job_{:03}", self.job_counter);
         let now = Utc::now().to_rfc3339();
         
-        JobInfo {
-            job_id: job_id.clone(),
-            job_name: name.to_string(),
-            status: status.clone(),
-            slurm_job_id: slurm_job_id.map(|s| s.to_string()),
-            created_at: now.clone(),
-            updated_at: Some(now.clone()),
-            submitted_at: if slurm_job_id.is_some() { Some(now.clone()) } else { None },
-            completed_at: if matches!(status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
-                Some(now)
-            } else {
-                None
+        let mut job_info = JobInfo::new(
+            job_id.clone(),
+            name.to_string(),
+            NAMDConfig {
+                steps: 1000,
+                temperature: 300.0,
+                timestep: 2.0,
+                outputname: "output".to_string(),
+                dcd_freq: Some(100),
+                restart_freq: Some(500),
             },
-            project_dir: Some(format!("/projects/testuser/namdrunner_jobs/{}", job_id)),
-            scratch_dir: Some(format!("/scratch/alpine/testuser/namdrunner_jobs/{}", job_id)),
-            error_info: None,
-        }
+            SlurmConfig {
+                cores: 4,
+                memory: "4GB".to_string(),
+                walltime: "01:00:00".to_string(),
+                partition: Some("compute".to_string()),
+                qos: None,
+            },
+            Vec::new(),
+            format!("/projects/testuser/namdrunner_jobs/{}", job_id),
+        );
+
+        // Override with specific mock values
+        job_info.status = status.clone();
+        job_info.slurm_job_id = slurm_job_id.map(|s| s.to_string());
+        job_info.created_at = now.clone();
+        job_info.updated_at = Some(now.clone());
+        job_info.submitted_at = if slurm_job_id.is_some() { Some(now.clone()) } else { None };
+        job_info.completed_at = if matches!(status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
+            Some(now)
+        } else {
+            None
+        };
+        job_info.project_dir = Some(format!("/projects/testuser/namdrunner_jobs/{}", job_id));
+        job_info.scratch_dir = Some(format!("/scratch/alpine/testuser/namdrunner_jobs/{}", job_id));
+
+        job_info
     }
 
     // State progression methods

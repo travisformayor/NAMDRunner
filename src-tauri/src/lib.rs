@@ -4,8 +4,11 @@ mod mock_state;
 pub mod ssh;
 mod security;
 mod validation;
+mod validation_traits;
 mod retry;
-mod connection_utils;
+mod database;
+mod slurm;
+mod mode_switching;
 #[cfg(test)]
 mod security_tests;
 #[cfg(test)]
@@ -13,8 +16,28 @@ mod integration_tests;
 
 pub use types::*;
 
+fn initialize_database() -> anyhow::Result<()> {
+    // Determine database path based on environment
+    let db_path = if cfg!(debug_assertions) {
+        // In development, use a local database file
+        "./namdrunner_dev.db"
+    } else {
+        // In production, use a path in the user's data directory
+        // For now, use a simple path - this could be improved with proper OS-specific paths
+        "./namdrunner.db"
+    };
+
+    database::initialize_database(db_path)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize database on startup
+    if let Err(e) = initialize_database() {
+        eprintln!("Failed to initialize database: {}", e);
+        std::process::exit(1);
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -37,6 +60,8 @@ pub fn run() {
             commands::jobs::get_all_jobs,
             commands::jobs::sync_jobs,
             commands::jobs::delete_job,
+            commands::jobs::sync_job_status,
+            commands::jobs::sync_all_jobs,
             // File management
             commands::files::upload_job_files,
             commands::files::download_job_output,

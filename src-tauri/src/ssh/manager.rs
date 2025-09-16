@@ -71,159 +71,149 @@ impl ConnectionManager {
     /// Execute a command using the current connection
     pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Result<CommandResult> {
         // Use retry logic for command execution
-        patterns::retry_quick_operation(|| {
-            let connection = self.connection.clone();
-            let command = command.to_string();
-            let timeout = timeout;
-            Box::pin(async move {
-                let conn = connection.lock().await;
-                match conn.as_ref() {
-                    Some(connection) => {
-                        let session = connection.get_session()?;
-                        let executor = super::commands::CommandExecutor::new(session, timeout.unwrap_or(120));
-                        executor.execute(&command).await
-                    }
-                    None => Err(anyhow::anyhow!("No SSH connection available"))
-                }
-            })
-        }).await
+        patterns::retry_quick_operation(|| self.execute_command_once(command, timeout)).await
+    }
+
+    async fn execute_command_once(&self, command: &str, timeout: Option<u64>) -> Result<CommandResult> {
+        let conn = self.connection.lock().await;
+        match conn.as_ref() {
+            Some(connection) => {
+                let session = connection.get_session()?;
+                let executor = super::commands::CommandExecutor::new(session, timeout.unwrap_or(120));
+                executor.execute(command).await
+            }
+            None => Err(anyhow::anyhow!("No SSH connection available"))
+        }
     }
 
     /// Upload a file using the current connection
     pub async fn upload_file(&self, local_path: &str, remote_path: &str) -> Result<FileTransferProgress> {
         // Use retry logic for file uploads
-        patterns::retry_file_operation(|| {
-            let connection = self.connection.clone();
-            let local_path = local_path.to_string();
-            let remote_path = remote_path.to_string();
-            Box::pin(async move {
-                let conn = connection.lock().await;
-                match conn.as_ref() {
-                    Some(connection) => {
-                        let session = connection.get_session()?;
-                        let sftp = super::sftp::SFTPOperations::new(session);
-                        sftp.upload_file(std::path::Path::new(&local_path), &remote_path, None)
-                    }
-                    None => Err(anyhow::anyhow!("No SSH connection available"))
-                }
-            })
-        }).await
+        patterns::retry_file_operation(|| self.upload_file_once(local_path, remote_path)).await
+    }
+
+    async fn upload_file_once(&self, local_path: &str, remote_path: &str) -> Result<FileTransferProgress> {
+        let conn = self.connection.lock().await;
+        match conn.as_ref() {
+            Some(connection) => {
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+                sftp.upload_file(std::path::Path::new(local_path), remote_path, None)
+            }
+            None => Err(anyhow::anyhow!("No SSH connection available"))
+        }
     }
 
     /// Download a file using the current connection
     pub async fn download_file(&self, remote_path: &str, local_path: &str) -> Result<FileTransferProgress> {
         // Use retry logic for file downloads
-        patterns::retry_file_operation(|| {
-            let connection = self.connection.clone();
-            let remote_path = remote_path.to_string();
-            let local_path = local_path.to_string();
-            Box::pin(async move {
-                let conn = connection.lock().await;
-                match conn.as_ref() {
-                    Some(connection) => {
-                        let session = connection.get_session()?;
-                        let sftp = super::sftp::SFTPOperations::new(session);
-                        sftp.download_file(&remote_path, std::path::Path::new(&local_path), None)
-                    }
-                    None => Err(anyhow::anyhow!("No SSH connection available"))
-                }
-            })
-        }).await
+        patterns::retry_file_operation(|| self.download_file_once(remote_path, local_path)).await
+    }
+
+    async fn download_file_once(&self, remote_path: &str, local_path: &str) -> Result<FileTransferProgress> {
+        let conn = self.connection.lock().await;
+        match conn.as_ref() {
+            Some(connection) => {
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+                sftp.download_file(remote_path, std::path::Path::new(local_path), None)
+            }
+            None => Err(anyhow::anyhow!("No SSH connection available"))
+        }
     }
 
     /// List files in a directory using the current connection
     pub async fn list_files(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
         // Use retry logic for directory listing
-        patterns::retry_quick_operation(|| {
-            let connection = self.connection.clone();
-            let remote_path = remote_path.to_string();
-            Box::pin(async move {
-                let conn = connection.lock().await;
-                match conn.as_ref() {
-                    Some(connection) => {
-                        let session = connection.get_session()?;
-                        let sftp = super::sftp::SFTPOperations::new(session);
-                        sftp.list_directory(&remote_path)
-                    }
-                    None => Err(anyhow::anyhow!("No SSH connection available"))
-                }
-            })
-        }).await
+        patterns::retry_quick_operation(|| self.list_files_once(remote_path)).await
+    }
+
+    async fn list_files_once(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
+        let conn = self.connection.lock().await;
+        match conn.as_ref() {
+            Some(connection) => {
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+                sftp.list_directory(remote_path)
+            }
+            None => Err(anyhow::anyhow!("No SSH connection available"))
+        }
     }
 
     /// Create a directory using native SFTP
     pub async fn create_directory(&self, remote_path: &str) -> Result<()> {
         // Use retry logic for directory creation
-        patterns::retry_file_operation(|| {
-            let connection = self.connection.clone();
-            let remote_path = remote_path.to_string();
-            Box::pin(async move {
-                let conn = connection.lock().await;
-                match conn.as_ref() {
-                    Some(connection) => {
-                        let session = connection.get_session()?;
-                        let sftp = super::sftp::SFTPOperations::new(session);
-                        sftp.create_directory_recursive(&remote_path, 0o755)
-                    }
-                    None => Err(anyhow::anyhow!("No SSH connection available"))
-                }
-            })
-        }).await
+        patterns::retry_file_operation(|| self.create_directory_once(remote_path)).await
+    }
+
+    async fn create_directory_once(&self, remote_path: &str) -> Result<()> {
+        let conn = self.connection.lock().await;
+        match conn.as_ref() {
+            Some(connection) => {
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+                sftp.create_directory_recursive(remote_path, 0o755)
+            }
+            None => Err(anyhow::anyhow!("No SSH connection available"))
+        }
+    }
+
+    /// Delete a directory and all its contents using SSH command
+    pub async fn delete_directory(&self, remote_path: &str) -> Result<CommandResult> {
+        // Use rm -rf command for directory deletion with retry logic
+        let rm_command = format!("rm -rf {}", crate::validation::shell::escape_parameter(remote_path));
+        self.execute_command(&rm_command, Some(30)).await
     }
 
     /// Get file information using native SFTP
     pub async fn get_file_info(&self, remote_path: &str) -> Result<RemoteFileInfo> {
         // Use retry logic for file info retrieval
-        patterns::retry_quick_operation(|| {
-            let connection = self.connection.clone();
-            let remote_path = remote_path.to_string();
-            Box::pin(async move {
-                let conn = connection.lock().await;
-                match conn.as_ref() {
-                    Some(connection) => {
-                        let session = connection.get_session()?;
-                        let sftp = super::sftp::SFTPOperations::new(session);
-                        sftp.stat(&remote_path)
-                    }
-                    None => Err(anyhow::anyhow!("No SSH connection available"))
-                }
-            })
-        }).await
+        patterns::retry_quick_operation(|| self.get_file_info_once(remote_path)).await
+    }
+
+    async fn get_file_info_once(&self, remote_path: &str) -> Result<RemoteFileInfo> {
+        let conn = self.connection.lock().await;
+        match conn.as_ref() {
+            Some(connection) => {
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+                sftp.stat(remote_path)
+            }
+            None => Err(anyhow::anyhow!("No SSH connection available"))
+        }
     }
 
     /// Check if a file or directory exists
     pub async fn file_exists(&self, remote_path: &str) -> Result<bool> {
         // Use retry logic for existence checking
-        patterns::retry_quick_operation(|| {
-            let connection = self.connection.clone();
-            let remote_path = remote_path.to_string();
-            Box::pin(async move {
-                let conn = connection.lock().await;
-                match conn.as_ref() {
-                    Some(connection) => {
-                        let session = connection.get_session()?;
-                        let sftp = super::sftp::SFTPOperations::new(session);
-                        // Try to stat the file - if it succeeds, the file exists
-                        match sftp.stat(&remote_path) {
-                            Ok(_) => Ok(true),
-                            Err(e) => {
-                                // Check if the error indicates the file doesn't exist
-                                let error_msg = e.to_string().to_lowercase();
-                                if error_msg.contains("no such file") ||
-                                   error_msg.contains("not found") ||
-                                   error_msg.contains("does not exist") {
-                                    Ok(false)
-                                } else {
-                                    // Some other error occurred
-                                    Err(e)
-                                }
-                            }
+        patterns::retry_quick_operation(|| self.file_exists_once(remote_path)).await
+    }
+
+    async fn file_exists_once(&self, remote_path: &str) -> Result<bool> {
+        let conn = self.connection.lock().await;
+        match conn.as_ref() {
+            Some(connection) => {
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+                // Try to stat the file - if it succeeds, the file exists
+                match sftp.stat(remote_path) {
+                    Ok(_) => Ok(true),
+                    Err(e) => {
+                        // Check if the error indicates the file doesn't exist
+                        let error_msg = e.to_string().to_lowercase();
+                        if error_msg.contains("no such file") ||
+                           error_msg.contains("not found") ||
+                           error_msg.contains("does not exist") {
+                            Ok(false)
+                        } else {
+                            // Some other error occurred
+                            Err(e)
                         }
                     }
-                    None => Err(anyhow::anyhow!("No SSH connection available"))
                 }
-            })
-        }).await
+            }
+            None => Err(anyhow::anyhow!("No SSH connection available"))
+        }
     }
 
     /// Upload a file with existence checking
