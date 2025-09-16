@@ -432,11 +432,11 @@ mod tests {
         // Test our mock filesystem for consistent behavior
         let mut fs = MockFileSystem::new();
 
-        // Add files and directories
-        fs.add_file("/home/user/document.txt", 2048, 0o644)
-          .add_file("/home/user/script.sh", 512, 0o755)
-          .add_directory("/home/user", 0o755)
-          .add_directory("/home/user/projects", 0o755);
+        // Add directories first, then files (proper order for filesystem)
+        fs.add_directory("/home/user", 0o755)
+          .add_directory("/home/user/projects", 0o755)
+          .add_file("/home/user/document.txt", 2048, 0o644)
+          .add_file("/home/user/script.sh", 512, 0o755);
 
         // Test file retrieval
         let doc_info = fs.get_file_info("/home/user/document.txt").unwrap();
@@ -452,11 +452,12 @@ mod tests {
 
         // Test directory listing
         let listing = fs.list_directory("/home/user").unwrap();
-        assert!(listing.len() >= 2); // At least our two files
+        assert_eq!(listing.len(), 3); // Two files + one subdirectory
 
         let names: Vec<&str> = listing.iter().map(|f| f.name.as_str()).collect();
         assert!(names.contains(&"document.txt"));
         assert!(names.contains(&"script.sh"));
+        assert!(names.contains(&"projects"));
     }
 
     #[test]

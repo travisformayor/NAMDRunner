@@ -85,7 +85,7 @@ pub enum ConnectionState {
     Expired,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum JobStatus {
     #[serde(rename = "CREATED")]
     Created,

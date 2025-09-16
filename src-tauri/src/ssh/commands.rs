@@ -207,9 +207,23 @@ impl SLURMCommands {
     /// Parse sbatch output to get job ID
     pub fn parse_sbatch_output(output: &str) -> Option<String> {
         // Expected format: "Submitted batch job 12345678"
-        output.split_whitespace()
-            .last()
-            .map(|s| s.to_string())
+        // Handle multiline output by processing first line
+        for line in output.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("Submitted batch job") {
+                return trimmed.split_whitespace()
+                    .last()
+                    .and_then(|s| {
+                        // Verify it's a valid job ID (numeric)
+                        if s.chars().all(|c| c.is_ascii_digit()) {
+                            Some(s.to_string())
+                        } else {
+                            None
+                        }
+                    });
+            }
+        }
+        None
     }
 }
 

@@ -3,6 +3,13 @@ pub mod commands;
 mod mock_state;
 pub mod ssh;
 mod security;
+mod validation;
+mod retry;
+mod connection_utils;
+#[cfg(test)]
+mod security_tests;
+#[cfg(test)]
+mod integration_tests;
 
 pub use types::*;
 
