@@ -2,8 +2,9 @@
 
 > **📚 For cluster-specific details**, see `docs/cluster-guide.md`
 > **🔧 For implementation patterns**, see `python-implementation-reference.md`
+> **⚙️ For dynamic configuration**, see Phase 5 Settings Page architecture
 
-This document provides a complete reference of SLURM commands and patterns proven to work with the CURC Alpine cluster.
+This document provides a complete reference of SLURM commands and patterns. **Note**: Starting in Phase 5, resource limits and partition information will be discoverable via the Settings page rather than hardcoded.
 
 ## Table of Contents
 - [Module Loading](#module-loading)
@@ -163,9 +164,22 @@ scontrol update JobId=<job_id> Partition=amilan
 # Note: Only pending jobs can be modified
 ```
 
-## Resource Limits
+## Resource Limits (Dynamic Discovery)
 
-### Alpine Cluster (amilan partition)
+**Phase 5+**: Resource limits will be discovered automatically via Settings page using:
+
+```bash
+# Query partition information
+sinfo --partition=amilan --format="%n %c %m %t %O" --noheader
+
+# Get detailed partition limits
+scontrol show partition amilan
+
+# Query QOS information
+sacctmgr show qos format=name,priority,maxtres,maxwall --noheader
+```
+
+**Legacy Reference** (Alpine Cluster - amilan partition):
 | Resource | Minimum | Maximum | Default |
 |----------|---------|---------|---------|
 | Cores | 1 | 64 | 1 |

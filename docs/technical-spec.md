@@ -15,7 +15,8 @@
 * **Rust** with **Tauri commands** as the IPC boundary from UI.
 * **SSH/SFTP** via Rust `ssh2` (libssh2). Password and keyboard-interactive auth match cluster policies.
 * **SQLite** via `rusqlite` (or the Tauri SQL plugin).
-* **Templating** (NAMD `.conf` + Slurm scripts) via `tera` or `handlebars`.
+* **Templating** (NAMD `.conf` + Slurm scripts) via `tera` or `handlebars` - **Phase 5+**: Templates stored as configurable data in database.
+* **Settings Management** - Dynamic cluster configuration and template management via Settings page.
 
 #### Rust Development Patterns
 *Essential patterns for SSH/SFTP backend implementation*
@@ -60,6 +61,18 @@ pub mod ssh {
     pub use manager::ConnectionManager;
     pub use connection::{SSHConnection, ConnectionConfig};
 }
+
+// Phase 5+ additions
+pub mod cluster {
+    pub mod discovery;     // Query cluster capabilities (module avail, spider)
+    pub mod templates;     // Template management and rendering
+    pub mod job_types;     // Job type definitions and defaults
+}
+
+pub mod settings {
+    pub mod config;        // Settings persistence and management
+    pub mod validation;    // Template and configuration validation
+}
 ```
 
 **Async/Blocking Integration**: Handle ssh2's blocking nature properly.
@@ -98,6 +111,22 @@ pub struct JobInfo {
     pub status: JobStatus,
     #[serde(rename = "createdAt")]
     pub created_at: String, // ISO 8601 format
+    // Phase 6+ addition for job restart functionality
+    #[serde(rename = "restartInfo")]
+    pub restart_info: Option<RestartInfo>,
+}
+
+// Phase 6+ addition: Job restart data model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestartInfo {
+    #[serde(rename = "parentJobId")]
+    pub parent_job_id: String,
+    #[serde(rename = "checkpointFiles")]
+    pub checkpoint_files: Vec<String>,
+    #[serde(rename = "completedSteps")]
+    pub completed_steps: u64,
+    #[serde(rename = "remainingSteps")]
+    pub remaining_steps: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,6 +164,38 @@ For complete Rust development standards and anti-patterns, see [`docs/developer-
 
 ### Data Contracts
 * Local SQLite schemas (projects, jobs, files, statuses) - See `docs/data-spec.md`
+* **Phase 5+ Extensions**: Settings and template storage schemas:
+  ```sql
+  -- Cluster configurations (multiple clusters support)
+  CREATE TABLE cluster_configs (
+      cluster_id TEXT PRIMARY KEY,
+      hostname TEXT NOT NULL,
+      namd_version TEXT,
+      module_sequence TEXT,
+      default_paths JSON
+  );
+
+  -- Template storage (configurable, not hardcoded)
+  CREATE TABLE namd_templates (
+      template_id TEXT PRIMARY KEY,
+      job_type TEXT NOT NULL,
+      namd_version TEXT,
+      template_content TEXT NOT NULL,
+      template_variables JSON
+  );
+
+  -- Job type definitions
+  CREATE TABLE job_types (
+      job_type_id TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      template_id TEXT,
+      default_resources JSON,
+      required_files JSON
+  );
+
+  -- Phase 6+ addition: Extend jobs table for restart functionality
+  ALTER TABLE jobs ADD COLUMN restart_info TEXT; -- JSON blob with RestartInfo
+  ```
 * Remote JSON shapes (`meta.json`, `job.json`) versioned with a `schema_version` field - See `docs/data-spec.md`
 * IPC command interfaces between frontend and backend - See `docs/api-spec.md`
 * Reconciliation treats **cluster** as source-of-truth on conflict
@@ -307,6 +368,16 @@ Key areas covered:
 * Explicit **Connect/Disconnect/Reconnect** controls and visible session state.
 * Clear job status with last-polled timestamp.
 * Non-blocking status refresh; errors as dismissible banners with retry.
+
+### Job Restart UI Flow (Phase 6+)
+* **"Restart Job" button** appears on completed/failed jobs with detected checkpoint files.
+* **Restart wizard** allows researcher to:
+  - Review original job parameters
+  - Modify resource allocation (cores, memory, walltime)
+  - See checkpoint file status and validation
+  - Preview restart job configuration
+* **Restart job tracking** shows connection to parent job and restart lineage.
+* **Progress indication** displays completed vs remaining steps across restart chain.
 
 ## References
 

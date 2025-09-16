@@ -22,12 +22,20 @@ A **fellow researcher** (not a paying customer). We can help them set it up init
 
 ## End-to-End Workflow
 
+### Primary Workflow (New Jobs)
 1. **Connect via SSH** (password or keyboard-interactive). Session lives in memory only.
 2. **Wizard**: build NAMD `.conf` from templates; user attaches inputs.
 3. **Stage & upload** via SFTP to `/projects/$USER/namdrunner_jobs/...`; write **JSON** metadata files (top-level job/project info).
 4. **Submit**: copy staged inputs to a **scratch** run dir; `sbatch` the generated job script; capture JobID.
 5. **Track**: poll **Slurm** (`squeue` while pending/running, `sacct` for terminal states) and update local cache + remote JSON.
 6. **Results**: browse remote folders, download outputs as needed.
+
+### Job Restart Workflow (Post MVP-Phases)
+7. **Restart Option**: for completed/failed jobs with checkpoint files, provide "Restart Job" option.
+8. **Resource Selection**: allow researcher to choose different resource allocation for restart.
+9. **Checkpoint Detection**: automatically detect and validate NAMD checkpoint files (`.restart.coor`, `.restart.vel`, `.restart.xsc`).
+10. **Restart Submission**: create new job with restart template, copy checkpoint files, submit with remaining steps.
+11. **Lineage Tracking**: maintain connection between original job and restart jobs for progress tracking.
 
 ## Data Placement Strategy
 
@@ -64,6 +72,7 @@ A **fellow researcher** (not a paying customer). We can help them set it up init
 * Jobs don't mysteriously fail due to our tool
 * Tool works reliably for months without maintenance
 * Scientists can reopen the tool and see past submitted jobs
+* **Scientists can restart failed/incomplete jobs with different resources**
 * New developers can understand and modify code
 
 ### Technical Goals

@@ -61,23 +61,32 @@ src-tauri/
 │   ├── commands/                # Tauri IPC command handlers
 │   │   ├── mod.rs              # Command module exports
 │   │   ├── connection.rs       # Connection management commands
-│   │   └── jobs.rs             # Job lifecycle commands (create/submit/delete)
+│   │   ├── jobs.rs             # Job lifecycle commands (create/submit/delete)
+│   │   └── files.rs            # File management commands
 │   ├── ssh/                    # SSH/SFTP service implementation
 │   │   ├── mod.rs              # SSH module exports
 │   │   ├── connection.rs       # Low-level SSH connection handling
 │   │   ├── manager.rs          # Connection lifecycle and directory management
-│   │   ├── commands.rs         # SLURM command execution and parsing
+│   │   ├── commands.rs         # SSH command execution and parsing
 │   │   ├── sftp.rs             # File transfer operations
 │   │   ├── errors.rs           # SSH error mapping and classification
 │   │   └── test_utils.rs       # Mock infrastructure for testing
+│   ├── slurm/                  # SLURM integration
+│   │   ├── mod.rs              # SLURM module exports
+│   │   ├── commands.rs         # SLURM command builder and patterns
+│   │   └── status.rs           # Job status synchronization
+│   ├── database/               # Data persistence layer
+│   │   ├── mod.rs              # Database module exports
+│   │   └── job_repository.rs   # Repository pattern for job data access
 │   ├── types/                  # Rust type definitions
 │   │   ├── mod.rs              # Type module exports
 │   │   ├── core.rs             # Core domain types (JobInfo, SessionInfo)
 │   │   └── commands.rs         # Command parameter and result types
-│   ├── connection_utils.rs     # SSH operation wrapper with retry logic
 │   ├── retry.rs                # Exponential backoff retry implementation
 │   ├── validation.rs           # Input sanitization and path safety
+│   ├── validation_traits.rs    # Unified validation trait patterns
 │   ├── security.rs             # Secure password handling with SecStr
+│   ├── mode_switching.rs       # Mock/real mode switching patterns
 │   └── mock_state.rs           # Mock state management for development
 ├── Cargo.toml                  # Dependencies (ssh2, secstr, rusqlite)
 └── tauri.conf.json            # Tauri configuration
@@ -275,12 +284,36 @@ For comprehensive architectural patterns and code quality standards, see [`docs/
 - **Memory Safety**: SecStr-based password handling with automatic cleanup
 - **Shell Protection**: `escape_parameter()` prevents command injection attacks
 
-### Retry Logic Implementation
-**Resilient Operations**: Exponential backoff retry system for network operations:
-- **RetryManager**: Configurable retry with jitter (1s → 2s → 4s progression)
-- **Pattern-Based**: Different strategies for file operations vs quick operations
-- **Error Classification**: Proper categorization of retryable vs non-retryable errors
-- **ConnectionUtils**: Clean wrapper API for all SSH operations with integrated retry
+### Repository Pattern Implementation
+**Separation of Database Concerns**: Clean data access layer with repository pattern:
+- **JobRepository trait**: Standardized interface for job data operations
+- **DefaultJobRepository**: Concrete implementation using existing database infrastructure
+- **JobService**: Business logic layer providing domain-specific operations
+- **Mock repositories**: In-memory implementations for testing without database dependencies
+- **Domain separation**: Core types focus on business logic, repositories handle persistence
+
+### Validation Pattern Implementation
+**Unified Validation System**: Trait-based validation with consistent error handling:
+- **Validate trait**: Generic validation interface for command parameters
+- **ValidateId trait**: Specialized validation for ID parameters with security checks
+- **ValidationError**: Structured error types with field-specific context
+- **Validator utilities**: Reusable validation functions for common patterns
+- **Type safety**: Validated types ensure clean input throughout the system
+
+### SLURM Command Builder
+**Consistent Command Construction**: Centralized SLURM command generation:
+- **SlurmCommand builder**: Fluent interface for building complex commands
+- **Standard prefixes**: All commands include proper module loading sequences
+- **Helper functions**: Pre-built patterns for common operations (status, submit, cancel)
+- **Reference compliance**: Commands match documented SLURM patterns exactly
+- **Maintainability**: Single place to update command patterns and module versions
+
+### Async Pattern Optimization
+**Efficient Memory Usage**: Optimized async patterns without unnecessary allocations:
+- **Direct async functions**: Eliminated Box::pin allocations where possible
+- **Helper methods**: Private async functions for cleaner retry integration
+- **Performance**: Reduced heap allocations for frequently-called operations
+- **Maintainability**: Cleaner code structure without boxing overhead
 
 ### Mock Infrastructure
 **Offline Development Environment**: Complete mock system for fast development:
@@ -291,19 +324,27 @@ For comprehensive architectural patterns and code quality standards, see [`docs/
 
 ## Current Implementation Status
 
-The NAMDRunner application currently provides **complete job lifecycle management** with secure SSH/SFTP cluster connectivity:
+The NAMDRunner application currently provides **complete job lifecycle management** with secure SSH/SFTP cluster connectivity and a clean, refactored architecture:
 
 ### Job Management Capabilities
 - **Job Creation**: Complete directory structure setup with security validation
 - **Job Submission**: SLURM script generation and SBATCH execution with job ID parsing
+- **Job Status Sync**: Real-time status monitoring with batch operations
 - **Job Deletion**: Safe cleanup with path validation and directory removal
 - **File Operations**: SFTP-based file upload/download with retry logic
 - **Directory Management**: Automated project and scratch directory lifecycle
 
+### Refactored Architecture
+- **Repository Pattern**: Clean separation between domain logic and data persistence
+- **Unified Validation**: Trait-based validation system with consistent error handling
+- **SLURM Command Builder**: Centralized, maintainable command construction
+- **Optimized Async**: Efficient async patterns without unnecessary Box::pin allocations
+- **Mode Switching**: Clean mock/real operation patterns for development and testing
+
 ### SSH/SFTP Integration
-- **Real SSH Operations**: Production-ready ssh2-based connectivity
+- **Real SSH Operations**: Production-ready ssh2-based connectivity with optimized async patterns
 - **Secure Authentication**: Password-only authentication with memory-safe credential handling
-- **Network Resilience**: Exponential backoff retry logic for transient failures
+- **Network Resilience**: Exponential backoff retry logic integrated directly into ConnectionManager
 - **Error Recovery**: Comprehensive error classification with recovery strategies
 - **Dual Mode Operation**: Mock mode for development, real mode for production
 
@@ -315,8 +356,8 @@ The NAMDRunner application currently provides **complete job lifecycle managemen
 - **No Persistence**: Credentials exist only in memory during active sessions
 
 ### Testing Infrastructure
-- **116 Passing Tests**: Complete unit test coverage using NAMDRunner testing philosophy
-- **Mock Infrastructure**: Fast offline development environment
+- **Comprehensive Test Coverage**: Complete unit test coverage using NAMDRunner testing philosophy
+- **Mock Infrastructure**: Fast offline development environment with repository mocks
 - **Business Logic Focus**: Tests validate our code, not external libraries
 - **Security Testing**: Comprehensive validation against malicious inputs
 - **No External Dependencies**: All tests use mocks for reliability
