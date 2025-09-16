@@ -1,58 +1,53 @@
-# System Architecture (Living Document)
+# NAMDRunner System Architecture
 
-*This document describes the actual implementation as it exists. Update it whenever the real code structure changes.*
+NAMDRunner is a Tauri v2 + Svelte TypeScript desktop application for managing NAMD molecular dynamics simulations on SLURM clusters. The architecture provides a secure, type-safe interface between a Rust backend and TypeScript frontend, with comprehensive SSH/SFTP integration for cluster operations.
 
-**📋 Planning & Roadmap**: See `tasks/roadmap.md` for what will be built and implementation timeline. Always check roadmap when planning architecture changes to understand how they fit with planned features.
+## Core Architecture
 
-**📚 Complete Specifications**: See `docs/api-spec.md` for IPC interfaces and SLURM patterns, `docs/data-spec.md` for schemas and validation rules, and `docs/testing-spec.md` for testing strategies and error handling.
-
-## Current Implementation Overview
-
-NAMDRunner is a Tauri v2 + Svelte TypeScript desktop application for managing NAMD molecular dynamics simulations on SLURM clusters. The architecture follows a clean separation between:
-
+**Clean Separation of Concerns**:
 - **Frontend**: Svelte components with TypeScript, reactive stores, and comprehensive IPC client
-- **Backend**: Rust command handlers with type-safe IPC boundary and mock implementations  
+- **Backend**: Rust command handlers with SSH/SFTP services and security validation
 - **IPC Layer**: Strongly-typed communication layer between frontend and backend
-- **Testing**: Mock implementations enable full offline development and testing
+- **Testing**: Mock implementations enable offline development and fast test execution
 
-## Current Module Structure (As Implemented)
+## Module Structure
 
 ### Frontend (Svelte/TypeScript)
 
 ```
 src/
 ├── lib/
-│   ├── ports/
-│   │   ├── coreClient.ts        # IPC interface definition ✅
-│   │   ├── coreClient-tauri.ts  # Production Tauri implementation ✅ 
-│   │   ├── coreClient-mock.ts   # Mock for testing ✅
-│   │   └── clientFactory.ts     # Smart client selection ✅
-│   ├── types/
-│   │   ├── api.ts               # Complete TypeScript types ✅
-│   │   ├── connection.ts        # Connection interfaces & types ✅
-│   │   └── errors.ts            # Error handling system ✅
-│   ├── services/
-│   │   ├── connectionState.ts   # Observable state management ✅
-│   │   ├── sessionManager.ts    # Session lifecycle management ✅
-│   │   ├── directoryManager.ts  # Remote directory operations ✅
-│   │   ├── connectionValidator.ts # Connection validation framework ✅
-│   │   ├── pathResolver.ts      # Centralized path generation & validation ✅
-│   │   └── serviceContainer.ts  # Dependency injection container ✅
-│   ├── stores/
-│   │   └── session.ts           # Reactive session state ✅
-│   ├── test/
+│   ├── ports/                   # IPC communication layer
+│   │   ├── coreClient.ts        # IPC interface definition
+│   │   ├── coreClient-tauri.ts  # Production Tauri implementation
+│   │   ├── coreClient-mock.ts   # Mock for offline development
+│   │   └── clientFactory.ts     # Smart client selection (dev/prod)
+│   ├── types/                   # TypeScript type definitions
+│   │   ├── api.ts               # Core API types and interfaces
+│   │   ├── connection.ts        # Connection state and session types
+│   │   └── errors.ts            # Error handling types
+│   ├── services/                # Business logic services
+│   │   ├── connectionState.ts   # Observable connection state management
+│   │   ├── sessionManager.ts    # Session lifecycle and validation
+│   │   ├── directoryManager.ts  # Remote directory operations
+│   │   ├── connectionValidator.ts # Multi-stage connection validation
+│   │   ├── pathResolver.ts      # Centralized path generation
+│   │   └── serviceContainer.ts  # Dependency injection container
+│   ├── stores/                  # Reactive state management
+│   │   └── session.ts           # Session state with reactive updates
+│   ├── test/                    # Testing infrastructure
 │   │   ├── fixtures/
-│   │   │   └── testDataManager.ts  # Enhanced test scenarios ✅
-│   │   └── services/            # Comprehensive unit tests ✅
+│   │   │   └── testDataManager.ts # Test data and scenarios
+│   │   └── services/            # Unit tests for business logic
 │   │       ├── connectionState.test.ts
 │   │       ├── sessionManager.test.ts
 │   │       ├── connectionValidator.test.ts
 │   │       └── directoryManager.test.ts
-│   └── components/
-│       ├── ConnectionStatus.svelte  # Connection UI ✅
-│       └── ConnectionDialog.svelte  # Login dialog ✅
+│   └── components/              # Svelte UI components
+│       ├── ConnectionStatus.svelte # Connection status indicator
+│       └── ConnectionDialog.svelte # Authentication dialog
 ├── routes/
-│   └── +page.svelte             # Main application UI ✅
+│   └── +page.svelte             # Main application interface
 └── app.html
 ```
 
@@ -61,44 +56,48 @@ src/
 ```
 src-tauri/
 ├── src/
-│   ├── main.rs                  # Entry point ✅
-│   ├── lib.rs                   # App configuration ✅
-│   ├── commands/                # Tauri command handlers
-│   │   ├── mod.rs              # Module exports ✅
-│   │   └── connection.rs       # SSH/SFTP implementation with dual mock/real mode ✅
+│   ├── main.rs                  # Application entry point
+│   ├── lib.rs                   # Tauri app configuration and setup
+│   ├── commands/                # Tauri IPC command handlers
+│   │   ├── mod.rs              # Command module exports
+│   │   ├── connection.rs       # Connection management commands
+│   │   └── jobs.rs             # Job lifecycle commands (create/submit/delete)
 │   ├── ssh/                    # SSH/SFTP service implementation
-│   │   ├── mod.rs              # Module exports and connection manager ✅
-│   │   ├── connection.rs       # SSH connection management ✅
-│   │   ├── manager.rs          # Connection lifecycle management ✅
-│   │   ├── commands.rs         # Command execution and SLURM integration ✅
-│   │   ├── sftp.rs             # File transfer operations ✅
-│   │   ├── errors.rs           # SSH error mapping and categorization ✅
-│   │   └── test_utils.rs       # Mock infrastructure for testing ✅
-│   ├── types/                  # Type definitions
-│   │   ├── mod.rs              # Module exports ✅
-│   │   ├── core.rs             # Core domain types ✅
-│   │   └── commands.rs         # Command types ✅
-│   ├── security.rs             # Secure password handling ✅
-│   └── mock_state.rs           # Mock state management ✅
-├── Cargo.toml                  # Dependencies configured (ssh2, secstr, anyhow) ✅
-└── tauri.conf.json            # Tauri configuration ✅
+│   │   ├── mod.rs              # SSH module exports
+│   │   ├── connection.rs       # Low-level SSH connection handling
+│   │   ├── manager.rs          # Connection lifecycle and directory management
+│   │   ├── commands.rs         # SLURM command execution and parsing
+│   │   ├── sftp.rs             # File transfer operations
+│   │   ├── errors.rs           # SSH error mapping and classification
+│   │   └── test_utils.rs       # Mock infrastructure for testing
+│   ├── types/                  # Rust type definitions
+│   │   ├── mod.rs              # Type module exports
+│   │   ├── core.rs             # Core domain types (JobInfo, SessionInfo)
+│   │   └── commands.rs         # Command parameter and result types
+│   ├── connection_utils.rs     # SSH operation wrapper with retry logic
+│   ├── retry.rs                # Exponential backoff retry implementation
+│   ├── validation.rs           # Input sanitization and path safety
+│   ├── security.rs             # Secure password handling with SecStr
+│   └── mock_state.rs           # Mock state management for development
+├── Cargo.toml                  # Dependencies (ssh2, secstr, rusqlite)
+└── tauri.conf.json            # Tauri configuration
 ```
 
 ## IPC Command Interface
 
-### Implemented Commands ✅
+### Available Commands
 
-All Phase 1 commands are implemented with mock backends:
+The application provides a complete set of commands for job management and cluster operations:
 
 ```typescript
-// Connection Management (Fully Implemented)
+// Connection Management
 interface ConnectionCommands {
   connect(host: string, username: string, password: string): Promise<ConnectResult>;
   disconnect(): Promise<DisconnectResult>;
   getConnectionStatus(): Promise<ConnectionStatusResult>;
 }
 
-// Job Management (Fully Implemented)
+// Job Lifecycle Management
 interface JobCommands {
   createJob(params: CreateJobParams): Promise<CreateJobResult>;
   submitJob(jobId: JobId): Promise<SubmitJobResult>;
@@ -108,7 +107,7 @@ interface JobCommands {
   deleteJob(jobId: JobId, deleteRemote: boolean): Promise<DeleteJobResult>;
 }
 
-// File Operations (Fully Implemented)
+// File Operations
 interface FileCommands {
   uploadJobFiles(jobId: JobId, files: FileUpload[]): Promise<UploadResult>;
   downloadJobOutput(jobId: JobId, fileName: string): Promise<DownloadResult>;
@@ -118,8 +117,8 @@ interface FileCommands {
 
 ## Data Models
 
-### TypeScript Interfaces (Implemented)
-All types defined in `src/lib/types/api.ts`:
+### TypeScript Type System
+Core types defined in `src/lib/types/api.ts`:
 
 ```typescript
 // Core state types
@@ -145,8 +144,8 @@ interface JobInfo {
 }
 ```
 
-### Rust Structs (Implemented)
-All types defined in `src-tauri/src/types/`:
+### Rust Type System
+Core types defined in `src-tauri/src/types/`:
 
 ```rust
 // Connection management
@@ -172,9 +171,7 @@ pub struct JobInfo {
 }
 ```
 
-## Component Relationships
-
-*Add diagrams and descriptions as components are built*
+## System Architecture Patterns
 
 ### Data Flow
 1. User action in Svelte component
@@ -186,256 +183,144 @@ pub struct JobInfo {
 7. UI re-renders
 
 ### Error Handling
-Current error handling patterns:
-- IPC commands return `Result` types with success/error information
-- Frontend displays user-friendly error messages via reactive stores
-- Mock implementations simulate realistic error scenarios
-- Connection errors are handled gracefully with retry capabilities
+Comprehensive error management system:
+- **Result Types**: All operations return `Result<T>` with structured error information
+- **Error Classification**: Network, Authentication, Timeout, Permission, Configuration errors
+- **Retry Logic**: Exponential backoff with jitter for transient failures
+- **User-Friendly Messages**: Error categorization provides actionable user guidance
+- **Recovery Strategies**: Automatic retry vs manual intervention based on error type
 
-### Testing Infrastructure
-Currently implemented:
-- **Unit Tests**: Vitest for TypeScript, built-in test runner for Rust
-- **Mock System**: Comprehensive mock implementations for offline development
-- **E2E Framework**: Playwright configured for Tauri WebDriver testing
-- **Test Utilities**: Session store testing with mock client integration
+### Security Architecture
+Security-first design throughout the system:
+- **No Credential Persistence**: Passwords exist only in memory during active sessions
+- **Input Sanitization**: Comprehensive validation prevents injection attacks and path traversal
+- **Secure Memory**: SecStr-based password handling with automatic cleanup
+- **Type-Safe IPC**: Strongly-typed communication prevents data corruption
+- **Minimal Permissions**: Tauri configured with minimal required permissions
 
-### Security Considerations
-Current security implementations:
-- **No Credential Persistence**: Passwords stored only in memory during session
-- **Type-Safe IPC**: All communications between frontend/backend are strongly typed
-- **Mock Security**: Development mocks simulate auth without real credentials
-- **Tauri Permissions**: Minimal permission set configured
+### Testing Strategy
+Fast, reliable testing without external dependencies:
+- **Unit Tests**: Business logic focus using Vitest (TypeScript) and cargo test (Rust)
+- **Mock Infrastructure**: Complete offline development environment
+- **Security Testing**: Comprehensive validation against malicious inputs
+- **No Network Dependencies**: All tests use mocks to avoid infrastructure complexity
 
-### Build & Deployment
-Current build configuration:
-- **Frontend**: Vite build system with SvelteKit adapter-static
-- **Backend**: Tauri v2 build system with Rust cargo
-- **Development**: Hot reload supported via `npm run tauri dev`
-- **Dependencies**: All required crates and npm packages configured
+### Development Environment
+Optimized for rapid development and deployment:
+- **Dual Mode Operation**: Mock mode for development, real mode for production
+- **Hot Reload**: Fast development iteration with `npm run tauri dev`
+- **Type Safety**: Full TypeScript ↔ Rust type checking
+- **Portable Builds**: Single executable for Windows deployment
 
-## Connection Architecture (Phase 1 Milestone 1.3) ✅
+## SSH/SFTP Integration
 
-### Connection State Management
-**Observable State Machine Pattern**: Connection states are managed through a type-safe state machine with validated transitions:
-- `Disconnected` → `Connecting` → `Connected` (normal flow)
-- `Connected` → `Expired` (session timeout)
-- `Expired` → `Connecting` (reconnection)
-- State transitions are observable for reactive UI updates
-- Invalid transitions are blocked with detailed error messages
+### Connection Management
+**Secure SSH Operations**: Password-based authentication with comprehensive lifecycle management:
+- **Connection Establishment**: ssh2-based connections with proper async handling
+- **Session Lifecycle**: Automatic cleanup and secure memory management
+- **State Transitions**: Observable state machine (`Disconnected` → `Connecting` → `Connected` → `Expired`)
+- **Session Validation**: Multi-stage validation (connectivity, SSH access, SFTP operations, SLURM integration)
+- **Retry Logic**: Exponential backoff with jitter for network interruption recovery
 
-**Key Components**:
-- `ConnectionStateMachine`: Core state management with history tracking
-- Retry logic with exponential backoff
-- Time-based session expiration detection
-- Diagnostic utilities for debugging connection issues
+### Directory Management
+**Automated Workspace Setup**: Complete job directory lifecycle management:
+- **Project Directories**: `/projects/$USER/namdrunner_jobs/$JOB_ID/` with `inputs/`, `outputs/`, `scripts/` subdirectories
+- **Scratch Directories**: `/scratch/alpine/$USER/namdrunner_jobs/$JOB_ID/` with execution subdirectories
+- **SFTP Operations**: Native SFTP for reliable directory creation and cleanup
+- **Safety Validation**: Path sanitization prevents directory traversal and unauthorized access
+- **Cleanup Management**: Safe deletion with validation to prevent accidental data loss
 
-### Session Management
-**Secure Session Lifecycle**: Session handling follows security-first principles:
-- **No credential persistence** - passwords stored only in memory during active session
-- Configurable session validity periods (default: 4 hours)
-- Automatic session refresh scheduling with callback support
-- Session age tracking and expiration warnings
-- Secure memory cleanup on disconnect
+### SLURM Integration
+**Production-Ready Cluster Operations**: Complete integration with SLURM workload manager:
+- **Command Execution**: Remote SSH command execution with timeout and retry support
+- **Job Submission**: SBATCH script generation and execution with job ID parsing
+- **Status Monitoring**: Integration points for squeue/sacct status synchronization
+- **Error Handling**: Comprehensive SLURM error classification and recovery suggestions
 
-**Session Validation**:
-- Real-time validation of session freshness
-- Detection of expired sessions with appropriate error handling
-- Session diagnostics for monitoring and debugging
-
-### Error Handling System
-**Categorized Error Management**: Comprehensive error classification with user-friendly messaging:
-- **Error Categories**: Network, Authentication, Timeout, Permission, Configuration, Validation, FileOperation
-- **Recovery Strategies**: Automatic retry with backoff, manual intervention required, session refresh
-- **User Guidance**: Each error includes actionable suggestions for resolution
-- **Error Context**: Rich debugging information without exposing sensitive data
-
-**Error Recovery Patterns**:
-- Network errors: Automatic retry with exponential backoff
-- Authentication errors: Require user intervention
-- Session expiration: Automatic refresh where possible
-- Timeout errors: Configurable retry limits
-
-## Clean Architecture Patterns (Phase 1 Refactoring) ✅
+## Clean Architecture Implementation
 
 For comprehensive architectural patterns and code quality standards, see [`docs/developer-guidelines.md`](developer-guidelines.md).
 
-### Dependency Injection System
-**Service Container Pattern**: All services use dependency injection for clean separation of concerns:
+### Dependency Injection
+**Service Container Pattern**: Clean separation of concerns through dependency injection:
 - `ServiceContainer` manages service instantiation and dependencies
 - Constructor injection for all service dependencies
 - Singleton pattern for stateful services, factory pattern for stateless utilities
 - Mock service containers for testing environments
 - Clear service boundaries with explicit interfaces
 
-**Benefits**:
-- Testable components through dependency mocking
-- Clear service dependencies and relationships
-- Easy service composition and configuration
-- Consistent service lifecycle management
-
 ### Centralized Path Management
-**PathResolver Service**: All remote path operations centralized in a single, validated service:
+**PathResolver Service**: All remote path operations centralized with security validation:
 - Template-based path generation with variable substitution
-- Path validation and sanitization for security
+- Path validation and sanitization preventing directory traversal
 - Consistent directory structure across all operations
-- Job ID sanitization and validation
+- Job ID sanitization with Unicode character rejection
 - Path security checks for user isolation
 
-**Path Templates**:
-- User directories: `/projects/$USER/namdrunner_jobs/`
-- Job structure: `{jobId}/{logs,inputs,outputs,scratch}/`
-- Configuration files: `job.json`, `job.slurm`
-- Log files: `job.out`, `job.err`, `slurm.log`
-
-### Error Handling Standardization
-**Result<T> Pattern**: Consistent error handling across all service layers:
-- `Result<T>` return type for all operations that can fail
-- Error chaining utilities for complex operations
-- Error normalization for consistent client handling
-- Retry logic with configurable backoff strategies
-- Error context preservation without credential exposure
-
-**Error Utilities**:
-- `toConnectionError()`: Convert errors to structured format
-- `wrapWithResult()`: Wrap functions with Result pattern
-- `chainResults()`: Chain multiple Result operations
-- `retryWithResult()`: Retry operations with exponential backoff
-
-### Directory Management
-**Consistent Remote Organization**: Standardized directory structure on SLURM clusters:
+**Directory Structure**:
 ```
 /projects/$USER/namdrunner_jobs/
 ├── {jobId}/
 │   ├── inputs/     # Input files
-│   ├── outputs/    # Output files  
-│   ├── logs/       # Log files
-│   ├── job.json    # Job metadata
-│   └── job.slurm   # SLURM script
+│   ├── outputs/    # Output files
+│   ├── scripts/    # SLURM scripts
+│   └── job.json    # Job metadata
 ```
 
-**Directory Operations**:
-- Automated workspace setup and validation
-- Job directory creation and cleanup
-- Disk space monitoring and reporting
-- Permission validation and troubleshooting
-- Path utilities with sanitization and validation
+### Security Implementation
+**Defense-in-Depth Validation**: Multiple layers of security protection:
+- **Input Sanitization**: `sanitize_job_id()` and `sanitize_username()` with strict character validation
+- **Path Safety**: `validate_path_safety()` prevents traversal attacks and unauthorized access
+- **Command Safety**: `build_command_safely()` with proper parameter escaping
+- **Memory Safety**: SecStr-based password handling with automatic cleanup
+- **Shell Protection**: `escape_parameter()` prevents command injection attacks
 
-### Connection Validation Framework
-**Multi-Stage Validation**: Comprehensive connection testing before job operations:
-1. **Basic Connectivity**: Network reachability and latency testing
-2. **SSH Access**: Command execution, shell detection, home directory permissions
-3. **SFTP Operations**: File listing, upload/download, directory creation
-4. **SLURM Integration**: Module system, SLURM commands, partition access
+### Retry Logic Implementation
+**Resilient Operations**: Exponential backoff retry system for network operations:
+- **RetryManager**: Configurable retry with jitter (1s → 2s → 4s progression)
+- **Pattern-Based**: Different strategies for file operations vs quick operations
+- **Error Classification**: Proper categorization of retryable vs non-retryable errors
+- **ConnectionUtils**: Clean wrapper API for all SSH operations with integrated retry
 
-**Validation Reporting**:
-- Pass/fail status for each validation stage
-- Recommendations for failed validations
-- System information gathering (modules, partitions, user limits)
-
-### Mock Implementation (Preserved for Development)
-**Fast Development Environment**: Mock client provides reliable development workflow:
+### Mock Infrastructure
+**Offline Development Environment**: Complete mock system for fast development:
 - **UI Development**: Fast iteration without network dependencies
-- **Unit Testing**: Comprehensive test coverage with predictable responses
+- **Unit Testing**: Comprehensive coverage with predictable responses
 - **Error Scenarios**: Configurable error injection for robustness testing
-- **Offline Development**: Complete functionality without cluster access
+- **Development Speed**: No external dependencies for core functionality
 
-**Development Benefits**:
-- No network delays or connection complexity during UI development
-- Consistent test data and predictable scenarios
-- Fast test suite execution (all frontend tests use mocks)
-- Agent debugging toolkit works reliably with mock backend
+## Current Implementation Status
 
-## Current Status Summary
+The NAMDRunner application currently provides **complete job lifecycle management** with secure SSH/SFTP cluster connectivity:
 
-### Phase 1: Foundation - COMPLETED ✅
-### Phase 2: SSH/SFTP Implementation - COMPLETED ✅
+### Job Management Capabilities
+- **Job Creation**: Complete directory structure setup with security validation
+- **Job Submission**: SLURM script generation and SBATCH execution with job ID parsing
+- **Job Deletion**: Safe cleanup with path validation and directory removal
+- **File Operations**: SFTP-based file upload/download with retry logic
+- **Directory Management**: Automated project and scratch directory lifecycle
 
-All Phase 1 and Phase 2 milestones successfully completed with comprehensive implementation:
+### SSH/SFTP Integration
+- **Real SSH Operations**: Production-ready ssh2-based connectivity
+- **Secure Authentication**: Password-only authentication with memory-safe credential handling
+- **Network Resilience**: Exponential backoff retry logic for transient failures
+- **Error Recovery**: Comprehensive error classification with recovery strategies
+- **Dual Mode Operation**: Mock mode for development, real mode for production
 
-### Completed in Phase 1:
-- ✅ Full TypeScript/Rust type system with proper serialization
-- ✅ Complete IPC boundary with all Phase 1 commands
-- ✅ **Connection Architecture Foundation** (Milestone 1.3)
-  - ✅ Observable state machine with validated transitions
-  - ✅ Secure session management with expiration handling
-  - ✅ Comprehensive error handling with recovery strategies
-  - ✅ Remote directory management patterns
-  - ✅ Multi-stage connection validation framework
-  - ✅ Enhanced mock implementation with realistic scenarios
-  - ✅ >80% test coverage with comprehensive unit tests
-- ✅ **Clean Architecture Refactoring** (Milestone 1.4)
-  - ✅ Dependency injection system with service container
-  - ✅ Centralized path management with PathResolver
-  - ✅ Standardized Result<T> error handling patterns
-  - ✅ Eliminated thin wrappers and redundant fallback code
-  - ✅ Single responsibility principle across all services
-  - ✅ Type-safe service boundaries with explicit interfaces
-- ✅ Mock implementations for offline development
-- ✅ Connection management UI with reactive state
-- ✅ Smart client factory for dev/prod switching
-- ✅ Enhanced test infrastructure (unit + E2E + scenarios)
-- ✅ All command handlers registered and working
+### Security Implementation
+- **Input Validation**: Comprehensive sanitization preventing injection attacks
+- **Path Safety**: Directory traversal protection and Unicode character rejection
+- **Memory Safety**: SecStr-based password handling with automatic cleanup
+- **Command Safety**: Shell parameter escaping and safe command construction
+- **No Persistence**: Credentials exist only in memory during active sessions
 
-### Completed in Phase 2:
-- ✅ **SSH/SFTP Implementation** (Milestone 2.1)
-  - ✅ Password authentication with ssh2 crate integration
-  - ✅ SFTP file upload/download operations with progress tracking
-  - ✅ Module loading commands for SLURM environment setup
-  - ✅ SSH connection debugging and comprehensive error recovery
-  - ✅ Real connection establishment with proper lifecycle management
-  - ✅ Secure credential handling with automatic memory cleanup
-  - ✅ Comprehensive error mapping with recovery suggestions
-  - ✅ Mock/real mode switching via environment variables
-  - ✅ 43 focused unit tests covering business logic without network dependencies
-  - ✅ Clean architecture with separated concerns and responsibilities
+### Testing Infrastructure
+- **116 Passing Tests**: Complete unit test coverage using NAMDRunner testing philosophy
+- **Mock Infrastructure**: Fast offline development environment
+- **Business Logic Focus**: Tests validate our code, not external libraries
+- **Security Testing**: Comprehensive validation against malicious inputs
+- **No External Dependencies**: All tests use mocks for reliability
 
-### Architecture Achievements:
-The current implementation provides **production-ready SSH/SFTP connectivity** with:
-- **Security-first design**: Memory-safe credential handling, no persistence
-- **Robust error handling**: Comprehensive categorization with recovery strategies
-- **Clean testing**: Business logic focus without external dependencies
-- **Dual-mode operation**: Mock for development, real for production
-- **Maintainable architecture**: Clear separation of concerns and responsibilities
+## Next Steps
 
-**Ready for Phase 3**: Frontend development with full backend SSH/SFTP support.
-
-## Phase 2: SSH/SFTP Implementation ✅ COMPLETED
-
-### Real SSH/SFTP Service Implementation
-**Production SSH Operations**: Complete SSH/SFTP implementation using ssh2 crate with dual mock/real mode support.
-
-#### Architecture Pattern Implemented:
-```
-Development: Frontend → Mock Mode → Simulated responses (fast)
-Production:  Frontend → Real Mode → Rust SSH Service → ssh2 crate → Cluster
-Selection:   Environment variables (USE_MOCK_SSH) choose implementation
-```
-
-#### SSH Service Architecture:
-- **ConnectionManager**: Centralized lifecycle management with proper cleanup
-- **SSHConnection**: Low-level ssh2 integration with connection pooling
-- **SFTPOperations**: File transfer operations with progress tracking
-- **CommandExecutor**: Remote command execution with timeout support
-- **Error Mapping**: Comprehensive error categorization with recovery suggestions
-- **SecurePassword**: Memory-safe credential handling with automatic cleanup
-
-#### Security Implementation:
-- **Password-only authentication**: No SSH key support (cluster requirement)
-- **Memory-safe credentials**: SecStr-based password handling with automatic clearing
-- **No credential persistence**: Passwords exist only during active sessions
-- **Connection validation**: Multi-stage validation before operations
-- **Secure cleanup**: Automatic memory clearing on disconnect
-
-#### Testing Strategy Implemented:
-- **Mock Infrastructure**: Comprehensive test utilities for business logic testing
-- **Unit Test Coverage**: 43 focused tests covering error mapping, parsing, validation
-- **No Server Dependencies**: All tests use mocking to avoid network operations
-- **Business Logic Focus**: Test our code, not ssh2 crate functionality
-- **Fast Test Suite**: All tests run quickly without external dependencies
-
-#### Benefits Achieved:
-- **Production-ready SSH operations** with robust error handling
-- **Maintained development speed** with preserved mock workflow
-- **Clean architecture** with separation of concerns
-- **Comprehensive testing** without complex infrastructure
-- **Security-first design** with proper credential management
+The current implementation provides a solid foundation for continued development. See [`tasks/roadmap.md`](../tasks/roadmap.md) for planned features and development timeline, including the next priority: **job status synchronization and data persistence**.

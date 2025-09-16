@@ -131,4 +131,75 @@ cargo install tauri-driver --locked    # WebDriver for desktop testing
 **Mock data issues**: Check `testDataManager.ts` scenario selection  
 **IPC errors**: Use E2E tests to debug TypeScript ↔ Rust communication
 
-**For complete testing documentation**: See `docs/testing-spec.md` for comprehensive testing strategies, setup instructions, debugging workflows, and CI pipeline configuration.
+## Testing Infrastructure Details
+
+### Mock Data Patterns
+
+**SLURM Command Responses**:
+```rust
+const MOCK_SQUEUE_RUNNING: &str = "12345678|test_job|R|00:15:30|01:44:30|1|24|16GB|amilan|/scratch/alpine/testuser/namdrunner_jobs/test_job";
+const MOCK_SACCT_COMPLETED: &str = "12345678|test_job|COMPLETED|0:0|2025-01-15T10:00:00|2025-01-15T11:00:00|01:00:00|/scratch/alpine/testuser/namdrunner_jobs/test_job";
+const MOCK_SBATCH_SUCCESS: &str = "Submitted batch job 12345678";
+```
+
+**Job Lifecycle States**:
+- **CREATED** - Job exists locally but not submitted
+- **PENDING** - Submitted to SLURM, waiting for resources
+- **RUNNING** - Executing on cluster
+- **COMPLETED** - Finished successfully
+- **FAILED** - Job failed with error
+- **CANCELLED** - User or system cancelled job
+
+### CI Testing Pipeline
+
+**Linux CI Job**:
+1. Run unit tests (Vitest + Cargo)
+2. Run fast UI tests with agent debug toolkit
+3. Build Tauri application (`--debug` for testing)
+4. Install `tauri-driver` and WebKit prerequisites
+5. Run WebdriverIO E2E tests under Xvfb
+6. Upload screenshots, test results, and logs as artifacts
+
+**Windows CI Job**:
+1. Build portable `.exe` file
+2. Publish as release artifact
+3. No desktop E2E testing required
+
+### Debug Environment Setup
+
+**UI Testing Setup (Playwright + Vite)**:
+```bash
+Xvfb :99 -screen 0 1280x720x24 &  # Virtual display for SSH/CI environments
+export DISPLAY=:99
+npm run dev                        # Start Vite dev server (localhost:1420)
+npm run test:ui                    # Agent debugging toolkit with screenshots
+```
+
+**E2E Testing Setup (WebdriverIO + tauri-driver)**:
+```bash
+# Prerequisites (one-time setup)
+cargo install tauri-driver --locked     # WebDriver for Tauri apps
+which WebKitWebDriver                   # Verify WebKit driver exists
+
+# Run E2E tests (automatically builds Tauri binary)
+export DISPLAY=:99                      # Virtual display if needed
+npm run test:e2e                        # Complete desktop app testing
+```
+
+### Logging Configuration
+
+**Development Logging Setup**:
+```rust
+// In main.rs
+use log::LevelFilter;
+
+fn main() {
+    env_logger::Builder::from_default_env()
+        .filter_level(LevelFilter::Debug)
+        .init();
+
+    // Rest of main function
+}
+```
+
+**For focused testing principles**: See `docs/testing-spec.md` for business logic testing philosophy and patterns.

@@ -75,6 +75,13 @@ This directory contains the complete NAMDRunner project documentation. Use this 
 
 ## 📁 Reference Materials
 
+### [`reference/`](reference/)
+**Implementation reference and command patterns**
+- [`slurm-commands-reference.md`](reference/slurm-commands-reference.md) - Complete SLURM command reference with Alpine cluster patterns
+- [`namd-commands-reference.md`](reference/namd-commands-reference.md) - NAMD configuration templates, execution patterns, and workflows
+- [`python-implementation-reference.md`](reference/python-implementation-reference.md) - Lessons learned from Python version
+- [`NAMDRun-python/`](reference/NAMDRun-python/) - Complete Python implementation for reference
+
 ### [`misc/`](misc/)
 **Supplementary documentation**
 - [`curc-docs-reference.md`](misc/curc-docs-reference.md) - Original CURC documentation dump (archived)
