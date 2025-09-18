@@ -123,6 +123,24 @@ export const sessionActions = {
   reset(): void {
     sessionStore.set(initialState);
   },
+
+  // Mock connected state for UI testing
+  mockConnected(): void {
+    sessionStore.update((state) => ({
+      ...state,
+      connectionState: 'Connected' as const,
+      sessionInfo: {
+        host: 'login.rc.colorado.edu',
+        username: 'jsmith',
+        homeDirectory: '/home/jsmith',
+        workingDirectory: '/projects/jsmith/namdrunner_jobs',
+        slurmVersion: '23.02.7',
+        modules: ['gcc/14.2.0', 'openmpi/4.1.4', 'namd/3.0']
+      },
+      isConnecting: false,
+      lastError: null,
+    }));
+  },
 };
 
 // Export the store for subscription

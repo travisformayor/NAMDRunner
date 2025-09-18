@@ -50,7 +50,6 @@ export const slurmPartitions = {
   aa100: 'aa100',          // NVIDIA A100 GPU nodes
   ami100: 'ami100',        // AMD MI100 GPU nodes
   al40: 'al40',            // NVIDIA L40 GPU nodes
-  csu: 'csu',              // CSU contributed nodes
   atesting: 'atesting',    // CPU testing partition
   atesting_a100: 'atesting_a100',   // A100 GPU testing
   atesting_mi100: 'atesting_mi100', // MI100 GPU testing
@@ -63,7 +62,6 @@ export const slurmQOS = {
   mem: 'mem',           // High-memory QoS (amem partition, 7 days)
   testing: 'testing',   // Testing partitions (1 hour max)
   compile: 'compile',   // Compilation QoS (12 hours max)
-  csu: 'csu',          // CSU nodes
 };
 
 // SBATCH command responses - simplified for practical testing
