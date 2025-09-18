@@ -1,10 +1,10 @@
 # Reference Documentation
 
 > **📚 For current specifications**, see the `docs/` directory:
-> - `docs/api-spec.md` - IPC interfaces and command specifications
-> - `docs/data-spec.md` - JSON schemas, SQLite structure, validation rules
-> - `docs/cluster-guide.md` - CURC Alpine cluster details
-> - `docs/testing-spec.md` - Testing strategies and error handling
+> - [`docs/API.md`](../API.md) - IPC interfaces, data schemas, and command specifications
+> - [`docs/SSH.md`](../SSH.md) - SSH/SFTP connection management, security patterns, and implementation details
+> - [`docs/reference/alpine-cluster-reference.md`](alpine-cluster-reference.md) - CURC Alpine cluster details
+> - [`docs/CONTRIBUTING.md#testing-strategy`](../CONTRIBUTING.md#testing-strategy) - Testing strategies and error handling
 
 This directory contains reference materials from the Python NAMDRunner implementation that inform the Tauri version development.
 

@@ -28,7 +28,7 @@ By completion, the application should:
 ### Essential Context
 - `tasks/active/phase2-milestone2.1-ssh-sftp-implementation.md` - **YOUR DETAILED TASK PLAN**
 - `tasks/roadmap.md` - Phase 2 objectives and context
-- `docs/architecture.md` - Phase 1 foundation to build upon
+- `docs/ARCHITECTURE.md` - Phase 1 foundation to build upon
 - `docs/technical-spec.md` - Development standards and Rust patterns
 
 ### Foundation Architecture (Phase 1)

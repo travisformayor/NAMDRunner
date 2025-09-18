@@ -14,25 +14,25 @@ Implement **[specific functionality]** with core capabilities:
 
 ### 1. Essential Specifications (READ FIRST)
 - `README.md` - Project overview and quick start
-- `docs/project-spec.md` - **WHAT** we're building (business requirements)
-- `docs/technical-spec.md` - **HOW** to build it (architecture, tech stack, coding standards)
+- `docs/ARCHITECTURE.md` - **WHAT** we're building (business requirements, system design)
+- `docs/CONTRIBUTING.md` - **HOW** to build it (development setup, testing, coding standards)
 - `CLAUDE.md` - Development guidelines and workflow
 
 ### 2. Current Phase/Implementation Details
 - `tasks/roadmap.md` - **[Current phase] scope and milestones** (your roadmap)
-- `docs/architecture.md` - Implementation progress tracker (update as you build)
+- `docs/ARCHITECTURE.md` - Implementation progress tracker (update as you build)
 - `tasks/[specific-task].md` - Complete implementation requirements and constraints
 
 ### 3. Reference Implementation Knowledge
 - `docs/reference/slurm-commands-reference.md` - **Working SLURM patterns** and command reference
 - `docs/reference/namd-commands-reference.md` - NAMD execution patterns and templates
 - `docs/reference/python-implementation-reference.md` - Comprehensive lessons from Python implementation
-- `docs/data-spec.md` - Database schema and JSON metadata formats
+- `docs/DB.md` - Database schema and JSON metadata formats
 
 ### 4. Development Support
-- `docs/testing-spec.md` - Testing strategy, debugging workflows, CI setup
+- `docs/CONTRIBUTING.md#testing-strategy` - Testing strategy and workflows
 - `tasks/templates/task.md` - Use this template for task planning
-- `docs/agent-capabilities.md` - Available tools and testing infrastructure
+- `docs/reference/agent-development-tools.md` - Available tools and testing infrastructure
 
 ## 🎯 [Phase/Milestone] Success Criteria
 
@@ -84,7 +84,7 @@ rg "[function-pattern]" src/[specific-file].rs -A 15
 
 ### 3. Reference-Driven Development
 - **Start with proven patterns** from `docs/reference/[specific-reference].md`
-- **Use established data formats** from `docs/data-spec.md`
+- **Use established data formats** from `docs/DB.md`
 - **Learn from Python lessons** in `docs/reference/python-implementation-reference.md`
 - **Improve and modernize** with Tauri/Rust advantages
 
@@ -160,21 +160,21 @@ npm run lint            # TypeScript/Svelte linting
 - Comprehensive unit test coverage with mocks
 - Type safety across the entire IPC boundary
 - Proper error handling and user feedback
-- Follow coding standards in `docs/technical-spec.md`
+- Follow coding standards in `docs/CONTRIBUTING.md#developer-standards--project-philosophy`
 - [Phase-specific quality requirement]
 
 ### Integration Requirements
 - Build on existing [specific system] infrastructure
-- Maintain compatibility with [existing feature]
-- Follow established [specific pattern] patterns
+- Improve upon [existing feature] as needed
+- Follow established [specific pattern] patterns where beneficial
 - Respect [specific constraint] constraints
 
 ## 🤝 Getting Help
 
 ### When You Need Guidance
 - **[Domain] questions** - Check `docs/reference/[specific-reference].md` first
-- **Data format questions** - See `docs/data-spec.md`
-- **Architecture decisions** - Review `docs/architecture.md` and ask for input
+- **Data format questions** - See `docs/DB.md`
+- **Architecture decisions** - Review `docs/ARCHITECTURE.md` and ask for input
 - **Python implementation questions** - Look at `docs/reference/python-implementation-reference.md`
 
 ### Communication Protocol
@@ -204,7 +204,7 @@ npm run lint            # TypeScript/Svelte linting
 ## Task Management (CRITICAL)
 - **Create task files** using `tasks/templates/task.md` before coding
 - **Work on one task at a time** - move to `tasks/active/` when starting
-- **Update architecture.md** as you implement each component
+- **Update ARCHITECTURE.md** as you implement each component
 - **Get approval** for your implementation plan before coding
 
 Remember: This builds on existing NAMDRunner infrastructure. **Leverage established patterns** and **integrate seamlessly** with proven systems rather than creating parallel implementations.

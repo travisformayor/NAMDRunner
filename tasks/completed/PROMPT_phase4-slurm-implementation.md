@@ -41,7 +41,7 @@ Complete Phase 4 by implementing real SLURM job submission with batch script gen
 - Enhance existing `submit_job_real()` in `src/commands/jobs.rs`
 - Build on existing SSH command execution patterns
 - Integrate with current retry logic and error handling
-- Maintain compatibility with existing job lifecycle
+- Integrate with existing job lifecycle
 
 **Integration Points**:
 ```rust
@@ -173,5 +173,5 @@ Extend existing error handling to cover SLURM-specific failures:
 After completing the implementation:
 1. Run code review with `.claude/agents/review-refactor.md`
 2. Implement any simplification recommendations
-3. Update `docs/architecture.md` with SLURM integration details
+3. Update `docs/ARCHITECTURE.md` with SLURM integration details
 4. Mark Phase 4 complete in `tasks/roadmap.md`

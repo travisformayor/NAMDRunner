@@ -13,19 +13,22 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters. **Tauri v
 
 ### Essential Docs
 - `docs/README.md` - Documentation index (keep up-to-date)
-- `docs/project-spec.md` - Business requirements and goals
-- `docs/technical-spec.md` - Stack, architecture, development setup  
-- `docs/developer-guidelines.md` - Code quality standards and architectural patterns
-- `docs/agent-capabilities.md` - Available tools and testing infrastructure
+- `docs/ARCHITECTURE.md` - System design, business requirements, and project goals
+- `docs/CONTRIBUTING.md` - Development setup, testing strategy, and coding standards
+- `docs/API.md` - IPC interfaces, command specifications, and SLURM integration
+- `docs/DB.md` - SQLite schemas, JSON metadata formats, and data validation
+- `docs/SSH.md` - Secure connection, file transfer, and session management
+- `docs/reference/agent-development-tools.md` - Available tools and testing infrastructure
 - `tasks/roadmap.md` - Current phase and development plan
 - `docs/reference/python-implementation-reference.md` - Comprehensive lessons from Python implementation
 - `docs/reference/slurm-commands-reference.md` - Complete SLURM command reference
-- `docs/cluster-guide.md` - HPC cluster configuration and setup requirements
+- `docs/reference/namd-commands-reference.md` - NAMD configuration and execution patterns
+- `docs/reference/alpine-cluster-reference.md` - HPC cluster configuration and setup requirements
 
 ## Development Workflow
 
 ### Before Starting ANY Work
-1. **Read the specs** - `docs/project-spec.md` and `docs/technical-spec.md`
+1. **Read the specs** - `docs/ARCHITECTURE.md` and `docs/CONTRIBUTING.md`
 2. **Check current phase** - `tasks/roadmap.md` shows where we are
 3. **Look for active tasks** - `tasks/active/` (should be empty to start new work)
 4. **Understand the feature** - Check `docs/reference/python-implementation-reference.md` for Python implementation
@@ -40,7 +43,7 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters. **Tauri v
 After implementation and testing, before archiving:
 1. **Code Review & Refactor** - Use `.claude/agents/review-refactor.md` agent to analyze completed work
 2. **Apply Improvements** - Implement recommended refactoring based on what was learned
-3. **Update Documentation** - Update `tasks/roadmap.md` and `docs/architecture.md` with final implementation details
+3. **Update Documentation** - Update `tasks/roadmap.md` and `docs/ARCHITECTURE.md` with final implementation details
 4. **Update and Archive Task** - Move to `tasks/completed/`
 
 ### When You're Stuck
@@ -49,19 +52,19 @@ After implementation and testing, before archiving:
 - Look at actual Python code in `docs/reference/NAMDRun-python/src/namdrunner/`
 - Document findings in appropriate reference file
 - Update `docs/reference/python-implementation-reference.md` with new insights
-- **Read `docs/agent-capabilities.md`** - Available tools and testing infrastructure
-- **Investigate with temporary scripts** - Use testing tools (`docs/testing-spec.md`) to understand current behavior
+- **Read `docs/reference/agent-development-tools.md`** - Available tools and testing infrastructure
+- **Investigate with temporary scripts** - Use testing tools (`docs/CONTRIBUTING.md#testing-strategy`) to understand current behavior
 - **Ask specific questions** about the requested feature or Python implementation details
 
 ## Quick Commands
 
-See `docs/technical-spec.md` for complete setup and development commands.
+See `docs/CONTRIBUTING.md` for complete setup and development commands.
 
 ## Critical Success Factors
 
-### Data Compatibility (Where It Makes Sense)
-- **SQLite schema** - Consider Python patterns, improve if possible while maintaining user data compatibility
-- **JSON metadata format** - Use schema_version field approach, adapt structure as needed
+### Python Reference Usage
+- **SQLite schema** - Adapt Python patterns, improve and modernize as needed
+- **JSON metadata format** - Use schema_version field for current implementation tracking
 - **Directory structure** - `/projects/$USER/namdrunner_jobs/` pattern worked well
 - **SLURM commands** - Use proven working patterns from Python as starting point
 
@@ -98,7 +101,7 @@ See `docs/technical-spec.md` for complete setup and development commands.
 
 ## When to Ask for Help
 - **SLURM integration questions** - Python patterns are proven starting points
-- **Data format questions** - User compatibility considerations
+- **Data format questions** - Reference implementation design decisions
 - **Architecture decisions** - Get input before big design choices  
 - **Task planning** - Break down complex work before starting
 - **Stuck on Python code** - Ask for specific clarification rather than guessing

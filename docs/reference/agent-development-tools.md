@@ -202,4 +202,4 @@ fn main() {
 }
 ```
 
-**For focused testing principles**: See `docs/testing-spec.md` for business logic testing philosophy and patterns.
+**For focused testing principles**: See [`docs/CONTRIBUTING.md#testing-strategy`](../CONTRIBUTING.md#testing-strategy) for business logic testing philosophy and patterns.

@@ -24,7 +24,7 @@ By completion, developers should be able to:
 ### Essential Context
 - `tasks/active/phase1-milestone1.2-mock-infrastructure.md` - **YOUR DETAILED TASK PLAN**
 - `tasks/completed/phase1-milestone1.1-foundation.md` - What's already built
-- `docs/architecture.md` - Current implementation status
+- `docs/ARCHITECTURE.md` - Current implementation status
 - `docs/technical-spec.md` - Development standards and patterns
 
 ### Reference Implementation  

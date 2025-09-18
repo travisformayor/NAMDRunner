@@ -80,7 +80,7 @@ Add real SSH/SFTP connectivity using Rust ssh2 crate alongside existing mocks, e
 - Leverage existing ConnectionStateMachine for state management
 - Use existing ValidationFramework to verify real connections
 - Integrate with PathResolver for consistent remote paths
-- Maintain compatibility with existing service container pattern
+- Build upon existing service container pattern
 
 ### Error Mapping Strategy
 - Map SSH errors to existing CONNECTION_ERRORS categories
@@ -104,7 +104,7 @@ After implementation and testing:
 - [x] Implement recommended refactoring improvements
 - [x] Update and archive task to `tasks/completed/phase2-milestone2.1-ssh-sftp-implementation.md`
 - [x] Update `tasks/roadmap.md` progress
-- [x] Update `docs/architecture.md` with SSH/SFTP implementation details
+- [x] Update `docs/ARCHITECTURE.md` with SSH/SFTP implementation details
 
 ## Testing Approach
 

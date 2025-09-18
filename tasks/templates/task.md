@@ -8,7 +8,7 @@
 - **Delivered state**: [What will exist after - specific outcomes]
 - **Foundation**: [What we're building on - existing systems/patterns]
 - **Dependencies**: [Required prerequisite work]
-- **Testing approach**: [How this aligns with NAMDRunner testing philosophy (as outlined in `docs/testing-spec.md`)]
+- **Testing approach**: [How this aligns with NAMDRunner testing philosophy (as outlined in `docs/CONTRIBUTING.md#testing-strategy`)]
 
 ## Implementation Plan
 
@@ -92,7 +92,7 @@ After implementation and testing:
 - [ ] Implement recommended refactoring improvements
 - [ ] Update and archive task to `tasks/completed/[task-name].md`
 - [ ] Update `tasks/roadmap.md` progress/changes to future work
-- [ ] Update `docs/architecture.md` with implementation details
+- [ ] Update `docs/ARCHITECTURE.md` with implementation details
 
 ## Open Questions
 - [ ] Question 1

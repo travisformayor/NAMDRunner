@@ -1,6 +1,7 @@
 # SLURM Commands Reference
 
-> **📚 For cluster-specific details**, see `docs/cluster-guide.md`
+> **📚 For cluster-specific details**, see [`alpine-cluster-reference.md`](alpine-cluster-reference.md)
+> **🔐 For SSH/SFTP patterns**, see [`../SSH.md`](../SSH.md)
 > **🔧 For implementation patterns**, see `python-implementation-reference.md`
 > **⚙️ For dynamic configuration**, see Phase 5 Settings Page architecture
 

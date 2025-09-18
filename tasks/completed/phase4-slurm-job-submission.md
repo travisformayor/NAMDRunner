@@ -103,7 +103,7 @@ validate_slurm_config() // Check resource requirements against cluster limits
 ```
 
 ## References
-- **NAMDRunner patterns**: `docs/architecture.md` for SSH integration, `docs/testing-spec.md` for test approach
+- **NAMDRunner patterns**: `docs/ARCHITECTURE.md` for SSH integration, `docs/testing-spec.md` for test approach
 - **Implementation files**:
   - `src/commands/jobs.rs` - submit_job_real() function to enhance
   - `src/slurm/` - existing command builders and status parsing
@@ -152,7 +152,7 @@ After implementation and testing:
 - [x] Run code review using `.claude/agents/review-refactor.md` - **COMPLETED 2025-01-15**
 - [x] Implement recommended refactoring improvements - **COMPLETED 2025-01-15**
 - [x] Update `tasks/roadmap.md` to mark Phase 4 complete - **COMPLETED 2025-01-15**
-- [x] Update `docs/architecture.md` with SLURM integration implementation details - **COMPLETED 2025-01-15**
+- [x] Update `docs/ARCHITECTURE.md` with SLURM integration implementation details - **COMPLETED 2025-01-15**
 - [x] Archive task to `tasks/completed/phase4-slurm-job-submission.md` - **COMPLETED NOW**
 
 ## Final Status: ✅ PHASE 4 COMPLETE

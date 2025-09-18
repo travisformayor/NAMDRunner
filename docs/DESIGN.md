@@ -1,4 +1,4 @@
-# NAMDRunner UI/UX Design Specification
+# UI/UX Design Guide
 
 ## Project Overview
 NAMDRunner is a desktop application for managing NAMD molecular dynamics simulations on SLURM HPC clusters. The UI should be clean, functional, and straightforward - prioritizing clarity and reliability over visual flourish. Think traditional desktop application patterns that scientists will find familiar and trustworthy.
@@ -342,6 +342,24 @@ components/
 3. Advanced filtering/search
 4. Job templates
 5. Settings/preferences
+
+---
+
+## UX Requirements
+
+* Explicit **Connect/Disconnect/Reconnect** controls and visible session state.
+* Clear job status with last-polled timestamp.
+* Non-blocking status refresh; errors as dismissible banners with retry.
+
+### Job Restart UI Flow (Phase 6+)
+* **"Restart Job" button** appears on completed/failed jobs with detected checkpoint files.
+* **Restart wizard** allows researcher to:
+  - Review original job parameters
+  - Modify resource allocation (cores, memory, walltime)
+  - See checkpoint file status and validation
+  - Preview restart job configuration
+* **Restart job tracking** shows connection to parent job and restart lineage.
+* **Progress indication** displays completed vs remaining steps across restart chain.
 
 ---
 

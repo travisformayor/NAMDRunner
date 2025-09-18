@@ -181,7 +181,7 @@ After implementation and testing:
 - [ ] Implement recommended refactoring improvements
 - [ ] Update and archive task to `tasks/completed/phase2-milestone2.3-job-status-synchronization.md`
 - [ ] Update `tasks/roadmap.md` progress
-- [ ] Update `docs/architecture.md` with status synchronization implementation details
+- [ ] Update `docs/ARCHITECTURE.md` with status synchronization implementation details
 
 ## Open Questions
 - [ ] What sync interval provides best balance of responsiveness vs SLURM load?

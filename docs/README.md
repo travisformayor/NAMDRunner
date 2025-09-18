@@ -2,129 +2,91 @@
 
 This directory contains the complete NAMDRunner project documentation. Use this guide to find the information you need.
 
-## 📋 Core Project Documentation
+## 🚀 Quick Start
 
-### [`project-spec.md`](project-spec.md)
-**What we're building and why**
-- Business requirements and goals
-- End-to-end workflow description
-- Success criteria and constraints
-- Target platforms and deployment strategy
+### What is NAMDRunner?
+Desktop app for NAMD molecular dynamics on SLURM clusters. Built with Tauri v2 (Rust) + Svelte (TypeScript).
 
-### [`technical-spec.md`](technical-spec.md) 
-**Technology stack and development setup**
-- Tauri v2 + Svelte + Rust architecture
-- Development environment setup (Fedora VM)
-- Testing strategy overview
-- Coding standards and repository structure
+### Setup (5 minutes)
+```bash
+# Prerequisites: Node.js LTS, Rust toolchain
+git clone [repo]
+cd namdrunner
+npm install
 
-## 🖥️ Alpine Cluster Integration
+# Launch development app
+npm run tauri dev
+```
 
-### [`cluster-guide.md`](cluster-guide.md) ⭐
-**Complete Alpine cluster reference (SINGLE SOURCE OF TRUTH)**
-- Hardware partitions and resource limits
-- SLURM command patterns and job templates
-- Module loading sequences for NAMD
-- Error handling and recovery strategies
-- Directory structure requirements
+### First Development Task
+```bash
+# Run tests to verify setup
+npm test && cargo test
 
-## 🔗 System Architecture
+# Make a small change to verify hot reload works
+# Edit src/App.svelte and see changes in app
+```
 
-### [`api-spec.md`](api-spec.md)
-**IPC interfaces and data contracts**
-- TypeScript ↔ Rust command interfaces
-- SSH/SFTP connection patterns
-- Mock data for testing
-- Error handling strategies
+## 📋 Core Documentation
 
-### [`data-spec.md`](data-spec.md)
-**JSON schemas and database design**
-- JSON metadata file formats
-- SQLite schema definitions
+### [`CONTRIBUTING.md`](CONTRIBUTING.md)
+**New to the project? Start here.** This guide covers everything you need to be a productive developer on this project, including:
+- Development environment setup and platform requirements
+- Development principles and our testing philosophy
+- Build configuration and deployment constraints
+- Code quality standards and performance guidelines
+
+### [`ARCHITECTURE.md`](ARCHITECTURE.md)
+**How does this app work?** Read this for a high-level overview of the system design, technology stack, and end-to-end workflows.
+- "How this project is built and works"
+- Project overview and design principles
+- End-to-end workflow and data placement strategy
+- Technology choices and module structure
+- Security architecture and current implementation
+
+### [`DESIGN.md`](DESIGN.md)
+**Building UI?** This is the specification for UI/UX design, component architecture, and page workflows.
+- Design philosophy and patterns
+- Component architecture
+- Page specifications and workflows
+- Implementation guidelines
+
+### [`API.md`](API.md)
+**Adding a command?** This defines the contract between the frontend and backend, including IPC interfaces, data schemas, and error handling.
+- IPC command interfaces
+- SLURM integration patterns
+- Error handling patterns
+- Security implementation
+
+### [`DB.md`](DB.md)
+**Touching the database?** This document covers the SQLite schema, JSON metadata formats, and data validation rules.
+- SQLite database design
+- JSON metadata schemas
 - Data validation rules
-- Schema versioning strategy
+- Migration and backup strategies
 
-### [`architecture.md`](architecture.md)
-**Current implementation state**
-- What has been built (updated after each milestone)
-- Component relationships and data flow
-- Integration points and boundaries
-
-### [`developer-guidelines.md`](developer-guidelines.md)
-**Code quality standards and architectural patterns**
-- Clean architecture principles from Phase 1 lessons
-- Anti-patterns to avoid with concrete examples
-- Result<T> error handling patterns
-- Service development patterns
-- Security and performance guidelines
-
-## 🧪 Development Tools
-
-### [`testing-spec.md`](testing-spec.md)
-**Testing strategy and tools**
-- Unit testing with Vitest (TypeScript) and Cargo (Rust)
-- E2E testing with WebdriverIO + tauri-driver
-- UI testing with Playwright
-- Agent debugging toolkit
-
-### [`agent-capabilities.md`](agent-capabilities.md)
-**AI assistant development tools**
-- Available testing commands and workflows
-- Mock infrastructure for offline development
-- Debug tools and utilities
+### [`SSH.md`](SSH.md)
+**Working with the cluster?** This details SSH/SFTP connection management, security patterns, and file operations.
+- Connection lifecycle and state management
+- SFTP file operations and optimization
+- Security patterns and credential handling
+- Error handling and troubleshooting
 
 ## 📁 Reference Materials
 
 ### [`reference/`](reference/)
-**Implementation reference and command patterns**
-- [`slurm-commands-reference.md`](reference/slurm-commands-reference.md) - Complete SLURM command reference with Alpine cluster patterns
-- [`namd-commands-reference.md`](reference/namd-commands-reference.md) - NAMD configuration templates, execution patterns, and workflows
-- [`python-implementation-reference.md`](reference/python-implementation-reference.md) - Lessons learned from Python version
-- [`NAMDRun-python/`](reference/NAMDRun-python/) - Complete Python implementation for reference
+**Lookup tables and external system details**
+- [`alpine-cluster-reference.md`](reference/alpine-cluster-reference.md) - Complete Alpine cluster information reference (partitions, QoS, resources, etc)
+- [`slurm-commands-reference.md`](reference/slurm-commands-reference.md) - SLURM command patterns
+- [`namd-commands-reference.md`](reference/namd-commands-reference.md) - NAMD configuration templates
+- [`agent-development-tools.md`](reference/agent-development-tools.md) - Tooling setup to enable autonomous development for AI assistants
+- [`svelte-implementation-guide.md`](reference/svelte-implementation-guide.md) - Svelte patterns and component architecture
+- [`python-implementation-reference.md`](reference/python-implementation-reference.md) - Lessons from Python version
 
-### [`misc/`](misc/)
-**Supplementary documentation**
-- [`curc-docs-reference.md`](misc/curc-docs-reference.md) - Original CURC documentation dump (archived)
-- [`design-discussion.md`](misc/design-discussion.md) - Design decisions and trade-offs
-- [`tauri-docs-reference.md`](misc/tauri-docs-reference.md) - Tauri framework references
+## 📝 Documentation Principles
 
-## 🗺️ Quick Navigation
-
-**Starting a new task?**
-1. Review [`project-spec.md`](project-spec.md) - understand the goals
-2. Check [`cluster-guide.md`](cluster-guide.md) - get cluster integration details  
-3. Reference [`api-spec.md`](api-spec.md) and [`data-spec.md`](data-spec.md) - understand data contracts
-4. See [`testing-spec.md`](testing-spec.md) - set up testing workflow
-
-**Need cluster information?**
-- **Always use [`cluster-guide.md`](cluster-guide.md)** - the single authoritative source
-- Contains partitions, QoS, resource limits, SLURM commands, job templates
-- Replaces scattered cluster info previously in api-spec.md and data-spec.md
-
-**Implementing features?**
-1. Check [`../docs/reference/`](../docs/reference/) for Python implementation patterns
-2. Use [`api-spec.md`](api-spec.md) for IPC interface definitions
-3. Follow [`data-spec.md`](data-spec.md) for data schema requirements
-4. Test with tools from [`testing-spec.md`](testing-spec.md)
-
-**Need help with development environment?**
-- See [`technical-spec.md`](technical-spec.md) for setup instructions
-- Use [`agent-capabilities.md`](agent-capabilities.md) for debugging tools
-
-## 📝 Documentation Maintenance
-
-**When updating documentation:**
-- **Cluster changes**: Update [`cluster-guide.md`](cluster-guide.md) only
-- **Architecture changes**: Update [`architecture.md`](architecture.md) after implementation
-- **New features**: Update relevant specs, add references to cluster-guide.md
-- **Bug fixes**: Document lessons learned in appropriate reference files
-
-**Documentation principles:**
-- Single source of truth for cluster information
-- Reference cluster-guide.md from other docs to avoid duplication
-- Keep lessons learned separate from current facts
-- Update architecture.md to reflect what IS built, not what WILL be built
-
----
-
-*For questions about documentation organization or missing information, check the Git history or ask the development team.*
+- **One topic, one file** - Each major topic has a single authoritative source
+- **Traditional structure** - Familiar open source conventions (CONTRIBUTING.md, etc.)
+- **Quick onboarding** - Fast path to productivity for new developers
+- **Zero redundancy** - No duplicate information to maintain
+- **Task-oriented** - Clear paths for specific developer needs
