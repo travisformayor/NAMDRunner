@@ -1,6 +1,43 @@
-# API Specification
+# API & Data Contracts
 
-This document defines the complete API interface for NAMDRunner, including IPC commands between the frontend and backend, and proven SLURM integration patterns.
+This document defines all interfaces and data contracts for NAMDRunner, consolidating IPC communication patterns and data schemas.
+
+## Table of Contents
+- [Implementation Notes](#implementation-notes)
+- [Core Type Definitions](#core-type-definitions)
+  - [Connection State Management](#connection-state-management)
+  - [Job Lifecycle States](#job-lifecycle-states)
+  - [Basic Types](#basic-types)
+- [Connection Management Commands](#connection-management-commands)
+  - [IPC Interface](#ipc-interface)
+- [Job Management Commands](#job-management-commands)
+  - [IPC Interface](#ipc-interface-1)
+  - [Request/Response Types](#requestresponse-types)
+- [File Management Commands](#file-management-commands)
+  - [IPC Interface](#ipc-interface-2)
+- [Error Handling Strategy](#error-handling-strategy)
+  - [Error Categories](#error-categories)
+  - [Common Error Examples](#common-error-examples)
+- [Rust Type Definitions](#rust-type-definitions)
+  - [Core Types](#core-types)
+  - [Command Result Types](#command-result-types)
+- [SLURM Integration](#slurm-integration)
+- [Related Documentation](#related-documentation)
+
+## Implementation Notes
+
+1. **Always use full paths** for working directories
+2. **Module commands must be sourced properly** with `/etc/profile`
+3. **Parse both stdout and stderr** for error detection
+4. **Handle queue wait times** - jobs may be PENDING for hours
+5. **Account for 90-day scratch purge policy**
+6. **Never log or persist passwords** - memory only
+7. **Validate SSH connection** before SLURM operations
+8. **Use working directory pattern** to identify NAMDRunner jobs: `/scratch/alpine/$USER/namdrunner_jobs/*`
+
+These patterns are proven to work with the CURC Alpine cluster and provide the foundation for reliable SLURM integration in the Tauri implementation.
+
+> **For detailed SSH/SFTP implementation patterns, security practices, and performance optimizations, see [`SSH.md`](SSH.md)**.
 
 ## Core Type Definitions
 
@@ -61,9 +98,6 @@ interface ConnectionStatusResult {
 }
 ```
 
-### SSH Connection Best Practices
-
-> **For complete Alpine cluster integration patterns, see [`docs/cluster-guide.md`](cluster-guide.md)**.
 
 ## Job Management Commands
 
@@ -169,10 +203,6 @@ interface DeleteJobResult {
 }
 ```
 
-## SLURM Integration
-
-> **For complete SLURM integration patterns including job submission, status monitoring, error handling, and command examples, see [`docs/cluster-guide.md`](cluster-guide.md)**.
-
 ## File Management Commands
 
 ### IPC Interface
@@ -258,9 +288,6 @@ const VALIDATION_ERROR: NAMDRunnerError = {
 };
 ```
 
-#### SLURM Errors
-
-> **For complete SLURM error patterns and handling strategies, see [`docs/cluster-guide.md`](cluster-guide.md)**.
 
 ## Rust Type Definitions
 
@@ -355,56 +382,16 @@ pub struct CreateJobResult {
 // Additional result types follow same pattern...
 ```
 
-## Resource Limits
+## SLURM Integration
 
-> **For current resource limits, partition details, QoS specifications, and allocation recommendations, see [`docs/cluster-guide.md`](cluster-guide.md)**.
+> **For complete SLURM integration patterns including job submission, status monitoring, error handling, and command examples, see [`reference/slurm-commands-reference.md`](reference/slurm-commands-reference.md) and [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)**.
 
-## Integration Best Practices
+## Related Documentation
 
-### Command Reliability
-1. Always load modules before SLURM commands
-2. Use full paths for working directories
-3. Check command exit codes
-4. Parse stderr for error messages
-5. Handle network timeouts gracefully
+For SSH/SFTP connection management, security patterns, and file transfer implementation details, see [`SSH.md`](SSH.md).
 
-### Interaction Optimization
-1. Batch SLURM queries when possible
-2. Cache job status to avoid repeated queries
-3. Use background threads for long operations
-4. Limit concurrent SSH connections
+For architectural principles, clean architecture patterns, and development best practices, see [`CONTRIBUTING.md#developer-standards--project-philosophy`](CONTRIBUTING.md#developer-standards--project-philosophy).
 
-### Error Recovery
-1. Retry failed commands with exponential backoff
-2. Validate SSH connection before SLURM commands
-3. Handle partial failures in batch operations
-4. Provide clear error messages to users
+For testing strategies and infrastructure setup, see [`CONTRIBUTING.md#testing-strategy`](CONTRIBUTING.md#testing-strategy).
 
-## Mock Implementation Data
-
-### Fixture Responses for Testing
-```rust
-// Mock squeue response
-const MOCK_SQUEUE_RUNNING: &str = "12345678|test_job|R|00:15:30|01:44:30|1|24|16GB|amilan|/scratch/alpine/testuser/namdrunner_jobs/test_job";
-
-// Mock sacct response
-const MOCK_SACCT_COMPLETED: &str = "12345678|test_job|COMPLETED|0:0|2025-01-15T10:00:00|2025-01-15T11:00:00|01:00:00|/scratch/alpine/testuser/namdrunner_jobs/test_job";
-
-// Mock sbatch response
-const MOCK_SBATCH_SUCCESS: &str = "Submitted batch job 12345678";
-```
-
-> **For complete SLURM command patterns and response formats, see [`docs/cluster-guide.md`](cluster-guide.md)**.
-
-## Important Implementation Notes
-
-1. **Always use full paths** for working directories
-2. **Module commands must be sourced properly** with `/etc/profile`
-3. **Parse both stdout and stderr** for error detection
-4. **Handle queue wait times** - jobs may be PENDING for hours
-5. **Account for 90-day scratch purge policy**
-6. **Never log or persist passwords** - memory only
-7. **Validate SSH connection** before SLURM operations
-8. **Use working directory pattern** to identify NAMDRunner jobs: `/scratch/alpine/$USER/namdrunner_jobs/*`
-
-These patterns are proven to work with the CURC Alpine cluster and provide the foundation for reliable SLURM integration in the Tauri implementation.
+For data schemas, SQLite database design, and persistence patterns, see [`DB.md`](DB.md).

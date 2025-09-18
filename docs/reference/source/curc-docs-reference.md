@@ -2,7 +2,7 @@
 
 **Source**: https://curc.readthedocs.io/en/latest/
 
-> This file contains the original CURC documentation dump used to create [`docs/cluster-guide.md`](../cluster-guide.md). For current Alpine cluster information, always use [`docs/cluster-guide.md`](../cluster-guide.md) instead, where relevant information has been extracted into a structured cluster guide. 
+> This file contains the original CURC documentation dump used to create [`alpine-cluster-reference.md`](../alpine-cluster-reference.md). For current Alpine cluster information, always use [`alpine-cluster-reference.md`](../alpine-cluster-reference.md) instead, where relevant information has been extracted into a structured cluster guide. 
 > This file is preserved for any additional future reference needs.
 
 # Frequently Asked Questions

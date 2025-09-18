@@ -28,23 +28,23 @@ export function toConnectionError(
 }
 
 /**
- * Convert legacy success/error object to Result pattern
+ * Convert success/error object to Result pattern
  */
-export function toResult<T>(legacyResult: {
+export function toResult<T>(successErrorResult: {
   success: boolean;
   data?: T;
   error?: string;
 }): Result<T> {
-  if (legacyResult.success && legacyResult.data !== undefined) {
-    return { success: true, data: legacyResult.data };
+  if (successErrorResult.success && successErrorResult.data !== undefined) {
+    return { success: true, data: successErrorResult.data };
   }
-  
-  const error = toConnectionError(legacyResult.error || 'Operation failed');
+
+  const error = toConnectionError(successErrorResult.error || 'Operation failed');
   return { success: false, error };
 }
 
 /**
- * Convert Result pattern to legacy success/error object
+ * Convert Result pattern to success/error object
  */
 export function fromResult<T>(result: Result<T>): {
   success: boolean;
@@ -54,10 +54,10 @@ export function fromResult<T>(result: Result<T>): {
   if (result.success) {
     return { success: true, data: result.data };
   }
-  
-  return { 
-    success: false, 
-    error: result.error.message 
+
+  return {
+    success: false,
+    error: result.error.message
   };
 }
 

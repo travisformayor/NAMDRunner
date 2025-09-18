@@ -20,7 +20,7 @@ Implement a **single-job MVP** with core functionality:
 
 ### 2. Current Phase Details
 - `tasks/roadmap.md` - **Phase 1 scope and milestones** (your roadmap)
-- `docs/architecture.md` - Implementation progress tracker (update as you build)
+- `docs/ARCHITECTURE.md` - Implementation progress tracker (update as you build)
 - `tasks/phase1-interface-definitions.md` - Complete IPC interface contracts
 
 ### 3. Reference Implementation Knowledge
@@ -63,7 +63,7 @@ Implement a **single-job MVP** with core functionality:
 ### 2. Task Management (CRITICAL)
 - **Create task files** using `tasks/templates/task.md` before coding
 - **Work on one task at a time** - move to `tasks/active/` when starting
-- **Update architecture.md** as you implement each component
+- **Update ARCHITECTURE.md** as you implement each component
 - **Get approval** for your implementation plan before coding
 
 ### 3. Technology Constraints
@@ -141,7 +141,7 @@ npm run tauri dev       # Full Tauri app
 ### When You Need Guidance
 - **SLURM integration questions** - Check `docs/reference/slurm-commands-reference.md` first
 - **Data format questions** - See `docs/data-spec.md`
-- **Architecture decisions** - Review `docs/architecture.md` and ask for input
+- **Architecture decisions** - Review `docs/ARCHITECTURE.md` and ask for input
 - **Python implementation questions** - Look at `docs/reference/python-implementation-reference.md`
 
 ### Communication Protocol

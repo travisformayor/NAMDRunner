@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 use super::core::*;
+use crate::security::SecurePassword;
 
 // Connection management command parameters and results
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ConnectParams {
     pub host: String,
     pub username: String,
-    pub password: String,
+    pub password: SecurePassword,
 }
 
 #[derive(Debug, Serialize)]
@@ -31,7 +32,7 @@ pub struct ConnectionStatusResult {
 }
 
 // Job management command parameters and results
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct CreateJobParams {
     #[serde(rename = "jobName")]
     pub job_name: String,
@@ -88,6 +89,22 @@ pub struct SyncJobsResult {
 pub struct DeleteJobResult {
     pub success: bool,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncJobStatusResult {
+    pub success: bool,
+    #[serde(rename = "jobInfo")]
+    pub job_info: Option<JobInfo>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncAllJobsResult {
+    pub success: bool,
+    #[serde(rename = "jobsUpdated")]
+    pub jobs_updated: u32,
+    pub errors: Vec<String>,
 }
 
 // File management command parameters and results

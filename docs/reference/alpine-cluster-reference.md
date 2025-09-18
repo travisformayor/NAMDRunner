@@ -2,9 +2,10 @@
 
 This document provides the authoritative reference for Alpine cluster integration in NAMDRunner. All cluster-specific implementation details should reference this guide.
 
-> **Source**: CU Research Computing (CURC) Alpine cluster documentation  
-> **Last Updated**: 2025-01-15  
+> **Source**: CU Research Computing (CURC) Alpine cluster documentation
+> **Last Updated**: 2025-01-15
 > **Target Cluster**: CURC Alpine (RHEL 8.4/8.8, SLURM scheduler)
+> **For SSH/SFTP implementation patterns**, see [`../SSH.md`](../SSH.md)
 
 ## Cluster Overview
 

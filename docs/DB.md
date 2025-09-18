@@ -1,6 +1,38 @@
-# Data Specification
+# Database & Data Schemas
 
-This document defines all data structures, schemas, and formats used by NAMDRunner, including JSON metadata, SQLite schemas, file organization, and validation rules.
+This document defines all data persistence patterns for NAMDRunner, including SQLite schemas, JSON metadata formats, validation rules, and data management strategies.
+
+## Table of Contents
+- [JSON Metadata Schema](#json-metadata-schema)
+  - [job_info.json (Single Job)](#job_infojson-single-job)
+  - [Error Information Format](#error-information-format)
+- [SQLite Schema (Phase 1 Version)](#sqlite-schema-phase-1-version)
+  - [Jobs Table](#jobs-table)
+  - [Application Metadata Table](#application-metadata-table)
+  - [Python Implementation Reference](#python-implementation-reference)
+- [File Organization Requirements](#file-organization-requirements)
+  - [Directory Structure](#directory-structure)
+  - [File Naming Conventions](#file-naming-conventions)
+  - [Python Implementation Directory Pattern (Reference)](#python-implementation-directory-pattern-reference)
+- [Validation Rules](#validation-rules)
+  - [Job ID Format](#job-id-format)
+  - [File Path Validation](#file-path-validation)
+  - [Parameter Ranges](#parameter-ranges)
+  - [Resource Limits (Alpine Cluster)](#resource-limits-alpine-cluster)
+- [Schema Version Management](#schema-version-management)
+  - [JSON Schema Version](#json-schema-version)
+  - [Schema Development](#schema-development)
+  - [Development Strategy](#development-strategy)
+- [Data Type Mappings](#data-type-mappings)
+  - [TypeScript to Rust](#typescript-to-rust)
+  - [SQLite to Rust Type Mapping](#sqlite-to-rust-type-mapping)
+- [Database Best Practices](#database-best-practices)
+  - [Database Indexing Strategy](#database-indexing-strategy)
+  - [Performance Guidelines](#performance-guidelines)
+  - [Connection Management](#connection-management)
+- [Data Integrity](#data-integrity)
+  - [JSON Validation](#json-validation)
+  - [Backup and Recovery](#backup-and-recovery)
 
 ## JSON Metadata Schema
 
@@ -29,7 +61,7 @@ This file is created in each job directory on the cluster and contains all job m
     },
     "slurm": {
       "cores": 24,
-      "memory": "16GB", 
+      "memory": "16GB",
       "walltime": "02:00:00",
       "partition": "amilan",
       "qos": "normal"
@@ -42,13 +74,13 @@ This file is created in each job directory on the cluster and contains all job m
       "type": "pdb"
     },
     {
-      "name": "structure.psf", 
+      "name": "structure.psf",
       "path": "input_files/structure.psf",
       "type": "psf"
     },
     {
       "name": "parameters.prm",
-      "path": "input_files/parameters.prm", 
+      "path": "input_files/parameters.prm",
       "type": "prm"
     }
   ],
@@ -74,7 +106,7 @@ When jobs fail, the `error_info` field contains:
 ```json
 "error_info": {
   "error_type": "SLURM_ERROR",
-  "error_message": "Job exceeded walltime limit", 
+  "error_message": "Job exceeded walltime limit",
   "error_code": "TIMEOUT",
   "failed_at": "2025-01-15T13:00:00Z",
   "slurm_exit_code": 1
@@ -97,7 +129,7 @@ CREATE TABLE jobs (
     completed_at TEXT,
     project_dir TEXT,
     scratch_dir TEXT,
-    
+
     -- JSON columns for complex data
     namd_config_json TEXT,                 -- NAMD configuration as JSON
     slurm_config_json TEXT,                -- SLURM configuration as JSON
@@ -122,15 +154,15 @@ CREATE TABLE app_metadata (
 );
 
 -- Insert schema version
-INSERT INTO app_metadata (key, value, updated_at) 
+INSERT INTO app_metadata (key, value, updated_at)
 VALUES ('schema_version', '1.0', datetime('now'));
 ```
 
-### Python Implementation Compatibility Notes
+### Python Implementation Reference
 
-The Python version used more complex schemas that should inform future expansion:
+The Python version used more complex schemas that inform our design choices:
 
-#### Job Groups (Future Consideration)
+#### Job Groups (Future Implementation)
 Python used UUID-based group IDs and multi-stage workflows:
 ```sql
 -- Python implementation patterns (for reference)
@@ -139,16 +171,15 @@ Python used UUID-based group IDs and multi-stage workflows:
 -- job_outputs table for cached SLURM stdout/stderr
 ```
 
-#### Migration Strategy
+#### Design Patterns
 - **Data Integrity**: Validate JSON before parsing, handle missing fields gracefully
-- **Backward Compatibility**: Maintain compatibility for at least one version
-- **Status Values**: Must match between Python and Rust implementations
-- **Timestamp Format**: ISO 8601 strings for cross-language compatibility
+- **Status Values**: Use clear, descriptive status names
+- **Timestamp Format**: ISO 8601 strings for consistency and parsing
 
 ## File Organization Requirements
 
 ### Directory Structure
-> **See [`docs/cluster-guide.md`](cluster-guide.md)** for complete directory structure requirements and Alpine cluster file system details.
+> **See [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)** for complete directory structure requirements and Alpine cluster file system details.
 
 ```
 /projects/$USER/namdrunner_jobs/
@@ -216,7 +247,7 @@ The Python version used this structure (informational for future multi-stage sup
 - **Allowed file extensions**: `.pdb`, `.psf`, `.prm`, `.namd`, `.sbatch`, `.out`, `.err`, `.log`, `.dcd`, `.coor`, `.vel`, `.xsc`
 
 ### Parameter Ranges
-> **Note**: SLURM resource limits are defined in [`docs/cluster-guide.md`](cluster-guide.md) and may vary by partition.
+> **Note**: SLURM resource limits are defined in [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md) and may vary by partition.
 
 ```typescript
 interface ValidationRules {
@@ -234,7 +265,7 @@ interface ValidationRules {
 ```
 
 ### Resource Limits (Alpine Cluster)
-> **For current resource limits, partition details, and QoS specifications, see [`docs/cluster-guide.md`](cluster-guide.md)**.
+> **For current resource limits, partition details, and QoS specifications, see [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)**.
 
 - **Default partition**: "amilan"
 - **Default QOS**: "normal"
@@ -242,22 +273,22 @@ interface ValidationRules {
 ## Schema Version Management
 
 ### JSON Schema Version
-- **Always include** `schema_version` field for future compatibility
-- **Version 1.0**: Initial single-job implementation
-- **Future versions**: Will support job groups, multi-stage workflows
+- **Always include** `schema_version` field for tracking current implementation
+- **Version 1.0**: Current single-job implementation
+- **Future iterations**: May implement job groups, multi-stage workflows
 
-### SQLite Schema Evolution
+### Schema Development
 ```sql
--- Example future migration pattern
-ALTER TABLE jobs ADD COLUMN job_group_id TEXT;
-UPDATE app_metadata SET value = '1.1' WHERE key = 'schema_version';
+-- Current implementation pattern
+-- Breaking changes are acceptable during development
+-- No migration compatibility required
 ```
 
-### Compatibility Strategy
+### Development Strategy
 - **Graceful degradation** for unknown fields in JSON
-- **Schema version checks** before parsing
-- **Migration scripts** for breaking changes
-- **Maintain at least one version backward compatibility**
+- **Schema version** for tracking current implementation
+- **Iterative development** - phases can break previous implementations
+- **Breaking changes are acceptable** during development
 
 ## Data Type Mappings
 
@@ -294,71 +325,56 @@ pub enum JobStatus {
 // JSON columns -> serde_json::Value -> structured types
 ```
 
-## Data Integrity Requirements
-
-### Required Fields
-All job records must have:
-- `job_id` (unique identifier)
-- `job_name` (user-provided name)
-- `status` (valid JobStatus enum value)
-- `created_at` (ISO 8601 timestamp)
-
-### Optional Fields with Defaults
-- `partition` → "amilan"
-- `qos` → "normal"
-- `dcd_freq` → null (no trajectory output)
-- `restart_freq` → null (no restart files)
-
-### JSON Field Validation
-```rust
-// Example validation in Rust
-impl JobInfo {
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        // Validate job_id format
-        if !JOB_ID_REGEX.is_match(&self.job_id) {
-            return Err(ValidationError::InvalidJobId);
-        }
-        
-        // Validate temperature range
-        if self.namd_config.temperature < 200.0 || self.namd_config.temperature > 400.0 {
-            return Err(ValidationError::InvalidTemperature);
-        }
-        
-        // Additional validations...
-        Ok(())
-    }
-}
-```
-
-## Performance Considerations
+## Database Best Practices
 
 ### Database Indexing Strategy
 - **Primary lookups**: job_id (primary key)
 - **Status queries**: idx_jobs_status for filtering by status
 - **SLURM integration**: idx_jobs_slurm_id for mapping SLURM jobs to our jobs
-- **Temporal queries**: idx_jobs_updated for sync operations
+- **Temporal queries**: idx_jobs_updated for recent activity
 
-### JSON Column Usage
-- **Store complex nested data** (configs, file lists) as JSON
-- **Query by simple fields** (status, job_id) using indexed columns
-- **Avoid JSON path queries** for performance
-- **Denormalize frequently queried fields** into dedicated columns
-
-### Memory Management
-- **Load job lists lazily** for large datasets
-- **Paginate job queries** in UI
-- **Cache frequently accessed** job metadata
-- **Clear completed job details** from memory after display
-
-## Important Implementation Notes
-
-1. **Schema versioning is critical** - always include version field
-2. **Timestamps must be UTC** and ISO 8601 formatted
-3. **Status values must match** between TypeScript and Rust exactly
-4. **File paths are relative** to job directory in metadata
-5. **Working directory pattern** identifies NAMDRunner jobs
+### Performance Guidelines
+1. **Use transactions** for multi-row operations
+2. **Batch inserts** for bulk operations
+3. **Prepare statements** for repeated queries
+4. **Index foreign keys** and commonly queried columns
+5. **Validate JSON** before storage to prevent corruption
 6. **JSON validation** prevents corrupt data from breaking the app
 7. **SQLite WAL mode** recommended for concurrent access
 8. **Regular maintenance** of completed job records may be needed
 9. **Backup strategy** should include both SQLite and project directories
-10. **Migration testing** required for schema changes
+10. **Schema changes** can be breaking during development
+
+### Connection Management
+- **Connection pooling** for concurrent access
+- **WAL mode** for better read/write concurrency
+- **Foreign key constraints** enabled
+- **Proper transaction boundaries** around related operations
+
+## Data Integrity
+
+### JSON Validation
+All JSON stored in SQLite should be validated against schemas before insertion:
+```rust
+// Example validation pattern
+fn validate_namd_config(json: &str) -> Result<NamdConfig, ValidationError> {
+    let config: NamdConfig = serde_json::from_str(json)?;
+
+    if config.steps < 1 || config.steps > 100_000_000 {
+        return Err(ValidationError::InvalidSteps);
+    }
+
+    Ok(config)
+}
+```
+
+### Backup and Recovery
+- **Automatic backups** before schema migrations
+- **Point-in-time recovery** using SQLite WAL files
+- **Data export** capabilities for user data portability
+- **Corruption detection** and recovery procedures
+
+---
+
+*For IPC interfaces and API contracts, see [`API.md`](API.md).*
+*For cluster-specific file system details, see [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md).*

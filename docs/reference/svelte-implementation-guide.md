@@ -1,14 +1,18 @@
-# Svelte-Native Patterns and Best Practices for NAMDRunner
+# Svelte Implementation Guide for NAMDRunner
+
+This comprehensive guide documents how to implement NAMDRunner's UI using Svelte, translating React mockup patterns into idiomatic Svelte code while leveraging the framework's strengths.
 
 ## Overview
 
-This guide documents how to implement the React mockup patterns (located in `docs/design_mockup/`) using proper Svelte idioms and best practices. The goal is to achieve the same user experience while leveraging Svelte's strengths.
+This guide translates the React mockup implementation (originally in `docs/design_mockup/`) into proper Svelte patterns and best practices. The goal is to achieve the same user experience while leveraging Svelte's compile-time optimizations, built-in reactivity, and simpler state management.
 
 ## Visual Reference
 
-Refer to mockup screenshots for UI context: `docs/design_mockup/mockup_screenshots/`
-
-The patterns below show how to achieve the same visual results using Svelte-native approaches.
+Refer to mockup screenshots for UI context in the design specifications and mockup materials. These screenshots show the design system in action across different states and views:
+- Main jobs table with sidebar navigation
+- Job detail page with tabbed interface
+- Connection status dropdown (connected/disconnected states)
+- Collapsible SSH console panel
 
 ## Core Architectural Patterns
 
@@ -612,6 +616,117 @@ export const jobsByStatus = derived(jobs, $jobs => {
 });
 ```
 
+## Design System Implementation
+
+### CSS Custom Properties Setup
+
+```css
+/* src/app.css */
+:root {
+  /* Theme Colors */
+  --namd-bg-primary: #ffffff;
+  --namd-bg-secondary: #f8fafc;
+  --namd-text-primary: #1f2937;
+  --namd-text-secondary: #6b7280;
+  --namd-text-muted: #9ca3af;
+
+  /* Interactive Elements */
+  --namd-primary: #030213;
+  --namd-primary-fg: #ffffff;
+  --namd-secondary: #f3f4f6;
+  --namd-secondary-fg: #1f2937;
+
+  /* Status Colors */
+  --namd-success: #10b981;
+  --namd-success-bg: #ecfdf5;
+  --namd-warning: #f59e0b;
+  --namd-warning-bg: #fffbeb;
+  --namd-error: #ef4444;
+  --namd-error-bg: #fef2f2;
+  --namd-info: #3b82f6;
+  --namd-info-bg: #eff6ff;
+
+  /* Layout */
+  --namd-border: rgba(0, 0, 0, 0.1);
+  --namd-border-radius: 0.625rem;
+  --namd-sidebar-width: 12rem;
+
+  /* Typography */
+  --namd-font-sans: ui-sans-serif, system-ui, sans-serif;
+  --namd-font-mono: ui-monospace, 'SF Mono', Monaco, monospace;
+  --namd-font-size-base: 0.875rem;
+  --namd-font-weight-normal: 400;
+  --namd-font-weight-medium: 500;
+
+  /* Spacing */
+  --namd-spacing-xs: 0.25rem;
+  --namd-spacing-sm: 0.5rem;
+  --namd-spacing-md: 1rem;
+  --namd-spacing-lg: 1.5rem;
+  --namd-spacing-xl: 2rem;
+}
+
+/* Dark theme */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --namd-bg-primary: #0f172a;
+    --namd-bg-secondary: #1e293b;
+    --namd-text-primary: #f1f5f9;
+    --namd-text-secondary: #cbd5e1;
+    --namd-text-muted: #64748b;
+
+    --namd-primary: #f1f5f9;
+    --namd-primary-fg: #1e293b;
+    --namd-secondary: #334155;
+    --namd-secondary-fg: #f1f5f9;
+
+    --namd-border: rgba(255, 255, 255, 0.1);
+  }
+}
+```
+
+### Component Architecture
+
+```
+App.svelte (Root)
+├── lib/
+│   ├── components/
+│   │   ├── layout/
+│   │   │   ├── AppSidebar.svelte
+│   │   │   ├── ConnectionDropdown.svelte
+│   │   │   ├── BreadcrumbNav.svelte
+│   │   │   └── SSHConsolePanel.svelte
+│   │   ├── jobs/
+│   │   │   ├── JobsPage.svelte
+│   │   │   ├── JobsTable.svelte
+│   │   │   ├── StatusBadge.svelte
+│   │   │   └── SyncControls.svelte
+│   │   ├── job-detail/
+│   │   │   ├── JobDetailPage.svelte
+│   │   │   ├── JobSummary.svelte
+│   │   │   ├── DetailTabs.svelte
+│   │   │   └── tabs/
+│   │   ├── job-create/
+│   │   │   ├── CreateJobPage.svelte
+│   │   │   ├── ResourceSection.svelte
+│   │   │   ├── FileUploadSection.svelte
+│   │   │   └── NAMDConfigSection.svelte
+│   │   └── common/
+│   │       ├── Button.svelte
+│   │       ├── Input.svelte
+│   │       ├── Modal.svelte
+│   │       └── FormField.svelte
+│   ├── stores/
+│   │   ├── session.ts (connection state)
+│   │   ├── jobs.ts (jobs data)
+│   │   ├── ui.ts (view state, modals)
+│   │   └── console.ts (SSH console)
+│   └── types/
+│       ├── job.ts
+│       ├── connection.ts
+│       └── ui.ts
+```
+
 ## Performance Best Practices
 
 ### 1. Use Keyed Each Blocks
@@ -673,4 +788,31 @@ export const jobsByStatus = derived(jobs, $jobs => {
 </script>
 ```
 
-This guide provides the foundation for implementing the React mockup using proper Svelte patterns, ensuring both code quality and maintainability while achieving the desired user experience.
+## Key Architectural Differences from React
+
+### 1. No Virtual DOM
+- Direct DOM manipulation means more efficient updates
+- No need for React keys or reconciliation concerns
+- Component lifecycle is simpler
+
+### 2. Compile-Time Optimizations
+- Svelte compiler optimizes reactivity at build time
+- No runtime framework overhead
+- Smaller bundle size
+
+### 3. Built-in State Management
+- Stores are first-class citizens
+- No need for external state management libraries
+- Automatic subscription/unsubscription
+
+### 4. CSS Scoping
+- Component-scoped CSS by default
+- No need for CSS-in-JS libraries
+- Can use CSS custom properties for theming
+
+### 5. Form Handling
+- Two-way binding eliminates controlled component boilerplate
+- Built-in form validation helpers
+- Easier to manage form state
+
+This guide provides the foundation for implementing NAMDRunner using proper Svelte patterns, ensuring both code quality and maintainability while achieving the desired user experience from the original React mockup.
