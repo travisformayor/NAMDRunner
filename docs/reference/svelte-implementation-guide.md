@@ -4,7 +4,7 @@ This comprehensive guide documents how to implement NAMDRunner's UI using Svelte
 
 ## Overview
 
-This guide translates the React mockup implementation (originally in `docs/design_mockup/`) into proper Svelte patterns and best practices. The goal is to achieve the same user experience while leveraging Svelte's compile-time optimizations, built-in reactivity, and simpler state management.
+This guide translates the React mockup implementation into proper Svelte patterns and best practices. The goal is to achieve the same user experience while leveraging Svelte's compile-time optimizations, built-in reactivity, and simpler state management.
 
 ## Visual Reference
 

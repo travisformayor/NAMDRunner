@@ -5,9 +5,10 @@ Quick reference for autonomous development tools and infrastructure available in
 ## Testing Infrastructure
 
 ### UI Testing - `npm run test:ui`
-**Purpose**: Fast UI development with visual feedback  
-**Target**: Web browser via Vite dev server (`localhost:1420`)  
+**Purpose**: Fast UI development with visual feedback
+**Target**: Web browser via Vite dev server (`localhost:1420`)
 **Speed**: Very fast (no build required)
+**⚠️ Server Startup**: Vite dev server takes 1-3 minutes on first start
 
 **Available Tools**:
 - **Playwright**: Browser automation for component testing
@@ -124,11 +125,30 @@ cargo install tauri-driver --locked    # WebDriver for desktop testing
 | Release validation | Full E2E suite | `npm run test:e2e` | Slow |
 | Unit testing | Vitest + Rust | `npm run test` | Fast |
 
+## SSH/Headless Environment Notes
+
+### For Agent Development Sessions
+- **Always use headless mode**: `chromium.launch({ headless: true })`
+- **Server startup**: Wait 60-180 seconds for Vite dev server before testing
+- **Port checking**: Use `curl -s http://localhost:1420` to verify server readiness
+- **Background processes**: Run `npm run dev &` in background, wait for "VITE ready" message
+
+### Headless Browser Configuration
+```javascript
+// Correct configuration for SSH environments
+const browser = await chromium.launch({
+  headless: true,  // Required for SSH
+  args: ['--no-sandbox', '--disable-setuid-sandbox']
+});
+```
+
 ## Quick Troubleshooting
 
-**UI tests failing**: Check Vite dev server is running (`npm run dev`)  
-**E2E tests failing**: Verify Tauri build succeeded and WebKit driver installed  
-**Mock data issues**: Check `testDataManager.ts` scenario selection  
+**UI tests failing**: Check Vite dev server is running (`npm run dev`) and wait for full startup
+**Server not responding**: Wait 1-3 minutes for initial Vite startup, check with `curl localhost:1420`
+**Headless browser issues**: Ensure `headless: true` and proper security args in Playwright config
+**E2E tests failing**: Verify Tauri build succeeded and WebKit driver installed
+**Mock data issues**: Check `testDataManager.ts` scenario selection
 **IPC errors**: Use E2E tests to debug TypeScript ↔ Rust communication
 
 ## Testing Infrastructure Details

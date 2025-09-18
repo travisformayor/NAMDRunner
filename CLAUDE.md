@@ -9,29 +9,62 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters. **Tauri v
 - **Reliability**: Scientists need stability over features
 - **Reference-Driven**: Adapt proven Python patterns
 
-## Essential Documentation (Read These First!)
+## Context-Specific Reading Guide
 
-### Essential Docs
-- `docs/README.md` - Documentation index (keep up-to-date)
-- `docs/ARCHITECTURE.md` - System design, business requirements, and project goals
-- `docs/CONTRIBUTING.md` - Development setup, testing strategy, and coding standards
-- `docs/API.md` - IPC interfaces, command specifications, and SLURM integration
-- `docs/DB.md` - SQLite schemas, JSON metadata formats, and data validation
-- `docs/SSH.md` - Secure connection, file transfer, and session management
-- `docs/reference/agent-development-tools.md` - Available tools and testing infrastructure
-- `tasks/roadmap.md` - Current phase and development plan
-- `docs/reference/python-implementation-reference.md` - Comprehensive lessons from Python implementation
-- `docs/reference/slurm-commands-reference.md` - Complete SLURM command reference
-- `docs/reference/namd-commands-reference.md` - NAMD configuration and execution patterns
-- `docs/reference/alpine-cluster-reference.md` - HPC cluster configuration and setup requirements
+**Quick navigation: What should I read for my current task?**
+
+### 🧪 Working on Unit Tests?
+- [`docs/CONTRIBUTING.md#testing-strategy`](docs/CONTRIBUTING.md#testing-strategy) - Testing philosophy and 3-tier architecture
+- [`docs/reference/agent-development-tools.md`](docs/reference/agent-development-tools.md) - Testing tools and debugging infrastructure
+
+### 🔧 Refactoring Code?
+- **Use the review-refactor agent first**: `.claude/agents/review-refactor.md`
+- [`docs/CONTRIBUTING.md#developer-standards--project-philosophy`](docs/CONTRIBUTING.md#developer-standards--project-philosophy) - Development principles and anti-patterns
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - System design and architectural constraints
+
+### 🎨 Working on UI?
+- [`docs/DESIGN.md`](docs/DESIGN.md) - UI/UX specifications and component architecture
+- [`docs/reference/svelte-implementation-guide.md`](docs/reference/svelte-implementation-guide.md) - Svelte patterns and best practices
+
+### ⚡ Working on SLURM Integration?
+- [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - SLURM command patterns and job management
+- [`docs/reference/alpine-cluster-reference.md`](docs/reference/alpine-cluster-reference.md) - Cluster-specific configurations and limits
+- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - Proven SLURM integration patterns
+
+### 🧬 Working on NAMD?
+- [`docs/reference/namd-commands-reference.md`](docs/reference/namd-commands-reference.md) - NAMD configuration templates and execution
+- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - NAMD workflow patterns
+
+### 🔐 Working on SSH/SFTP?
+- [`docs/SSH.md`](docs/SSH.md) - Connection management, security patterns, and file operations
+- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - SSH integration lessons
+
+### 🖥️ Making Cluster Allocation Decisions?
+- [`docs/reference/alpine-cluster-reference.md`](docs/reference/alpine-cluster-reference.md) - Resource limits, partitions, and QoS options
+- [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - Resource allocation commands
+
+### 🔌 Working on IPC/Commands?
+- [`docs/API.md`](docs/API.md) - IPC interfaces and command specifications
+- [`docs/CONTRIBUTING.md#security-requirements`](docs/CONTRIBUTING.md#security-requirements) - Security patterns for command handling
+
+### 🗄️ Working with Database/Data?
+- [`docs/DB.md`](docs/DB.md) - SQLite schemas and JSON metadata formats
+- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - Data format lessons
+
+## Essential Documentation (Always Available)
+
+### Start Here
+- [`docs/README.md`](docs/README.md) - Documentation index and quick start
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - System design and project overview
+- [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) - Development setup and standards
+- [`tasks/roadmap.md`](tasks/roadmap.md) - Current development phase
 
 ## Development Workflow
 
 ### Before Starting ANY Work
-1. **Read the specs** - `docs/ARCHITECTURE.md` and `docs/CONTRIBUTING.md`
+1. **Read the specs** - Use the Context-Specific Reading Guide above for your task type
 2. **Check current phase** - `tasks/roadmap.md` shows where we are
 3. **Look for active tasks** - `tasks/active/` (should be empty to start new work)
-4. **Understand the feature** - Check `docs/reference/python-implementation-reference.md` for Python implementation
 
 ### Task Management (Critical!)
 - **One task at a time** in `tasks/active/` - No exceptions
@@ -47,13 +80,8 @@ After implementation and testing, before archiving:
 4. **Update and Archive Task** - Move to `tasks/completed/`
 
 ### When You're Stuck
+- **Use the Context-Specific Reading Guide above** - Find docs relevant to your current task
 - Review `tasks/roadmap.md` for current development phase
-- Check `docs/reference/` docs for Python implementation patterns
-- Look at actual Python code in `docs/reference/NAMDRun-python/src/namdrunner/`
-- Document findings in appropriate reference file
-- Update `docs/reference/python-implementation-reference.md` with new insights
-- **Read `docs/reference/agent-development-tools.md`** - Available tools and testing infrastructure
-- **Investigate with temporary scripts** - Use testing tools (`docs/CONTRIBUTING.md#testing-strategy`) to understand current behavior
 - **Ask specific questions** about the requested feature or Python implementation details
 
 ## Quick Commands

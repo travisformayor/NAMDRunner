@@ -75,11 +75,11 @@ npm test && cargo test
 ## 📁 Reference Materials
 
 ### [`reference/`](reference/)
-**Lookup tables and external system details**
+**Lookup tables and system details**
+- [`agent-development-tools.md`](reference/agent-development-tools.md) - Tooling setup to enable autonomous development for AI assistants
 - [`alpine-cluster-reference.md`](reference/alpine-cluster-reference.md) - Complete Alpine cluster information reference (partitions, QoS, resources, etc)
 - [`slurm-commands-reference.md`](reference/slurm-commands-reference.md) - SLURM command patterns
 - [`namd-commands-reference.md`](reference/namd-commands-reference.md) - NAMD configuration templates
-- [`agent-development-tools.md`](reference/agent-development-tools.md) - Tooling setup to enable autonomous development for AI assistants
 - [`svelte-implementation-guide.md`](reference/svelte-implementation-guide.md) - Svelte patterns and component architecture
 - [`python-implementation-reference.md`](reference/python-implementation-reference.md) - Lessons from Python version
 

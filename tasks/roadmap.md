@@ -19,8 +19,6 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 
 ## Current Status: Phase 5 Complete ✅
 
-**Phase 3 Skipped**: UI development is being handled in a separate branch.
-
 **Next Priority**: Phase 6 - Single-Job MVP Completion (testing, polish, and production readiness)
 
 **Current Implementation**: See [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) for detailed description of what exists now, including module structure, SSH/SFTP integration, and security implementation.
@@ -132,42 +130,45 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 - [x] Simplify validation error types - use anyhow::Error instead of complex ValidationError system
 - [x] Consolidated validation patterns and removed over-engineered trait implementations
 
-## Phase 3: Frontend Development
-*User interface and workflows*
+## Phase 3: Frontend Development ✅ COMPLETED
+*Complete UI implementation with comprehensive refactoring cleanup*
+*User interface implementation based on React mockup*
 
-### Milestone 3.1: Core UI Components
-- [ ] Connection management dialog
-- [ ] Main dashboard with job table (single jobs)
-- [ ] Status indicators and badges
-- [ ] Navigation and routing
+### Milestone 3.1: Design System & Layout Components ✅ COMPLETED
+- [x] Import CSS custom properties and theme configuration
+- [x] Build main application shell (sidebar, header, content area)
+- [x] Implement navigation state management
+- [x] Create breadcrumb navigation system
+- [x] Build collapsible SSH console panel
 
-### Milestone 3.2: Job Creation & Management UI
-- [ ] **Job Creation Form**
-  - [ ] Simple job creation form (job name, input files, basic parameters)
-  - [ ] File upload interface with progress tracking
-  - [ ] Resource allocation controls (cores, memory, walltime)
-  - [ ] Basic NAMD parameter validation (client-side)
-- [ ] **Job Management Interface**
-  - [ ] Job detail view with status and metadata
-  - [ ] Job action buttons (submit, delete, restart later in Phase 7)
+### Milestone 3.2: Jobs Management Interface ✅ COMPLETED
+- [x] Jobs list page with sortable table
+- [x] Job status badges and indicators
+- [x] Job detail view with tabbed interface
+- [x] Sync controls and status updates
+- [x] Job selection and row interactions
 
-### Milestone 3.3: Results & File Management UI
-- [ ] **File Operations Interface**
-  - [ ] File listing and browsing interface for job results
-  - [ ] Download interface for result files
-  - [ ] File upload progress and status display
-- [ ] **Log Viewing & Debugging UI**
-  - [ ] Basic log viewer for SLURM and NAMD output
-  - [ ] SSH command logging and console view
-  - [ ] Error message display and troubleshooting interface
+### Milestone 3.3: Job Creation Workflow ✅ COMPLETED
+- [x] Multi-section creation form
+- [x] SLURM resource allocation interface
+- [x] File upload with drag & drop
+- [x] NAMD parameter configuration
+- [x] Form validation and error display
 
-### Milestone 3.4: Phase 3 Cleanup & Refactoring
-- [ ] Run Phase 3 code review using `.claude/agents/review-refactor.md` agent
-- [ ] Review UI components for consistency, reusability, and duplication
-- [ ] Consolidate similar form validation patterns discovered
-- [ ] Ensure accessible design patterns throughout application
-- [ ] Validate proper error display and user feedback patterns
-- [ ] Document UI component patterns and establish design system
+### Milestone 3.4: Connection UI & Polish ✅ COMPLETED
+- [x] Enhanced connection status dropdown (matching mockup)
+- [x] Updated connection dialog with proper styling
+- [x] Loading states and transitions
+- [x] Dark theme support
+- [x] Complete UI testing suite (pending integration)
+
+### Milestone 3.5: Phase 3 Cleanup & Refactoring ✅ COMPLETED
+- [x] Run Phase 3 code review using `.claude/agents/review-refactor.md` agent
+- [x] Review UI components for consistency, reusability, and duplication
+- [x] Consolidate similar form validation patterns discovered (FormField component)
+- [x] Ensure accessible design patterns throughout application
+- [x] Validate proper error display and user feedback patterns
+- [x] Document UI component patterns and establish design system
 
 ## Phase 4: SLURM Integration ✅ COMPLETED
 *Cluster job management*
@@ -240,19 +241,34 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 ## Phase 6: Single-Job MVP Completion
 *Testing, polish, and production readiness for core single-job functionality*
 
-### Milestone 6.1: Comprehensive Testing
+### Milestone 6.1: UI Integration with Backend
+- [x] Merge Phase 3 UI branch into mainline and resolve conflicts
+- [ ] Replace mock IPC client with real IPC bridge
+- [ ] Wire UI actions to backend commands
+  - [ ] Connection/session (login, logout, state)
+  - [ ] Job creation → remote directories + local database record
+  - [ ] File upload and download flows
+  - [ ] SLURM submission and status synchronization
+  - [ ] Log and results browsing
+  - [ ] Job deletion with remote cleanup
+- [ ] Align TypeScript types with Rust IPC payloads
+- [ ] Remove hardcoded mock data; retain optional mock mode toggle
+- [ ] Update E2E tests to exercise integrated flows end-to-end (using mocked server connection and not testing ssh/sftp performance or libraries)
+- [ ] Validate error handling and user feedback (toasts, dialogs, inline errors)
+
+### Milestone 6.2: Comprehensive Testing
 - [ ] Unit test coverage >80%
 - [ ] E2E test suite complete
 - [ ] Manual testing checklist
 - [ ] Performance optimization
 
-### Milestone 6.2: Production Readiness
+### Milestone 6.3: Production Readiness
 - [ ] Windows executable build
 - [ ] Installation documentation
 - [ ] User guide (single-job workflow)
 - [ ] Deployment pipeline
 
-### Milestone 6.3: MVP Cleanup & Architecture Review
+### Milestone 6.4: MVP Cleanup & Architecture Review
 - [ ] Run comprehensive code review using `.claude/agents/review-refactor.md` agent
 - [ ] Final refactoring pass for consistency and maintainability
 - [ ] Implement performance optimization opportunities identified
@@ -284,14 +300,14 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 - [x] Job status tracking with database persistence implemented
 - [x] SLURM status sync functional with manual sync commands
 
-### Phase 3 Complete When:
-- Full UI navigation works
-- Job creation and management forms complete
-- File upload/download interface working
-- Log viewing and debugging UI functional
-- All forms validate input properly
-- UI responsive and accessible
-- **Complete frontend ready for backend integration**
+### Phase 3 Complete When: ✅ ALL ACHIEVED
+- [x] UI visually matches React mockup screenshots
+- [x] Full navigation between Jobs, Job Detail, and Create Job views works
+- [x] All forms validate input with proper error display
+- [x] Light/dark themes both functional
+- [x] Mock data enables complete UI workflow testing
+- [x] UI tests capture screenshots for visual validation
+- [x] **BONUS**: Comprehensive refactoring cleanup completed (300+ lines CSS eliminated, utilities centralized)
 
 ### Phase 4 Complete When: ✅ ACHIEVED
 - [x] Jobs submit to SLURM
@@ -310,6 +326,7 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 - [x] **Backend file operations complete for end-to-end workflow**
 
 ### Phase 6 Complete When (Single-Job MVP):
+- UI integrated into backend features
 - All tests passing (>80% coverage)
 - Windows exe distributable
 - Documentation complete for single-job workflow
@@ -337,106 +354,175 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
   - [ ] Resource allocation interface for restart (allow different resources)
   - [ ] Restart job lineage display and tracking
 
-### Milestone 7.2: Restart Testing & Integration
+### Milestone 7.2: Advanced Restart Features
+- [ ] **Automatic Restart Configuration**
+  - [ ] Automatic restart configuration generation
+  - [ ] Intelligent checkpoint interval recommendations
+  - [ ] Resource optimization for restart jobs
+- [ ] **Checkpoint Management**
+  - [ ] Checkpoint file validation and integrity checks
+  - [ ] Checkpoint cleanup and retention policies
+  - [ ] Checkpoint size estimation and warnings
+
+### Milestone 7.3: Restart Testing & Integration
 - [ ] Comprehensive restart functionality testing
 - [ ] Integration with existing single-job workflow
 - [ ] Error handling for restart failures
 - [ ] Performance validation for checkpoint operations
 
-### Milestone 7.3: Restart Documentation & Polish
+### Milestone 7.4: Restart Documentation & Polish
 - [ ] User guide updates for restart functionality
 - [ ] Developer documentation for restart architecture
 - [ ] Final restart feature cleanup and optimization
 
 ### Phase 7 Complete When:
 - Job restart functionality working reliably
+- Automatic restart configuration generation working
 - Restart lineage tracking implemented
 - Documentation updated for restart workflows
 - **Single-job MVP with restart ready for users**
 
-### Phase 8 Complete When:
-- Dynamic cluster configuration working
-- Settings page functional
-- Template management system operational
-- **Multi-cluster support ready**
+## Phase 8: Dynamic Configuration & Templates
+*Multi-cluster support with configurable settings and templates*
 
-### Phase 9 Complete When:
-- Multi-stage workflow architecture implemented
-- Workflow templates functional
-- Stage progression tracking working
-- **Full workflow MVP ready for users**
-
-## Phase 8: Dynamic Configuration & Settings
-*Multi-cluster support and configurable templates*
-
-### Milestone 8.1: Settings Page & Dynamic Configuration
-- [ ] **Settings Page Infrastructure**
+### Milestone 8.1: Settings Page Infrastructure
+- [ ] **Settings Database & UI**
   - [ ] Settings database schema for cluster configs, templates, and job types
+  - [ ] Settings page UI with forms for configuration
+  - [ ] User preferences (default values, UI behavior)
+  - [ ] Export/import settings functionality
+- [ ] **Cluster Configuration Management**
+  - [ ] Configurable cluster connection settings (login server, port)
+  - [ ] Customizable SLURM partitions list
+  - [ ] Configurable QOS options
+  - [ ] Module versions configuration (gcc, cuda, namd versions)
+  - [ ] Resource limits and defaults per partition
+  - [ ] Multiple cluster profile support
+
+### Milestone 8.2: Dynamic Cluster Detection
+- [ ] **Automatic Discovery**
   - [ ] Cluster discovery commands (module avail, module spider)
-  - [ ] Template storage and management system
-- [ ] **Dynamic Cluster Detection**
   - [ ] NAMD version detection (namd2 vs namd3)
   - [ ] Module dependency discovery and validation
   - [ ] Resource limit querying from SLURM partitions
   - [ ] MPI execution pattern detection
-
-### Milestone 8.2: Template Management System
-- [ ] **Configurable Templates**
-  - [ ] Template editor with syntax highlighting and validation
-  - [ ] Variable definition and rendering engine
-  - [ ] Job type configuration management (not hardcoded)
-  - [ ] Migration from hardcoded Alpine configuration
-
-### Milestone 8.3: Multi-Cluster Support
-- [ ] **Cluster Configuration Management**
-  - [ ] Multiple cluster profile support
-  - [ ] Cluster-specific template and job type associations
   - [ ] Dynamic resource limit detection per cluster
 
+### Milestone 8.3: Template Management System
+- [ ] **Template Infrastructure**
+  - [ ] Template storage and management system
+  - [ ] Template editor with syntax highlighting and validation
+  - [ ] Variable definition language with `{{var_name}}` syntax
+  - [ ] Variable rendering engine with type safety
+- [ ] **Template Features**
+  - [ ] Template comment syntax for variable metadata
+  - [ ] Variable tooltips, descriptions, and validation rules
+  - [ ] Default values and suggestions
+  - [ ] Template library with common NAMD workflows
+  - [ ] Template dropdown selector in Create Job page
+  - [ ] Auto-population of form fields from template variables
+  - [ ] File upload mapping to template variables
+  - [ ] Template versioning and sharing capabilities
+  - [ ] Preview of generated NAMD configuration
+  - [ ] Export/import templates
+- [ ] **Migration & Integration**
+  - [ ] Migration from hardcoded Alpine configuration
+  - [ ] Cluster-specific template associations
+  - [ ] Job type configuration management (not hardcoded)
+
+### Phase 8 Complete When:
+- Settings page functional with cluster configuration
+- Dynamic cluster detection working
+- Template management system operational
+- Multiple cluster profiles supported
+- **Multi-cluster support with templates ready**
+
 ## Phase 9: Multi-Stage Job Workflows
-*Architecture evolution based on single-job lessons learned*
+*Architecture evolution for complex simulation workflows*
 
 ### Milestone 9.1: Job Workflow Architecture
-- [ ] **Job Group Data Model** (Breaking change from single jobs version can happen, we do not need to maintain backwards compatibility)
+- [ ] **Job Group Data Model** (Breaking changes acceptable - no backwards compatibility required)
   - [ ] Multi-stage job persistence schema
+  - [ ] Job group concept with multiple dependent stages
   - [ ] Stage dependency management and sequencing
   - [ ] Migration strategy from single jobs to job groups
 - [ ] **File Propagation System**
   - [ ] Automatic output-to-input file transfer between stages
   - [ ] Stage-specific template rendering with previous stage context
   - [ ] Restart file management across workflow stages
+  - [ ] Stage-specific parameter configuration
 
-### Milestone 9.2: Workflow Templates
+### Milestone 9.2: Workflow Templates & UI
 - [ ] **Multi-Stage Template System**
   - [ ] DNA origami equilibration workflow templates
   - [ ] Stage progression templates (minimization → k=0.5 → k=0.1 → k=0.01 → production)
+  - [ ] Structure optimization with restraint files
+  - [ ] Multi-stage equilibration workflows
   - [ ] Workflow validation and dependency checking
 - [ ] **Stage Management UI**
   - [ ] Progress tracking across multiple stages
   - [ ] Individual stage monitoring and control
   - [ ] Workflow restart and recovery capabilities
+  - [ ] Visual workflow designer/editor
 
-## Future Advanced Features (Post-Workflow MVP)
-*Additional capabilities that can be added after core workflow functionality*
+### Milestone 9.3: Advanced Workflow Features
+- [ ] **Workflow Automation**
+  - [ ] Conditional stage execution based on results
+  - [ ] Automatic parameter adjustments between stages
+  - [ ] Workflow branching and merging
+- [ ] **Workflow Management**
+  - [ ] Workflow templates library
+  - [ ] Workflow sharing and versioning
+  - [ ] Workflow performance analytics
 
-### Advanced NAMD Features
-- [ ] Multiple job types (Structure Optimization, Multi-Stage Equilibration)
-- [ ] Automatic restart configuration generation
-- [ ] Checkpoint detection and resume capabilities
-- [ ] Advanced parameter validation and job type workflows
-- [ ] Restraint file handling for structure optimization
+### Phase 9 Complete When:
+- Multi-stage workflow architecture implemented
+- Workflow templates functional for common use cases
+- Stage progression tracking and management working
+- File propagation between stages automatic
+- **Full workflow MVP ready for scientific users**
 
-### Advanced Job Management
-- [ ] Batch processing for large job sets
-- [ ] Advanced file management and cleanup utilities
-- [ ] Job deletion with remote cleanup
-- [ ] Bulk status updates and filtering
+## Phase 10: Monitoring & Advanced Management
+*Performance monitoring, batch operations, and enterprise features*
 
-### Advanced Features
-- [ ] Performance metrics and SU usage tracking
-- [ ] Module version configuration and auto-detection
-- [ ] Enhanced error recovery workflows
-- [ ] Storage usage monitoring and alerts
+### Milestone 10.1: Performance Monitoring
+- [ ] **Resource Usage Tracking**
+  - [ ] Performance metrics and SU usage tracking
+  - [ ] Storage usage monitoring and alerts
+  - [ ] Job efficiency analysis and recommendations
+  - [ ] Resource utilization reports
+- [ ] **System Monitoring**
+  - [ ] Cluster health monitoring integration
+  - [ ] Queue time predictions
+  - [ ] Resource availability forecasting
+
+### Milestone 10.2: Batch Operations & Management
+- [ ] **Bulk Job Operations**
+  - [ ] Batch processing for large job sets
+  - [ ] Bulk status updates and filtering
+  - [ ] Mass job submission with parameter sweeps
+  - [ ] Batch job cancellation and cleanup
+- [ ] **Advanced File Management**
+  - [ ] Advanced file management and cleanup utilities
+  - [ ] Automated archival of completed jobs
+  - [ ] Disk space optimization tools
+
+### Milestone 10.3: Enhanced Recovery & Reliability
+- [ ] **Error Recovery**
+  - [ ] Enhanced error recovery workflows
+  - [ ] Automatic job resubmission on transient failures
+  - [ ] Smart retry strategies based on failure patterns
+- [ ] **Reliability Features**
+  - [ ] Health checks and system diagnostics
+  - [ ] Automated backup and recovery
+  - [ ] Data integrity validation
+
+### Phase 10 Complete When:
+- Performance monitoring and alerting functional
+- Batch operations working for large-scale usage
+- Enhanced error recovery implemented
+- System reliability and monitoring operational
+- **Enterprise-ready NAMDRunner complete**
 
 ## Risk Mitigation
 

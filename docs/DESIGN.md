@@ -261,6 +261,120 @@ The current single-job table design will evolve to support job groups:
 - **Background**: Light gray or white
 - **Borders/Dividers**: Light gray
 
+### CSS Design System
+
+#### Naming Convention
+**Consistent Naming**: Use `namd-*` prefix for all custom CSS classes.
+
+```css
+/* ✅ Consistent naming in app.css */
+.namd-button { /* base styles */ }
+.namd-button--outline { /* variant */ }
+.namd-status-badge { /* component */ }
+.namd-status-badge--running { /* state */ }
+.namd-file-type-badge { /* component */ }
+.namd-file-type-structure { /* variant */ }
+```
+
+#### Centralized Styling
+**Define reusable styles in `app.css`**, not component files.
+
+```svelte
+<!-- ✅ Use centralized classes -->
+<span class="namd-status-badge namd-status-badge--{statusClass}">
+  {status}
+</span>
+
+<!-- ❌ Component-specific styles -->
+<style>
+  .status-badge { /* duplicate styles */ }
+</style>
+```
+
+#### Component Class Examples
+```css
+/* Status badges */
+.namd-status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.namd-status-badge--running {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+
+.namd-status-badge--completed {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+/* Form fields */
+.namd-field-group {
+  margin-bottom: 1rem;
+}
+
+.namd-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+
+.namd-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+}
+
+.namd-input.error {
+  border-color: #ef4444;
+}
+
+.namd-error-text {
+  color: #ef4444;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+/* Tabs */
+.namd-tabs-nav {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.namd-tabs-nav--grid {
+  display: grid;
+}
+
+.namd-tabs-nav--grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.namd-tab-button {
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.namd-tab-button.active {
+  border-bottom-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.namd-tab-content {
+  padding: 1rem;
+}
+
+.namd-tab-panel {
+  /* Panel-specific styles */
+}
+```
+
 ### Spacing & Layout
 - Consistent padding/margins throughout
 - Clear visual grouping of related elements

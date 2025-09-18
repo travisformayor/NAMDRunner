@@ -69,14 +69,14 @@
 
 ### First-Time Setup
 
-**Important**: Follow the official Tauri v2 documentation: https://v2.tauri.app/start/
+> Follow the official Tauri v2 documentation for platform prerequisites: https://v2.tauri.app/start/
 
 #### Linux/Fedora
 ```bash
 # Tauri system dependencies
 sudo dnf check-update
-sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel
-sudo dnf group install "C Development Tools and Libraries"
+sudo dnf install -y webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel
+sudo dnf group install -y "C Development Tools and Libraries"
 
 # Install Rust
 curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
@@ -90,31 +90,31 @@ git clone https://github.com/yourusername/namdrunner.git
 cd namdrunner
 npm install
 
-# Verify setup
-npm run tauri dev  # Should launch Tauri app
+# Smoke test
+npm run tauri dev
 ```
 
 #### macOS
-```bash
-# Install Xcode Command Line Tools
-xcode-select --install
 
-# Install Homebrew dependencies
+```bash
+# Install Dev tools
+xcode-select --install
+# Install Node/Rust with Homebrew
 brew install node rust
 
-# Clone and setup
+# Clone repo
 git clone https://github.com/yourusername/namdrunner.git
 cd namdrunner
 npm install
 ```
 
 #### Windows
-```powershell
-# Install prerequisites via winget or Chocolatey
-# Install Rust from https://rustup.rs
-# Install Node.js from https://nodejs.org
 
-# Clone and setup
+```powershell
+# Install Rust from https://rustup.rs (MSVC)
+# Install Node.js LTS from https://nodejs.org
+# Ensure Visual Studio Build Tools / Desktop C++ are present for native deps
+
 git clone https://github.com/yourusername/namdrunner.git
 cd namdrunner
 npm install
@@ -123,38 +123,43 @@ npm install
 ### Development Commands
 ```bash
 # Frontend development
-npm run dev              # Svelte dev server (Vite)
-npm run build            # Build static frontend
-npm run test            # Vitest unit tests
-npm run lint            # ESLint + Prettier
+npm run dev               # Svelte dev server (Vite)
+npm run build             # Build static frontend
+npm run preview           # Preview built assets
+npm run check             # svelte-kit sync + svelte-check
+npm run check:watch       # svelte-check --watch
+npm run lint              # ESLint + Prettier (check)
+npm run lint:fix          # ESLint --fix + Prettier --write
 
-# Backend development (src-tauri/)
-cargo test              # Rust unit tests
-cargo clippy            # Rust linting
+# Tests
+npm run test              # Vitest unit tests
+npm run test:vitest-ui    # Vitest UI
+npm run test:run          # Vitest run (CI-friendly)
+npm run test:ui           # UI testing toolkit (under Xvfb)
+npm run test:e2e          # WebdriverIO E2E (under Xvfb)
+
+# Rust (executed in `src-tauri/`)
+cargo test                # Rust unit tests
+cargo clippy              # Rust lint
 
 # Full Tauri application
-npm run tauri dev       # Run complete app with hot reload
-npm run tauri build     # Build release binary
-
-# Testing
-npm run test            # Unit tests (Vitest + Cargo)
-npm run test:ui         # UI testing with Playwright
-npm run test:e2e        # Desktop E2E testing
+npm run tauri dev         # Run app with hot reload
+npm run tauri build       # Build release binary
 ```
 
 
 ## VM Development Environment (Optional)
 
-For developers using a Fedora VM environment, see the VM-specific setup instructions below. Most developers can skip this section.
+For developers using a Fedora VM environment (e.g., UTM on macOS).
 
 ### Platform
 * **Fedora 38 ARM64** (UTM VM) for development
-* **Workspace**: `/media/share/namdrunner` (synced with host machine)
+* **Workspace**: `/media/share/<repo-worktree>` mounted from the host (synced with host machine)
 
-### MacOS Host Setup (Outside the VM)
+### Host Setup (Outside the VM)
 1. **Port forwarding with socat**:
    ```bash
-   socat TCP-LISTEN:2222,fork,reuseaddr TCP:192.168.64.3:22
+   socat TCP-LISTEN:2222,fork,reuseaddr TCP:<vm ip address>:22
    ```
 
 2. **SSH config**:
@@ -166,35 +171,41 @@ For developers using a Fedora VM environment, see the VM-specific setup instruct
      IdentityFile ~/.ssh/utm_ed25519
    ```
 
-### VM Setup (Linux/Fedora)
-```bash
-# Tauri system dependencies
-sudo dnf check-update
-sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel
-sudo dnf group install "C Development Tools and Libraries"
+## Host vs. VM Builds (Rust)
 
-# Install Rust
-curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
-source ~/.cargo/env
+**Goals**
 
-# Install Node.js via nvm
-nvm install --lts && nvm use --lts
+* Keep **sources** on the shared mount (e.g., `/media/share/<REPO>`).
+* On **Fedora VM**: send heavy I/O to VM disk.
+* On **macOS host**: use normal project-local folders.
 
-# Clone and setup project
-git clone https://github.com/yourusername/namdrunner.git
-cd namdrunner
-npm install
+### Rust (Cargo `target/`)
 
-# Verify setup
-npm run tauri dev  # Should launch Tauri app
-```
+**Fedora VM (zsh) — add to `~/.zshrc`:**
 
-### Rust Builds
-
-Add the following to the VMs `~/.zshrc` file to have cargo build commands use the VM local filesystem instead of the shared folder to improve build speed:
-```sh
+```zsh
+# Use VM-local disk for Cargo artifacts
 export CARGO_TARGET_DIR="$HOME/.cargo-target/namdrunner"
 export CARGO_INCREMENTAL=0
+```
+
+Setup folder once:
+
+```bash
+mkdir -p "$HOME/.cargo-target/namdrunner"
+```
+
+**macOS host:**
+No configuration needed. Ensure `CARGO_TARGET_DIR` is **not** set on macOS so Cargo writes to `./target` in the repo.
+
+**Verify**
+
+```bash
+# On VM: artifacts at ~/.cargo-target/namdrunner
+ls -1 "$HOME/.cargo-target/namdrunner" | head
+
+# On Mac: artifacts in ./target
+test -d target && echo "macOS using ./target ✅"
 ```
 
 ## Developer Standards & Project Philosophy
@@ -209,7 +220,42 @@ export CARGO_INCREMENTAL=0
 
 ### Core Architectural Principles
 
-### 1. Direct Code Patterns
+### 1. Progressive Enhancement
+**Start Simple**: Begin with the simplest solution that works, add abstraction only when you have 3+ use cases.
+
+```typescript
+// ✅ Start with simple utility functions
+export function parseMemoryString(memory: string): number {
+  // Direct implementation
+}
+
+// ✅ Add abstraction when pattern emerges across multiple components
+export const memoryUtils = {
+  parse: parseMemoryString,
+  format: formatMemory,
+  validate: validateMemoryInput
+};
+
+// ❌ Don't create abstraction prematurely
+class MemoryConfigurationManagerFactory {
+  // Over-engineered from the start
+}
+```
+
+**Prefer Composition**: Build complex functionality by combining simple, focused utilities.
+```typescript
+// ✅ Composable utilities
+const validation = validateResourceRequest(cores, memoryGB, walltimeHours, partition, qos);
+const cost = calculateJobCost(cores, walltimeHours, hasGpu, gpuCount);
+const queue = estimateQueueTime(cores, partition);
+
+// ❌ Monolithic service
+class CompleteJobValidator {
+  // Everything in one place
+}
+```
+
+### 2. Direct Code Patterns
 **Avoid Thin Wrappers**: Functions should add value, not just delegate.
 ```typescript
 // ❌ Thin wrapper
@@ -302,6 +348,136 @@ function sanitizeJobId(jobId: string): Result<string> {
 }
 ```
 
+## UI Development Patterns
+
+### 1. Utility-First Component Design
+**Centralized Utilities**: Create focused utility functions that serve multiple components.
+
+```typescript
+// ✅ Focused utility functions in utils/file-helpers.ts
+export function getFileIcon(type: string): string { /* ... */ }
+export function getTypeLabel(type: string): string { /* ... */ }
+export function parseMemoryString(memory: string): number { /* ... */ }
+
+// ✅ Use in components
+import { getFileIcon, getTypeLabel } from '../../utils/file-helpers';
+```
+
+**Single Source of Truth**: Centralize configuration and data definitions.
+```typescript
+// ✅ Centralized in data/cluster-config.ts
+export const PARTITIONS: PartitionSpec[] = [/* ... */];
+export function validateResourceRequest(cores, memory, walltime, partition, qos) { /* ... */ }
+
+// ❌ Duplicate definitions across components
+const partitionLimits = { amilan: { maxCores: 64 } }; // In Component A
+const limits = { amilan: { maxCores: 64 } }; // In Component B
+```
+
+### 2. Component Composition
+**Reusable Components**: Create focused, composable components.
+
+```svelte
+<!-- ✅ FormField.svelte - Reusable form component -->
+<script lang="ts">
+  export let label: string;
+  export let id: string;
+  export let type: 'text' | 'number' | 'email' = 'text';
+  export let value: string | number;
+  export let error: string = '';
+</script>
+
+<div class="namd-field-group">
+  <label class="namd-label" for={id}>{label}</label>
+  <input class="namd-input" class:error {id} {type} bind:value />
+  {#if error}<span class="namd-error-text">{error}</span>{/if}
+</div>
+```
+
+**Reactive Data Flow**: Use Svelte's reactive statements with utility functions.
+```svelte
+<script lang="ts">
+  import { validateResourceRequest, parseMemoryString } from '../../utils/helpers';
+
+  export let cores: number;
+  export let memory: string;
+
+  // ✅ Reactive validation using utilities
+  $: memoryGB = parseMemoryString(memory);
+  $: validation = validateResourceRequest(cores, memoryGB, walltime, partition, qos);
+</script>
+```
+
+### 3. Tab and Layout Systems
+**Unified Tab System**: Use consistent tab styling across all implementations.
+
+```svelte
+<!-- ✅ Consistent tab pattern -->
+<nav class="namd-tabs-nav namd-tabs-nav--grid namd-tabs-nav--grid-5">
+  {#each tabs as tab}
+    <button class="namd-tab-button" class:active={activeTab === tab.id}>
+      {tab.label}
+    </button>
+  {/each}
+</nav>
+<div class="namd-tab-content">
+  <div class="namd-tab-panel">
+    <!-- Tab content -->
+  </div>
+</div>
+```
+
+## Service Development Patterns
+
+### 1. Utility Function Design
+**Pure Functions**: Utility functions should be pure, predictable, and side-effect free.
+
+```typescript
+// ✅ Pure utility function
+export function parseMemoryString(memory: string): number {
+  if (!memory) return 0;
+  const cleanMemory = memory.toString().toLowerCase().replace(/\s+/g, '');
+  const match = cleanMemory.match(/^(\d+(?:\.\d+)?)([a-z]*)/);
+  // ... conversion logic
+  return value;
+}
+
+// ❌ Impure function with side effects
+export function parseMemoryString(memory: string): number {
+  console.log('Parsing memory:', memory); // Side effect
+  if (!memory) {
+    showErrorMessage('Memory is required'); // Side effect
+    return 0;
+  }
+  // ...
+}
+```
+
+**Focused Responsibility**: Each utility should have one clear, well-defined purpose.
+```typescript
+// ✅ Focused utilities
+export function getFileIcon(type: string): string { /* ... */ }
+export function getTypeLabel(type: string): string { /* ... */ }
+export function getTypeColor(type: string): string { /* ... */ }
+
+// ❌ Mixed responsibilities
+export function handleFileType(type: string, action: 'icon' | 'label' | 'color'): string {
+  // One function doing multiple things
+}
+```
+
+**Configuration Centralization**: Keep all related configuration in one place.
+```typescript
+// ✅ Single source of truth
+// In cluster-config.ts
+export const PARTITIONS: PartitionSpec[] = [/* ... */];
+export function validateResourceRequest(cores, memory, walltime, partition, qos) { /* ... */ }
+
+// ❌ Scattered configuration
+// In Component A: const limits = { amilan: { maxCores: 64 } };
+// In Component B: const partitionLimits = { amilan: { maxCores: 64 } };
+```
+
 ### Anti-Patterns to Avoid
 
 #### Critical Anti-Patterns (From NAMDRunner Experience)
@@ -315,6 +491,51 @@ function sanitizeJobId(jobId: string): Result<string> {
 - **False Backward Compatibility**: Claims of compatibility when no legacy code exists
 - **Over-Engineering**: Creating abstractions before you need them (YAGNI principle)
 - **Mixed Concerns**: UI logic in business logic, networking in data persistence
+
+#### UI-Specific Anti-Patterns
+**CSS Duplication**: Don't define the same styles in multiple components.
+
+```svelte
+<!-- ❌ Duplicate badge styles across components -->
+<!-- Component A -->
+<style>
+  .status-badge { padding: 0.25rem 0.5rem; border-radius: 9999px; }
+  .status-running { background-color: #dbeafe; color: #1d4ed8; }
+</style>
+
+<!-- Component B -->
+<style>
+  .status-indicator { padding: 0.25rem 0.5rem; border-radius: 9999px; }
+  .running { background-color: #dbeafe; color: #1d4ed8; }
+</style>
+
+<!-- ✅ Use centralized classes -->
+<span class="namd-status-badge namd-status-badge--running">Running</span>
+```
+
+**Hardcoded Styling**: Don't use hardcoded colors or Tailwind classes without the framework.
+```svelte
+<!-- ❌ Hardcoded styles -->
+<div class="bg-blue-500 text-white px-4 py-2">Content</div>
+<div style="background-color: #3b82f6; color: white;">Content</div>
+
+<!-- ✅ Use CSS custom properties -->
+<div class="namd-button namd-button--primary">Content</div>
+```
+
+**Over-Complex Component APIs**: Keep component interfaces focused and simple.
+```svelte
+<!-- ❌ Over-complex API -->
+<FormField
+  {label} {id} {type} {value} {placeholder} {required} {error}
+  {min} {max} {step} {disabled} {readonly} {autocomplete}
+  {validation} {transform} {formatter} {parser}
+  onInput={handleInput} onBlur={handleBlur} onFocus={handleFocus}
+/>
+
+<!-- ✅ Focused, simple API -->
+<FormField {label} {id} {type} {value} {error} {required} />
+```
 
 ### Security Requirements
 
@@ -355,9 +576,7 @@ function sanitizeJobId(jobId: string): Result<string> {
 
 > **For complete SSH connection lifecycle patterns**, see [`SSH.md#connection-management`](SSH.md#connection-management)
 
-### Service Development Patterns
-
-### Dependency Injection
+### 2. Dependency Injection
 **Constructor Injection**: Services receive dependencies through constructor.
 ```typescript
 export class DirectoryManager {
@@ -372,10 +591,10 @@ export class DirectoryManager {
 
 > **For SSH mock patterns in tests**, see [`SSH.md#testing--development`](SSH.md#testing--development)
 
-### Path Management
+### 3. Path Management
 Use PathResolver for all path operations. Never construct paths directly.
 
-### State Management
+### 4. State Management
 Use state machines for complex state management with validated transitions.
 
 ### Performance Guidelines
@@ -452,6 +671,19 @@ Use state machines for complex state management with validated transitions.
 
 For platform support, build requirements, and system constraints, see [`ARCHITECTURE.md#architecture-principles--constraints`](ARCHITECTURE.md#architecture-principles--constraints).
 
+## Summary: Key Development Principles
+
+1. **Progressive Enhancement**: Start simple, add complexity only when proven necessary
+2. **Single Source of Truth**: Centralize configuration, utilities, and styling
+3. **Utility-First Design**: Create focused, reusable functions and components
+4. **Consistent Patterns**: Use unified naming conventions and design system
+5. **Clean Separation**: Keep UI, business logic, and data operations separate
+6. **Security First**: Never log credentials, validate all paths, clear sensitive data
+
+This guideline document should be treated as living documentation that evolves with the project. All new code should follow these patterns, and existing code should be refactored to match these standards when possible.
+
+**Remember**: We're building a focused tool for scientists, not an enterprise platform. Keep it simple, reliable, and maintainable.
+
 ## Testing Strategy
 
 ### NAMDRunner Testing Philosophy
@@ -480,6 +712,26 @@ Test our logic, not external libraries. Focus on what NAMDRunner does, not how s
 > **For SSH/SFTP testing patterns and mock infrastructure**, see [`SSH.md#testing--development`](SSH.md#testing--development)
 
 ### Testing Commands
+
+#### Quick start for UI development and agent debugging
+```bash
+Xvfb :99 -screen 0 1280x720x24 &  # Virtual display for SSH/CI environments
+export DISPLAY=:99
+
+# Start Vite dev server (takes 1-3 minutes on first start)
+npm run dev &                      # Run in background
+sleep 120                          # Wait for server startup
+
+# Verify server is ready
+curl -s http://localhost:1420 > /dev/null && echo "Server ready" || echo "Server not ready"
+
+# Run headless UI tests (for SSH environments)
+node tests/ui/headless-visual-check.js  # Custom headless script
+# OR
+npm run test:ui                    # Standard debug toolkit (non-headless)
+```
+
+#### Standard testing commands
 ```bash
 # Frontend testing
 npm test                # Vitest unit tests
