@@ -1,9 +1,8 @@
 use crate::types::*;
 use crate::mock_state::{with_mock_state, get_mock_state, advance_job_progression};
 use crate::validation::{input, paths};
-use crate::validation_traits::{ValidateId};
 use crate::mode_switching::{is_mock_mode, execute_with_mode};
-use crate::database::job_repository::{default_job_repository, JobRepository};
+use crate::database::{with_database, helpers};
 use chrono::Utc;
 use std::env;
 
@@ -40,14 +39,6 @@ async fn get_cluster_username() -> Result<String, String> {
 }
 
 
-/// Business logic layer for job creation
-async fn create_job_business_logic(params: CreateJobParams) -> CreateJobResult {
-    execute_with_mode(
-        create_job_mock(params.clone()),
-        create_job_real(params)
-    ).await
-}
-
 #[tauri::command]
 pub async fn create_job(params: CreateJobParams) -> CreateJobResult {
     // Simple validation - check job name is not empty
@@ -59,8 +50,10 @@ pub async fn create_job(params: CreateJobParams) -> CreateJobResult {
         };
     }
 
-    // Business logic layer
-    create_job_business_logic(params).await
+    execute_with_mode(
+        create_job_mock(params.clone()),
+        create_job_real(params)
+    ).await
 }
 
 async fn create_job_mock(params: CreateJobParams) -> CreateJobResult {
@@ -102,8 +95,7 @@ async fn create_job_mock(params: CreateJobParams) -> CreateJobResult {
         state.jobs.insert(job_id.clone(), job_info.clone());
 
         // Also save to database for consistency with get_job_status
-        let job_repository = default_job_repository();
-        let _ = job_repository.save_job(&job_info);
+        let _ = with_database(|db| db.save_job(&job_info));
 
         CreateJobResult {
             success: true,
@@ -220,8 +212,8 @@ async fn create_job_real(params: CreateJobParams) -> CreateJobResult {
     job_info.scratch_dir = Some(scratch_dir);
 
     // Save to database using repository
-    let job_repository = default_job_repository();
-    if let Err(e) = job_repository.save_job(&job_info) {
+    
+    if let Err(e) = with_database(|db| db.save_job(&job_info)) {
         return CreateJobResult {
             success: false,
             job_id: None,
@@ -236,20 +228,10 @@ async fn create_job_real(params: CreateJobParams) -> CreateJobResult {
     }
 }
 
-/// Validation layer for submit job parameters
-
-/// Business logic layer for job submission
-async fn submit_job_business_logic(clean_job_id: String) -> SubmitJobResult {
-    execute_with_mode(
-        submit_job_mock(clean_job_id.clone()),
-        submit_job_real(clean_job_id)
-    ).await
-}
 
 #[tauri::command]
 pub async fn submit_job(job_id: String) -> SubmitJobResult {
-    // Input validation layer
-    let clean_job_id = match job_id.validate_id() {
+    let clean_job_id = match input::sanitize_job_id(&job_id) {
         Ok(id) => id,
         Err(error) => {
             return SubmitJobResult {
@@ -261,8 +243,10 @@ pub async fn submit_job(job_id: String) -> SubmitJobResult {
         }
     };
 
-    // Business logic layer
-    submit_job_business_logic(clean_job_id).await
+    execute_with_mode(
+        submit_job_mock(clean_job_id.clone()),
+        submit_job_real(clean_job_id)
+    ).await
 }
 
 async fn submit_job_mock(job_id: String) -> SubmitJobResult {
@@ -310,8 +294,8 @@ async fn submit_job_mock(job_id: String) -> SubmitJobResult {
             job.updated_at = Some(now.clone());
 
             // Also save to database for consistency with get_job_status
-            let job_repository = default_job_repository();
-            let _ = job_repository.save_job(job);
+            
+            let _ = with_database(|db| db.save_job(job));
 
             SubmitJobResult {
                 success: true,
@@ -339,8 +323,8 @@ async fn submit_job_real(job_id: String) -> SubmitJobResult {
     // Real implementation with scratch directory creation
 
     // Get job information from database
-    let job_repository = default_job_repository();
-    let mut job_info = match job_repository.load_job(&job_id) {
+    
+    let mut job_info = match with_database(|db| db.load_job(&job_id)) {
         Ok(Some(info)) => info,
         Ok(None) => {
             return SubmitJobResult {
@@ -494,8 +478,8 @@ async fn submit_job_real(job_id: String) -> SubmitJobResult {
     let now = Utc::now().to_rfc3339();
 
     // Update job with SLURM job ID and save to database
-    let job_repository = default_job_repository();
-    if let Err(e) = job_repository.update_job_with_slurm_id(&mut job_info, slurm_job_id.clone()) {
+    
+    if let Err(e) = helpers::update_job_with_slurm_id(&mut job_info, slurm_job_id.clone()) {
         return SubmitJobResult {
             success: false,
             slurm_job_id: None,
@@ -521,8 +505,8 @@ pub async fn get_job_status(job_id: String) -> JobStatusResult {
     tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
 
     // Retrieve job from database
-    let job_repository = default_job_repository();
-    match job_repository.load_job(&job_id) {
+    
+    match with_database(|db| db.load_job(&job_id)) {
         Ok(Some(job)) => JobStatusResult {
             success: true,
             job_info: Some(job),
@@ -550,8 +534,8 @@ pub async fn get_all_jobs() -> GetAllJobsResult {
     tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
 
     // Retrieve all jobs from database
-    let job_repository = default_job_repository();
-    match job_repository.load_all_jobs() {
+    
+    match with_database(|db| db.load_all_jobs()) {
         Ok(jobs) => GetAllJobsResult {
             success: true,
             jobs: Some(jobs),
@@ -613,20 +597,10 @@ pub async fn sync_jobs() -> SyncJobsResult {
     }
 }
 
-/// Validation layer for delete job parameters
-
-/// Business logic layer for job deletion
-async fn delete_job_business_logic(clean_job_id: String, delete_remote: bool) -> DeleteJobResult {
-    execute_with_mode(
-        delete_job_mock(clean_job_id.clone(), delete_remote),
-        delete_job_real(clean_job_id, delete_remote)
-    ).await
-}
 
 #[tauri::command]
 pub async fn delete_job(job_id: String, delete_remote: bool) -> DeleteJobResult {
-    // Input validation layer
-    let clean_job_id = match job_id.validate_id() {
+    let clean_job_id = match input::sanitize_job_id(&job_id) {
         Ok(id) => id,
         Err(error) => {
             return DeleteJobResult {
@@ -636,8 +610,10 @@ pub async fn delete_job(job_id: String, delete_remote: bool) -> DeleteJobResult 
         }
     };
 
-    // Business logic layer
-    delete_job_business_logic(clean_job_id, delete_remote).await
+    execute_with_mode(
+        delete_job_mock(clean_job_id.clone(), delete_remote),
+        delete_job_real(clean_job_id, delete_remote)
+    ).await
 }
 
 async fn delete_job_mock(job_id: String, delete_remote: bool) -> DeleteJobResult {
@@ -660,8 +636,8 @@ async fn delete_job_mock(job_id: String, delete_remote: bool) -> DeleteJobResult
     with_mock_state(|state| {
         if let Some(job_info) = state.jobs.remove(&job_id) {
             // Also delete from database for consistency with get_job_status
-            let job_repository = default_job_repository();
-            let _ = job_repository.delete_job(&job_info.job_id);
+            
+            let _ = with_database(|db| db.delete_job(&job_info.job_id));
 
             DeleteJobResult {
                 success: true,
@@ -683,8 +659,8 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
     // Real implementation with safe directory cleanup
 
     // Get job information from database
-    let job_repository = default_job_repository();
-    let job_info = match job_repository.load_job(&job_id) {
+    
+    let job_info = match with_database(|db| db.load_job(&job_id)) {
         Ok(Some(info)) => info,
         Ok(None) => {
             return DeleteJobResult {
@@ -751,8 +727,8 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
     }
 
     // Remove job from database
-    let job_repository = default_job_repository();
-    match job_repository.delete_job(&job_info.job_id) {
+    
+    match with_database(|db| db.delete_job(&job_info.job_id)) {
         Ok(true) => DeleteJobResult {
             success: true,
             error: None,
@@ -770,7 +746,6 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
 
 #[tauri::command]
 pub async fn sync_job_status(job_id: String) -> SyncJobStatusResult {
-    // Input validation layer
     let clean_job_id = match input::sanitize_job_id(&job_id) {
         Ok(id) => id,
         Err(e) => {
@@ -783,8 +758,8 @@ pub async fn sync_job_status(job_id: String) -> SyncJobStatusResult {
     };
 
     // Load job from database
-    let job_repository = default_job_repository();
-    let mut job_info = match job_repository.load_job(&clean_job_id) {
+    
+    let mut job_info = match with_database(|db| db.load_job(&clean_job_id)) {
         Ok(Some(job)) => job,
         Ok(None) => {
             return SyncJobStatusResult {
@@ -833,8 +808,8 @@ pub async fn sync_job_status(job_id: String) -> SyncJobStatusResult {
         Ok(new_status) => {
             // Update job status if it changed
             if job_info.status != new_status {
-                let job_repository = default_job_repository();
-                if let Err(e) = job_repository.update_job_status_with_timestamps(&mut job_info, new_status, "slurm") {
+                
+                if let Err(e) = helpers::update_job_status_with_timestamps(&mut job_info, new_status, "slurm") {
                     return SyncJobStatusResult {
                         success: false,
                         job_info: Some(job_info),
@@ -862,8 +837,8 @@ pub async fn sync_job_status(job_id: String) -> SyncJobStatusResult {
 #[tauri::command]
 pub async fn sync_all_jobs() -> SyncAllJobsResult {
     // Load all jobs from database
-    let job_repository = default_job_repository();
-    let jobs = match job_repository.load_all_jobs() {
+    
+    let jobs = match with_database(|db| db.load_all_jobs()) {
         Ok(jobs) => jobs,
         Err(e) => {
             return SyncAllJobsResult {
@@ -929,8 +904,8 @@ pub async fn sync_all_jobs() -> SyncAllJobsResult {
                         Ok(new_status) => {
                             // Update job status if it changed
                             if job_info.status != new_status {
-                                let job_repository = default_job_repository();
-                                if let Err(e) = job_repository.update_job_status_with_timestamps(&mut job_info, new_status, "slurm") {
+                                
+                                if let Err(e) = helpers::update_job_status_with_timestamps(&mut job_info, new_status, "slurm") {
                                     errors.push(format!("Failed to update job {}: {}", job_info.job_id, e));
                                 } else {
                                     jobs_updated += 1;

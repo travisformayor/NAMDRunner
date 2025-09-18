@@ -4,7 +4,6 @@ mod mock_state;
 pub mod ssh;
 mod security;
 mod validation;
-mod validation_traits;
 mod retry;
 mod database;
 mod slurm;
@@ -66,6 +65,8 @@ pub fn run() {
             commands::files::upload_job_files,
             commands::files::download_job_output,
             commands::files::list_job_files,
+            commands::files::get_job_logs,
+            commands::files::cleanup_job_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -66,7 +66,7 @@ pub enum JobStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FileType {
     #[serde(rename = "input")]
     Input,
@@ -78,7 +78,7 @@ pub enum FileType {
     Log,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum NAMDFileType {
     #[serde(rename = "pdb")]
     Pdb,
@@ -172,6 +172,32 @@ pub struct SlurmConfig {
     pub walltime: String,
     pub partition: Option<String>,
     pub qos: Option<String>,
+}
+
+// Default configuration constants for database persistence
+impl Default for NAMDConfig {
+    fn default() -> Self {
+        Self {
+            steps: 10000,
+            temperature: 300.0,
+            timestep: 2.0,
+            outputname: "output".to_string(),
+            dcd_freq: Some(1000),
+            restart_freq: Some(5000),
+        }
+    }
+}
+
+impl Default for SlurmConfig {
+    fn default() -> Self {
+        Self {
+            cores: 4,
+            memory: "4GB".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: Some("compute".to_string()),
+            qos: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

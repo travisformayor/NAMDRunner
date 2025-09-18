@@ -3,7 +3,7 @@ use crate::types::{JobInfo, JobStatus, NAMDConfig, SlurmConfig};
 use anyhow::{Result, anyhow};
 use std::path::Path;
 
-pub mod job_repository;
+pub mod helpers;
 
 pub struct JobDatabase {
     conn: Connection,
@@ -250,21 +250,8 @@ impl JobDatabase {
             scratch_dir: row.get(9)?,
             error_info: row.get(10)?,
             // Provide default values for new fields
-            namd_config: NAMDConfig {
-                steps: 10000,
-                temperature: 300.0,
-                timestep: 2.0,
-                outputname: "output".to_string(),
-                dcd_freq: Some(1000),
-                restart_freq: Some(5000),
-            },
-            slurm_config: SlurmConfig {
-                cores: 4,
-                memory: "4GB".to_string(),
-                walltime: "01:00:00".to_string(),
-                partition: Some("compute".to_string()),
-                qos: None,
-            },
+            namd_config: NAMDConfig::default(),
+            slurm_config: SlurmConfig::default(),
             input_files: Vec::new(),
             remote_directory: row.get::<_, Option<String>>(8)?.unwrap_or_else(|| "/tmp".to_string()),
         })
@@ -300,7 +287,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use chrono::Utc;
 
     fn create_test_database() -> JobDatabase {
@@ -633,32 +619,29 @@ mod tests {
         // Test JobInfo methods
         let job = create_test_job_info();
 
-        // Test repository pattern
-        let job_service = crate::database::job_repository::default_job_service();
-
-        // Test save_job
-        assert!(job_service.save_job(&job).is_ok());
+        // Test direct database functions
+        assert!(with_database(|db| db.save_job(&job)).is_ok());
 
         // Test load_job
-        let loaded = job_service.load_job("test_job_001").unwrap();
+        let loaded = with_database(|db| db.load_job("test_job_001")).unwrap();
         assert!(loaded.is_some());
         assert_eq!(loaded.unwrap().job_id, job.job_id);
 
         // Test load_all_jobs
-        let all_jobs = job_service.load_all_jobs().unwrap();
+        let all_jobs = with_database(|db| db.load_all_jobs()).unwrap();
         assert_eq!(all_jobs.len(), 1);
 
         // Test load_jobs_by_status
-        let created_jobs = job_service.load_jobs_by_status(JobStatus::Created).unwrap();
+        let created_jobs = with_database(|db| db.get_jobs_by_status(JobStatus::Created)).unwrap();
         assert_eq!(created_jobs.len(), 1);
 
         // Test update_job_status
-        assert!(job_service.update_job_status(&job.job_id, JobStatus::Running, "test").is_ok());
-        let updated_job = job_service.load_job(&job.job_id).unwrap().unwrap();
+        assert!(with_database(|db| db.update_job_status(&job.job_id, JobStatus::Running, "test")).is_ok());
+        let updated_job = with_database(|db| db.load_job(&job.job_id)).unwrap().unwrap();
         assert_eq!(updated_job.status, JobStatus::Running);
 
         // Test delete_job
-        assert!(job_service.delete_job(&job.job_id).unwrap());
+        assert!(with_database(|db| db.delete_job(&job.job_id)).unwrap());
 
         // Restore original database
         {

@@ -248,6 +248,8 @@ mod tests {
             submitted_at: None,
             completed_at: None,
             slurm_job_id: None,
+            error_info: None,
+            remote_directory: "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),
         }
     }
 

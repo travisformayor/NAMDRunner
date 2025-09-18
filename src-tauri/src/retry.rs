@@ -1,7 +1,6 @@
 use std::time::Duration;
 use anyhow::Result;
 use std::future::Future;
-use std::pin::Pin;
 use rand::Rng;
 use crate::ssh::errors::SSHError;
 

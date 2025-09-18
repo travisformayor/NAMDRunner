@@ -38,13 +38,6 @@ where
     }
 }
 
-/// Macro to simplify creating mode-switched implementations
-#[macro_export]
-macro_rules! mode_switch {
-    ($mock_expr:expr, $real_expr:expr) => {
-        $crate::mode_switching::execute_with_mode($mock_expr, $real_expr).await
-    };
-}
 
 #[cfg(test)]
 mod tests {
