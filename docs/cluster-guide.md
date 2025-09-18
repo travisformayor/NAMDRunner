@@ -24,7 +24,6 @@ This document provides the authoritative reference for Alpine cluster integratio
 | `aa100` | NVIDIA GPU compute | 10+ | 64 | 3.75 GB | 24H (7D with long QoS) | NVIDIA A100 | 3 |
 | `ami100` | AMD GPU compute | 8+ | 64 | 3.75 GB | 24H (7D with long QoS) | AMD MI100 | 3 |
 | `al40` | NVIDIA L40 GPU | 2+ | 64 | 3.75 GB | 24H (7D with long QoS) | NVIDIA L40 | 3 |
-| `csu` | CSU contribution | 32+ | 32/48 | 3.75 GB | 24H | None | 0 |
 
 ### Testing Partitions (Development Use)
 | Partition | Purpose | Max Runtime | Max Jobs/User | Resource Limits |
@@ -43,7 +42,6 @@ This document provides the authoritative reference for Alpine cluster integratio
 | `mem` | High-memory jobs | 7 days | 1000 | 12 | amem only (requires 256GB+ RAM) |
 | `testing` | Testing partitions | 1 hour | 5 | 2 | atesting, atesting_a100, atesting_mi100 |
 | `compile` | Compilation jobs | 12 hours | - | 1 | acompile |
-| `csu` | CSU nodes | 24 hours | - | - | csu |
 
 ## Resource Allocation Rules
 

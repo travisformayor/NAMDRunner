@@ -129,8 +129,18 @@ tempfile = "3"
 # Quick start for UI development and agent debugging
 Xvfb :99 -screen 0 1280x720x24 &  # Virtual display for SSH/CI environments
 export DISPLAY=:99
-npm run dev                        # Start Vite dev server (localhost:1420)
-npm run test:ui                    # Agent debugging toolkit with screenshots
+
+# Start Vite dev server (takes 1-3 minutes on first start)
+npm run dev &                      # Run in background
+sleep 120                          # Wait for server startup
+
+# Verify server is ready
+curl -s http://localhost:1420 > /dev/null && echo "Server ready" || echo "Server not ready"
+
+# Run headless UI tests (for SSH environments)
+node tests/ui/headless-visual-check.js  # Custom headless script
+# OR
+npm run test:ui                    # Standard debug toolkit (non-headless)
 ```
 
 #### E2E Testing Setup (WebdriverIO + tauri-driver) - `tests/e2e/`
@@ -210,8 +220,15 @@ cargo test              # Rust SSH service business logic tests
 ```bash
 # Fast UI development & agent debugging
 export DISPLAY=:99      # Virtual display for SSH environments
-npm run dev             # Start Vite dev server (required for UI testing)
-npm run test:ui         # Playwright agent debugging toolkit
+npm run dev &           # Start Vite dev server in background (takes 1-3 min)
+sleep 120              # Wait for server startup
+curl -s http://localhost:1420 > /dev/null && echo "Ready" || echo "Wait longer"
+
+# For SSH/headless environments - use custom headless script
+node tests/ui/headless-visual-check.js  # Headless browser automation
+
+# For local development - use interactive debug toolkit
+npm run test:ui         # Playwright agent debugging toolkit (non-headless)
 
 # Full desktop application testing (slower)
 npm run test:e2e        # WebdriverIO + tauri-driver (auto-builds Tauri app)

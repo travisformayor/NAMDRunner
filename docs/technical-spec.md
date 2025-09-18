@@ -8,7 +8,7 @@
 ### Frontend
 * **Svelte + TypeScript**
   * Compile-time reactivity → small output and fewer "mystery re-renders."
-  * Single-file components and explicit `$:` derivations → easier for juniors to read and reason about.
+  * Single-file components and explicit `$:` derivations → easier to read and reason about.
   * Solid unit/component testing story (Vitest + Svelte Testing Library).
 
 ### Backend (App Core)
@@ -39,9 +39,9 @@
 * Slurm adapters parse `sbatch`, `squeue`, `sacct` outputs into typed models.
 
 ### Data Contracts
-* Local SQLite schemas (projects, jobs, files, statuses) - See `docs/data-spec.md`
-* Remote JSON shapes (`meta.json`, `job.json`) versioned with a `schema_version` field - See `docs/data-spec.md`
-* IPC command interfaces between frontend and backend - See `docs/api-spec.md`
+* Local SQLite schemas (projects, jobs, files, statuses) — see `docs/data-spec.md`
+* Remote JSON shapes (`meta.json`, `job.json`) versioned with a `schema_version` field — see `docs/data-spec.md`
+* IPC command interfaces between frontend and backend — see `docs/api-spec.md`
 * Reconciliation treats **cluster** as source-of-truth on conflict
 
 ### Application States
@@ -57,14 +57,14 @@
 
 ### First-Time Setup
 
-**Important**: Follow the official Tauri v2 documentation: https://v2.tauri.app/start/
+> Follow the official Tauri v2 documentation for platform prerequisites: https://v2.tauri.app/start/
 
 #### Linux/Fedora
 ```bash
 # Tauri system dependencies
 sudo dnf check-update
-sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel
-sudo dnf group install "C Development Tools and Libraries"
+sudo dnf install -y webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel
+sudo dnf group install -y "C Development Tools and Libraries"
 
 # Install Rust
 curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
@@ -78,73 +78,116 @@ git clone https://github.com/yourusername/namdrunner.git
 cd namdrunner
 npm install
 
-# Verify setup
-npm run tauri dev  # Should launch Tauri app
+# Smoke test
+npm run tauri dev
 ```
 
 #### macOS
-```bash
-# Install Xcode Command Line Tools
-xcode-select --install
 
-# Install Homebrew dependencies
+```bash
+# Install Dev tools
+xcode-select --install
+# Install Node/Rust with Homebrew
 brew install node rust
 
-# Clone and setup
+# Clone repo
 git clone https://github.com/yourusername/namdrunner.git
 cd namdrunner
 npm install
 ```
 
 #### Windows
-```powershell
-# Install prerequisites via winget or Chocolatey
-# Install Rust from https://rustup.rs
-# Install Node.js from https://nodejs.org
 
-# Clone and setup
+```powershell
+# Install Rust from https://rustup.rs (MSVC)
+# Install Node.js LTS from https://nodejs.org
+# Ensure Visual Studio Build Tools / Desktop C++ are present for native deps
+
 git clone https://github.com/yourusername/namdrunner.git
 cd namdrunner
 npm install
 ```
 
-### Development Commands
+## Host vs. VM Builds (Rust)
+
+**Goals**
+
+* Keep **sources** on the shared mount (e.g., `/media/share/<REPO>`).
+* On **Fedora VM**: send heavy I/O to VM disk.
+* On **macOS host**: use normal project-local folders.
+
+### Rust (Cargo `target/`)
+
+**Fedora VM (zsh) — add to `~/.zshrc`:**
+
+```zsh
+# Use VM-local disk for Cargo artifacts
+export CARGO_TARGET_DIR="$HOME/.cargo-target/namdrunner"
+export CARGO_INCREMENTAL=0
+```
+
+Setup folder once:
+
+```bash
+mkdir -p "$HOME/.cargo-target/namdrunner"
+```
+
+**macOS host:**
+No configuration needed. Ensure `CARGO_TARGET_DIR` is **not** set on macOS so Cargo writes to `./target` in the repo.
+
+**Verify**
+
+```bash
+# On VM: artifacts at ~/.cargo-target/namdrunner
+ls -1 "$HOME/.cargo-target/namdrunner" | head
+
+# On Mac: artifacts in ./target
+test -d target && echo "macOS using ./target ✅"
+```
+
+## Development Commands
+
 ```bash
 # Frontend development
-npm run dev              # Svelte dev server (Vite)
-npm run build            # Build static frontend
-npm run test            # Vitest unit tests
-npm run lint            # ESLint + Prettier
+npm run dev               # Svelte dev server (Vite)
+npm run build             # Build static frontend
+npm run preview           # Preview built assets
+npm run check             # svelte-kit sync + svelte-check
+npm run check:watch       # svelte-check --watch
+npm run lint              # ESLint + Prettier (check)
+npm run lint:fix          # ESLint --fix + Prettier --write
 
-# Backend development (src-tauri/)
-cargo test              # Rust unit tests
-cargo clippy            # Rust linting
+# Tests
+npm run test              # Vitest unit tests
+npm run test:vitest-ui    # Vitest UI
+npm run test:run          # Vitest run (CI-friendly)
+npm run test:ui           # UI testing toolkit (under Xvfb)
+npm run test:e2e          # WebdriverIO E2E (under Xvfb)
+
+# Rust (executed in `src-tauri/`)
+cargo test                # Rust unit tests
+cargo clippy              # Rust lint
 
 # Full Tauri application
-npm run tauri dev       # Run complete app with hot reload
-npm run tauri build     # Build release binary
-
-# Testing (see docs/testing-spec.md for complete guide)
-npm run test            # Unit tests (Vitest + Cargo)
-npm run test:ui         # UI testing with Playwright
-npm run test:e2e        # Desktop E2E testing
+npm run tauri dev         # Run app with hot reload
+npm run tauri build       # Build release binary
 ```
 
 ## VM Development Environment (Optional)
 
-For developers using a Fedora VM environment, see the VM-specific setup instructions below. Most developers can skip this section.
+For developers using a Fedora VM environment (e.g., UTM on macOS).
 
 <details>
 <summary>Fedora VM Setup (Click to expand)</summary>
 
 ### Platform
 * **Fedora 38 ARM64** (UTM VM) for development
-* **Workspace**: `/media/share/namdrunner` (synced with host machine)
+* **Workspace**: `/media/share/<repo-worktree>` mounted from the host (synced with host machine)
 
 ### Host Setup (Outside the VM)
 1. **Port forwarding with socat**:
    ```bash
-   socat TCP-LISTEN:2222,fork,reuseaddr TCP:192.168.64.3:22
+   socat TCP-LISTEN:2222,fork,reuseaddr TCP:<vm ip address>:22
    ```
 
 2. **SSH config**:
@@ -156,13 +199,6 @@ For developers using a Fedora VM environment, see the VM-specific setup instruct
      IdentityFile ~/.ssh/utm_ed25519
    ```
 
-### Dependency Isolation
-```bash
-sudo mkdir -p /opt/deps/namdrunner
-sudo chown -R "$USER":"$USER" /opt/deps/namdrunner
-sudo mkdir -p /media/share/namdrunner/node_modules
-sudo mount --bind /opt/deps/namdrunner /media/share/namdrunner/node_modules
-```
 
 </details>
 
@@ -177,12 +213,13 @@ For comprehensive coding standards, architectural patterns, and build configurat
 Key areas covered:
 - Clean architecture principles and anti-patterns
 - TypeScript/Rust configuration and tooling
-- Error handling patterns (Result<T>)
+- Error handling patterns (`Result<T>`)
 - Service development patterns
 - Security guidelines for credential handling
 - Testing and performance best practices
 
-### Repository Structure
+## Repository Structure
+
 ```
 /src/                     # Svelte + TS components (no Tauri in here)
 /src/lib/ports/coreClient.ts
@@ -215,11 +252,11 @@ Key areas covered:
 
 ## References
 
-- [WebDriver | Tauri](https://v2.tauri.app/develop/tests/webdriver/) - Tauri WebDriver testing documentation
-- [Prerequisites | Tauri](https://v2.tauri.app/start/prerequisites/) - Tauri development prerequisites
-- [Visual comparisons | Playwright](https://playwright.dev/docs/test-snapshots) - Playwright screenshot testing
-- [tauri-apps/webdriver-example](https://github.com/tauri-apps/webdriver-example) - Official Tauri WebDriver example
-- [WebdriverIO | Tauri](https://v2.tauri.app/develop/tests/webdriver/example/webdriverio/) - WebdriverIO with Tauri guide
-- [Playwright](https://playwright.dev/) - Web testing framework
-- [Continuous Integration | Tauri](https://v2.tauri.app/develop/tests/webdriver/ci/) - Tauri CI setup for testing
-- [How to Run Your Tests Headless with Xvfb](https://elementalselenium.com/tips/38-headless) - Xvfb configuration for CI
+- [WebDriver | Tauri](https://v2.tauri.app/develop/tests/webdriver/)
+- [Prerequisites | Tauri](https://v2.tauri.app/start/prerequisites/)
+- [Visual comparisons | Playwright](https://playwright.dev/docs/test-snapshots)
+- [tauri-apps/webdriver-example](https://github.com/tauri-apps/webdriver-example)
+- [WebdriverIO | Tauri](https://v2.tauri.app/develop/tests/webdriver/example/webdriverio/)
+- [Playwright](https://playwright.dev/)
+- [Continuous Integration | Tauri](https://v2.tauri.app/develop/tests/webdriver/ci/)
+- [How to Run Your Tests Headless with Xvfb](https://elementalselenium.com/tips/38-headless)

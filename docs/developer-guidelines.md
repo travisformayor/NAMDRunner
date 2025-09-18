@@ -11,7 +11,42 @@ This document establishes coding patterns and architectural principles for NAMDR
 
 ## Core Architectural Principles
 
-### 1. Clean Architecture First
+### 1. Progressive Enhancement
+**Start Simple**: Begin with the simplest solution that works, add abstraction only when you have 3+ use cases.
+
+```typescript
+// ✅ Start with simple utility functions
+export function parseMemoryString(memory: string): number {
+  // Direct implementation
+}
+
+// ✅ Add abstraction when pattern emerges across multiple components
+export const memoryUtils = {
+  parse: parseMemoryString,
+  format: formatMemory,
+  validate: validateMemoryInput
+};
+
+// ❌ Don't create abstraction prematurely
+class MemoryConfigurationManagerFactory {
+  // Over-engineered from the start
+}
+```
+
+**Prefer Composition**: Build complex functionality by combining simple, focused utilities.
+```typescript
+// ✅ Composable utilities
+const validation = validateResourceRequest(cores, memoryGB, walltimeHours, partition, qos);
+const cost = calculateJobCost(cores, walltimeHours, hasGpu, gpuCount);
+const queue = estimateQueueTime(cores, partition);
+
+// ❌ Monolithic service
+class CompleteJobValidator {
+  // Everything in one place
+}
+```
+
+### 2. Clean Architecture First
 **Single Responsibility**: Each service, function, and module should have one clear purpose.
 
 **No Thin Wrappers**: Avoid functions that just delegate to other functions without adding value.
@@ -138,6 +173,111 @@ function sanitizeJobId(jobId: string): Result<string> {
     };
   }
 }
+```
+
+## UI Development Patterns
+
+### 1. Utility-First Component Design
+**Centralized Utilities**: Create focused utility functions that serve multiple components.
+
+```typescript
+// ✅ Focused utility functions in utils/file-helpers.ts
+export function getFileIcon(type: string): string { /* ... */ }
+export function getTypeLabel(type: string): string { /* ... */ }
+export function parseMemoryString(memory: string): number { /* ... */ }
+
+// ✅ Use in components
+import { getFileIcon, getTypeLabel } from '../../utils/file-helpers';
+```
+
+**Single Source of Truth**: Centralize configuration and data definitions.
+```typescript
+// ✅ Centralized in data/cluster-config.ts
+export const PARTITIONS: PartitionSpec[] = [/* ... */];
+export function validateResourceRequest(cores, memory, walltime, partition, qos) { /* ... */ }
+
+// ❌ Duplicate definitions across components
+const partitionLimits = { amilan: { maxCores: 64 } }; // In Component A
+const limits = { amilan: { maxCores: 64 } }; // In Component B
+```
+
+### 2. CSS Design System
+**Consistent Naming**: Use `namd-*` prefix for all custom CSS classes.
+
+```css
+/* ✅ Consistent naming in app.css */
+.namd-button { /* base styles */ }
+.namd-button--outline { /* variant */ }
+.namd-status-badge { /* component */ }
+.namd-status-badge--running { /* state */ }
+.namd-file-type-badge { /* component */ }
+.namd-file-type-structure { /* variant */ }
+```
+
+**Centralized Styling**: Define reusable styles in `app.css`, not component files.
+```svelte
+<!-- ✅ Use centralized classes -->
+<span class="namd-status-badge namd-status-badge--{statusClass}">
+  {status}
+</span>
+
+<!-- ❌ Component-specific styles -->
+<style>
+  .status-badge { /* duplicate styles */ }
+</style>
+```
+
+### 3. Component Composition
+**Reusable Components**: Create focused, composable components.
+
+```svelte
+<!-- ✅ FormField.svelte - Reusable form component -->
+<script lang="ts">
+  export let label: string;
+  export let id: string;
+  export let type: 'text' | 'number' | 'email' = 'text';
+  export let value: string | number;
+  export let error: string = '';
+</script>
+
+<div class="namd-field-group">
+  <label class="namd-label" for={id}>{label}</label>
+  <input class="namd-input" class:error {id} {type} bind:value />
+  {#if error}<span class="namd-error-text">{error}</span>{/if}
+</div>
+```
+
+**Reactive Data Flow**: Use Svelte's reactive statements with utility functions.
+```svelte
+<script lang="ts">
+  import { validateResourceRequest, parseMemoryString } from '../../utils/helpers';
+
+  export let cores: number;
+  export let memory: string;
+
+  // ✅ Reactive validation using utilities
+  $: memoryGB = parseMemoryString(memory);
+  $: validation = validateResourceRequest(cores, memoryGB, walltime, partition, qos);
+</script>
+```
+
+### 4. Tab and Layout Systems
+**Unified Tab System**: Use consistent tab styling across all implementations.
+
+```svelte
+<!-- ✅ Consistent tab pattern -->
+<nav class="namd-tabs-nav namd-tabs-nav--grid namd-tabs-nav--grid-5">
+  {#each tabs as tab}
+    <button class="namd-tab-button" class:active={activeTab === tab.id}>
+      {tab.label}
+    </button>
+  {/each}
+</nav>
+<div class="namd-tab-content">
+  <div class="namd-tab-panel">
+    <!-- Tab content -->
+  </div>
+</div>
 ```
 
 ## Service Development Patterns
@@ -272,7 +412,56 @@ describe('Service Integration', () => {
 
 ## Code Quality Standards
 
-### 1. TypeScript Usage
+### 1. Utility Function Design
+**Pure Functions**: Utility functions should be pure, predictable, and side-effect free.
+
+```typescript
+// ✅ Pure utility function
+export function parseMemoryString(memory: string): number {
+  if (!memory) return 0;
+  const cleanMemory = memory.toString().toLowerCase().replace(/\s+/g, '');
+  const match = cleanMemory.match(/^(\d+(?:\.\d+)?)([a-z]*)/);
+  // ... conversion logic
+  return value;
+}
+
+// ❌ Impure function with side effects
+export function parseMemoryString(memory: string): number {
+  console.log('Parsing memory:', memory); // Side effect
+  if (!memory) {
+    showErrorMessage('Memory is required'); // Side effect
+    return 0;
+  }
+  // ...
+}
+```
+
+**Focused Responsibility**: Each utility should have one clear, well-defined purpose.
+```typescript
+// ✅ Focused utilities
+export function getFileIcon(type: string): string { /* ... */ }
+export function getTypeLabel(type: string): string { /* ... */ }
+export function getTypeColor(type: string): string { /* ... */ }
+
+// ❌ Mixed responsibilities
+export function handleFileType(type: string, action: 'icon' | 'label' | 'color'): string {
+  // One function doing multiple things
+}
+```
+
+**Configuration Centralization**: Keep all related configuration in one place.
+```typescript
+// ✅ Single source of truth
+// In cluster-config.ts
+export const PARTITIONS: PartitionSpec[] = [/* ... */];
+export function validateResourceRequest(cores, memory, walltime, partition, qos) { /* ... */ }
+
+// ❌ Scattered configuration
+// In Component A: const limits = { amilan: { maxCores: 64 } };
+// In Component B: const partitionLimits = { amilan: { maxCores: 64 } };
+```
+
+### 2. TypeScript Usage
 **Strict Types**: Use strict TypeScript configuration, avoid `any`.
 
 ```typescript
@@ -359,7 +548,52 @@ interface ConnectionValidator {
 
 ## Anti-Patterns to Avoid
 
-### 1. False Backward Compatibility
+### 1. UI Duplication and Inconsistency
+**CSS Duplication**: Don't define the same styles in multiple components.
+
+```svelte
+<!-- ❌ Duplicate badge styles across components -->
+<!-- Component A -->
+<style>
+  .status-badge { padding: 0.25rem 0.5rem; border-radius: 9999px; }
+  .status-running { background-color: #dbeafe; color: #1d4ed8; }
+</style>
+
+<!-- Component B -->
+<style>
+  .status-indicator { padding: 0.25rem 0.5rem; border-radius: 9999px; }
+  .running { background-color: #dbeafe; color: #1d4ed8; }
+</style>
+
+<!-- ✅ Use centralized classes -->
+<span class="namd-status-badge namd-status-badge--running">Running</span>
+```
+
+**Hardcoded Styling**: Don't use hardcoded colors or Tailwind classes without the framework.
+```svelte
+<!-- ❌ Hardcoded styles -->
+<div class="bg-blue-500 text-white px-4 py-2">Content</div>
+<div style="background-color: #3b82f6; color: white;">Content</div>
+
+<!-- ✅ Use CSS custom properties -->
+<div class="namd-button namd-button--primary">Content</div>
+```
+
+**Over-Complex Component APIs**: Keep component interfaces focused and simple.
+```svelte
+<!-- ❌ Over-complex API -->
+<FormField
+  {label} {id} {type} {value} {placeholder} {required} {error}
+  {min} {max} {step} {disabled} {readonly} {autocomplete}
+  {validation} {transform} {formatter} {parser}
+  onInput={handleInput} onBlur={handleBlur} onFocus={handleFocus}
+/>
+
+<!-- ✅ Focused, simple API -->
+<FormField {label} {id} {type} {value} {error} {required} />
+```
+
+### 2. False Backward Compatibility
 **No Compatibility Claims**: Don't create "backward compatible" interfaces when no legacy code exists.
 
 ```typescript
@@ -390,30 +624,28 @@ const pathResolver = new PathResolver();
 ```
 
 ### 3. Mixed Concerns
-**Separation of Concerns**: Don't mix UI logic with business logic, or networking with data persistence.
+**Separation of Concerns**: Keep UI, business logic, and data operations separate.
 
 ```typescript
-// ❌ Mixed concerns
+// ❌ Mixed concerns in component
 class JobManager {
   async createJob(params: CreateJobParams): Promise<void> {
-    // Business logic
-    const job = new Job(params);
-    
-    // UI logic (shouldn't be here)
-    showNotification('Job created!');
-    
-    // Network logic (should be separate)
-    await fetch('/api/jobs', { method: 'POST', body: JSON.stringify(job) });
+    const job = new Job(params); // Business logic
+    showNotification('Job created!'); // UI logic
+    await fetch('/api/jobs', { method: 'POST', body: JSON.stringify(job) }); // Network
   }
 }
 
 // ✅ Separated concerns
+// Business logic in services
 class JobService {
   async createJob(params: CreateJobParams): Promise<Result<Job>> {
-    // Only business logic
     return { success: true, data: new Job(params) };
   }
 }
+
+// UI logic in components
+// Network logic in separate API layer
 ```
 
 ## Security Guidelines
@@ -496,47 +728,22 @@ async function connectWithRetry(config: ConnectionConfig): Promise<Result<Sessio
 
 ## Build Configuration Standards
 
-### TypeScript Configuration
-**Strict Mode Required**: Enable all strict type checking options for maximum safety.
+**Note**: Detailed build configuration is documented in [`technical-spec.md`](technical-spec.md). Key quality requirements:
 
-```json
-// tsconfig.json
-{
-  "compilerOptions": {
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "noImplicitOverride": true
-  }
-}
-```
+- **TypeScript**: Strict mode enabled, no `any` types
+- **Linting**: ESLint + Prettier with pre-commit hooks
+- **Rust**: Clippy with warnings denied, security auditing enabled
+- **Error Handling**: User-friendly messages, no internal details exposed
 
-**Linting and Formatting**:
-- ESLint with `@typescript-eslint` parser
-- Prettier for consistent formatting
-- Svelte ESLint plugin for component linting
-- Pre-commit hooks to enforce standards
+## Summary: Key Development Principles
 
-### Rust Configuration
-**Minimum Supported Rust Version (MSRV)**: Pin at project start for stability.
-
-```toml
-# Cargo.toml
-[package]
-rust-version = "1.70"  # Pin MSRV
-```
-
-**Quality Tools**:
-- `clippy` with `-D warnings` flag (deny all warnings)
-- `rustfmt` for consistent formatting
-- `cargo-audit` for security vulnerability scanning
-- `cargo-deny` for dependency hygiene
-- All tools enforced in CI pipeline
-
-**Error Handling**:
-- One error type per module for clarity
-- IPC boundaries return typed, user-friendly messages
-- Use `thiserror` for error derivation
-- Never expose internal error details to users
+1. **Progressive Enhancement**: Start simple, add complexity only when proven necessary
+2. **Single Source of Truth**: Centralize configuration, utilities, and styling
+3. **Utility-First Design**: Create focused, reusable functions and components
+4. **Consistent Patterns**: Use unified naming conventions and design system
+5. **Clean Separation**: Keep UI, business logic, and data operations separate
+6. **Security First**: Never log credentials, validate all paths, clear sensitive data
 
 This guideline document should be treated as living documentation that evolves with the project. All new code should follow these patterns, and existing code should be refactored to match these standards when possible.
+
+**Remember**: We're building a focused tool for scientists, not an enterprise platform. Keep it simple, reliable, and maintainable.
