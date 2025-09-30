@@ -4,6 +4,8 @@
 
 **Completed Date**: September 13, 2025
 
+> **Update (2025-09-28)**: Some services planned in this task (connectionValidator, directoryManager) were later removed as redundant with Rust SSH infrastructure. See [overlap analysis](../phase-6-4-comprehensive-testing.md) for details.
+
 **Type**: Implementation Task  
 **Priority**: High (required for SSH/SFTP connectivity)  
 **Phase**: 1 of 6

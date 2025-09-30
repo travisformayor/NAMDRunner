@@ -1,4 +1,4 @@
-# Task: [Brief Title]
+# Task: [Phase] - [Brief Title]
 
 ## Objective
 [One sentence goal describing the user-facing outcome]

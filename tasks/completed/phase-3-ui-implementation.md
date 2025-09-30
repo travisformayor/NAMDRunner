@@ -95,11 +95,9 @@ Implementing system from `svelte-design-system.md`:
 - Enable full UI testing without backend
 
 ## References
-- Mockup code: `docs/design_mockup/src/`
+- UI/UX specifications and Svelte implementation: `docs/DESIGN.md`
 - Screenshots: `docs/design_mockup/mockup_screenshots/`
-- Svelte patterns: `docs/design_mockup/svelte-patterns-guide.md`
-- Design system: `docs/design_mockup/svelte-design-system.md`
-- Component analysis: `docs/design_mockup/svelte-component-analysis.md`
+- Component architecture: `docs/ARCHITECTURE.md#frontend-sveltetypescript`
 
 ## Progress Log
 [2025-01-14] - Task created, plan reviewed and approved. Starting with design system setup.

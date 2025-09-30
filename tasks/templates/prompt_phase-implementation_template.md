@@ -1,4 +1,4 @@
-# [Phase/Milestone] Implementation Prompt for [Role/Engineer]
+# [Phase Milestone] Implementation Prompt
 
 ## Project Overview
 You are implementing **[Phase X.Y: Milestone Name]** for NAMDRunner, a desktop application for managing NAMD molecular dynamics simulations on SLURM HPC clusters. This is a **[new feature/enhancement/refactoring]** built with Tauri v2 (Rust backend) + Svelte (TypeScript frontend), using a proven Python/CustomTkinter implementation as reference.
