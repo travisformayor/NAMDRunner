@@ -8,13 +8,15 @@ This document defines all interfaces and data contracts for NAMDRunner, consolid
   - [Connection State Management](#connection-state-management)
   - [Job Lifecycle States](#job-lifecycle-states)
   - [Basic Types](#basic-types)
-- [Connection Management Commands](#connection-management-commands)
+- [Application Configuration Commands](#application-configuration-commands)
   - [IPC Interface](#ipc-interface)
-- [Job Management Commands](#job-management-commands)
+- [Connection Management Commands](#connection-management-commands)
   - [IPC Interface](#ipc-interface-1)
+- [Job Management Commands](#job-management-commands)
+  - [IPC Interface](#ipc-interface-2)
   - [Request/Response Types](#requestresponse-types)
 - [File Management Commands](#file-management-commands)
-  - [IPC Interface](#ipc-interface-2)
+  - [IPC Interface](#ipc-interface-3)
 - [Error Handling Strategy](#error-handling-strategy)
   - [Error Categories](#error-categories)
   - [Common Error Examples](#common-error-examples)
@@ -34,10 +36,12 @@ This document defines all interfaces and data contracts for NAMDRunner, consolid
 6. **Never log or persist passwords** - memory only
 7. **Validate SSH connection** before SLURM operations
 8. **Use working directory pattern** to identify NAMDRunner jobs: `/scratch/alpine/$USER/namdrunner_jobs/*`
+9. **IPC parameter serialization**: Tauri commands expect specific parameter structures - `connect_to_cluster` takes `{params: {host, username, password}}` and `set_app_mode` takes `{isDemo: boolean}`
+10. **Demo mode synchronization**: Frontend mode preference must be synced to backend via `set_app_mode` command with `{isDemo: boolean}` parameter
 
 These patterns are proven to work with the CURC Alpine cluster and provide the foundation for reliable SLURM integration in the Tauri implementation.
 
-> **For detailed SSH/SFTP implementation patterns, security practices, and performance optimizations, see [`SSH.md`](SSH.md)**.
+> **For detailed SSH/SFTP implementation patterns, security practices, and performance optimizations, see [`docs/SSH.md`](SSH.md)**.
 
 ## Core Type Definitions
 
@@ -58,6 +62,16 @@ type SlurmJobId = string;   // SLURM's job ID (numbers)
 type Timestamp = string;    // ISO 8601 format
 ```
 
+## Application Configuration Commands
+
+### IPC Interface
+```typescript
+interface IApplicationCommands {
+  // Set application mode (demo/real)
+  setAppMode(isDemo: boolean): Promise<void>;
+}
+```
+
 ## Connection Management Commands
 
 ### IPC Interface
@@ -65,10 +79,10 @@ type Timestamp = string;    // ISO 8601 format
 interface IConnectionCommands {
   // Establish SSH connection to cluster
   connect(host: string, username: string, password: string): Promise<ConnectResult>;
-  
+
   // Close SSH connection
   disconnect(): Promise<DisconnectResult>;
-  
+
   // Check current connection status
   getConnectionStatus(): Promise<ConnectionStatusResult>;
 }
@@ -384,14 +398,14 @@ pub struct CreateJobResult {
 
 ## SLURM Integration
 
-> **For complete SLURM integration patterns including job submission, status monitoring, error handling, and command examples, see [`reference/slurm-commands-reference.md`](reference/slurm-commands-reference.md) and [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)**.
+> **For complete SLURM integration patterns including job submission, status monitoring, error handling, and command examples, see [`docs/reference/slurm-commands-reference.md`](reference/slurm-commands-reference.md) and [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)**.
 
 ## Related Documentation
 
-For SSH/SFTP connection management, security patterns, and file transfer implementation details, see [`SSH.md`](SSH.md).
+For SSH/SFTP connection management, security patterns, and file transfer implementation details, see [`docs/SSH.md`](SSH.md).
 
 For architectural principles, clean architecture patterns, and development best practices, see [`CONTRIBUTING.md#developer-standards--project-philosophy`](CONTRIBUTING.md#developer-standards--project-philosophy).
 
-For testing strategies and infrastructure setup, see [`CONTRIBUTING.md#testing-strategy`](CONTRIBUTING.md#testing-strategy).
+For testing strategies and infrastructure setup, see [`docs/CONTRIBUTING.md#testing-strategy`](CONTRIBUTING.md#testing-strategy).
 
-For data schemas, SQLite database design, and persistence patterns, see [`DB.md`](DB.md).
+For data schemas, SQLite database design, and persistence patterns, see [`docs/DB.md`](DB.md).

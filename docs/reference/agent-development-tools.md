@@ -2,6 +2,23 @@
 
 Quick reference for autonomous development tools and infrastructure available in this project.
 
+## Important: Agent Testing vs CI/CD
+
+**🤖 Agent Development Tools** (This Document):
+- Tools for **autonomous agent testing** during development sessions
+- Interactive exploration and validation by AI agents
+- Screenshot capture and visual validation
+- Demo mode testing without server connections
+- **NOT for CI/CD** - these are for agent development sessions only
+
+**🏗️ CI/CD Pipeline** (`.github/workflows/ci.yml`):
+- **Windows builds only** - creates MSI and EXE installers
+- Basic linting and formatting checks
+- Build verification and artifact upload
+- **NO testing** - testing is done by agents during development
+
+**Key Distinction**: Agents run tests interactively during development to validate changes. CI only builds Windows executables for deployment.
+
 ## Testing Infrastructure
 
 ### UI Testing - `npm run test:ui`
@@ -104,6 +121,13 @@ npm run test:e2e        # E2E testing (WebdriverIO + Tauri)
 - Self-contained test suites for both UI and E2E
 - Debug output shows exact test execution steps
 - Mock data covers all major application scenarios
+
+**Agent Testing Philosophy**:
+- Agents execute tests during development to **validate changes immediately**
+- Interactive exploration with screenshot feedback
+- Autonomous clicking and form filling to validate workflows
+- Demo mode testing prevents accidental server connections
+- Fast feedback loops for development iterations
 
 ## Environment Setup
 ```bash

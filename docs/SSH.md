@@ -99,21 +99,55 @@ Directory creation is handled by `src-tauri/src/ssh/sftp.rs:218-248` with recurs
 
 ## Security Patterns
 
-### Secure Password Handling
+### Core Security Principles
 
-#### SecurePassword Implementation
+#### Essential Requirements
+- **Secure credential handling**: Always use SecStr for passwords with automatic memory cleanup
+- **No credential persistence**: Passwords exist only in memory during active sessions
+- **Safe logging**: Never log credentials, passwords, or sensitive configuration
+- **Input sanitization**: Validate and sanitize all user input before use
+- **Path safety**: Prevent directory traversal and injection attacks
+
+#### Secure Password Handling
+
+**SecurePassword Implementation**
 Secure password handling is implemented in `src-tauri/src/security.rs` using the `secstr` crate for automatic memory clearing and secure access patterns.
+
+**Password Lifecycle**
+- Passwords exist only in memory during active sessions
+- Use SecStr for password handling with automatic cleanup
+- Clear memory on disconnect
+- Never log or persist credentials
+- Validate SSH connection before SLURM operations
+
+### Input Validation
+
+#### Path Security & Input Validation
+**Essential Principles**:
+- Never use user input directly in path construction or shell commands
+- Always sanitize and validate input before use
+- Prevent directory traversal attacks (`../`, null bytes, etc.)
+- Use allow-lists for valid characters (alphanumeric, `_`, `-`)
+- Validate path length limits and component restrictions
+
+**Path Safety Validation**
+Path validation to prevent traversal attacks and ensure safe file operations is implemented in `src-tauri/src/validation.rs`.
+
+#### Command Injection Prevention
+**Essential Principles**:
+- Always escape shell parameters when executing remote commands
+- Sanitize filenames and command arguments
+- Use parameter validation before shell execution
+- Never use user input directly in command construction
 
 ### Memory Management
 
-> **For complete security requirements and architectural principles**, see [`docs/CONTRIBUTING.md#security-requirements`](CONTRIBUTING.md#security-requirements).
-
-#### Credential Security Summary
-- **Passwords exist only in memory during active sessions**
-- **Use SecStr for password handling with automatic cleanup**
-- **Clear memory on disconnect**
-- **Never log or persist credentials**
-- **Validate SSH connection before SLURM operations**
+#### Connection Lifecycle Management
+**Essential Principles**:
+- Always clean up connections properly
+- Clear credentials from memory on disconnect
+- Validate SSH connection before SLURM operations
+- Handle connection expiration gracefully
 
 ### Connection Cleanup
 
@@ -140,12 +174,54 @@ SSH error mapping from ssh2 library errors to application-specific error types i
 ### Retry Strategies
 
 #### Exponential Backoff Implementation
+**Essential Principles**:
+- Implement exponential backoff for retryable operations
+- Distinguish between retryable and non-retryable errors
+- Use appropriate timeout limits and maximum attempts
+- Add jitter to prevent thundering herd effects
+
+**Implementation Details**
 Exponential backoff retry logic with jitter and maximum delay is implemented in `src-tauri/src/retry.rs` and used throughout the SSH operations.
+
+### Error Mapping for User Experience
+
+#### Error Classification Principles
+**Essential Principles**:
+- Convert technical errors to actionable user messages
+- Categorize errors by type (Network, Authentication, Permission, etc.)
+- Provide recovery suggestions for each error category
+- Maintain error context throughout the system
+
+**Error Categories in SSH Operations**:
+- **Network Errors**: Connection timeouts, DNS failures, unreachable hosts
+- **Authentication Errors**: Invalid credentials, expired passwords, account lockouts
+- **Permission Errors**: Insufficient privileges, file access denied
+- **FileSystem Errors**: Disk full, permission denied, invalid paths
+- **Protocol Errors**: SSH protocol issues, incompatible versions
+- **Timeout Errors**: Operation timeouts, slow network responses
+
+#### User-Friendly Error Messages
+SSH error mapping provides clear, actionable feedback:
+```rust
+// Example: Convert ssh2 errors to user-friendly messages
+match ssh_error {
+    SshError::Network(_) => "Connection failed. Check your network and try again.",
+    SshError::Authentication(_) => "Login failed. Please verify your username and password.",
+    SshError::Permission(_) => "Access denied. Contact your system administrator.",
+    // ... more mappings
+}
+```
 
 ### Recovery Patterns
 
 #### Connection Recovery
 Connection state checking and recovery logic is in `src-tauri/src/ssh/manager.rs:59-69`. Note that passwords are not persisted, requiring manual re-authentication for expired sessions.
+
+#### Automatic Recovery Strategies
+- **Retryable Operations**: Network errors, temporary failures, timeouts
+- **Non-Retryable Operations**: Authentication failures, permission denials
+- **Progressive Backoff**: Increase delay between retry attempts
+- **Maximum Attempts**: Prevent infinite retry loops
 
 ## Performance & Optimization
 
@@ -156,7 +232,14 @@ Connection management and lifecycle is handled by the singleton ConnectionManage
 
 ### Async Patterns
 
-#### Non-Blocking SSH Operations
+#### Async Operations with Blocking Libraries
+**Essential Principles**:
+- Use `spawn_blocking` for CPU-intensive blocking operations
+- Avoid blocking the async runtime with synchronous operations
+- Handle ssh2 and other blocking libraries properly
+- Maintain async interface boundaries for UI responsiveness
+
+**Implementation Details**
 Command execution using `tokio::spawn_blocking` to handle synchronous SSH operations is implemented in `src-tauri/src/ssh/commands.rs`.
 
 ### Background Operations

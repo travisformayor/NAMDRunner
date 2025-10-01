@@ -2,12 +2,12 @@
 
 **How we expect you to write code and why** - This document covers development setup, coding standards, testing strategies, and best practices for contributing to NAMDRunner.
 
-> **For system architecture and design principles**, see [`ARCHITECTURE.md`](ARCHITECTURE.md)
-> **For SSH/SFTP connection patterns and security**, see [`SSH.md`](SSH.md)
-> **For UI/UX components and design patterns**, see [`DESIGN.md`](DESIGN.md)
-> **For database schemas and data management**, see [`DB.md`](DB.md)
-> **For IPC interfaces and API contracts**, see [`API.md`](API.md)
-> **For SLURM/NAMD command patterns**, see [`reference/`](reference/) directory
+> **For system architecture and design principles**, see [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
+> **For SSH/SFTP connection patterns and security**, see [`docs/SSH.md`](SSH.md)
+> **For UI/UX components and design patterns**, see [`docs/DESIGN.md`](DESIGN.md)
+> **For database schemas and data management**, see [`docs/DB.md`](DB.md)
+> **For IPC interfaces and API contracts**, see [`docs/API.md`](API.md)
+> **For SLURM/NAMD command patterns**, see [`docs/reference/`](reference/) directory
 
 ## Table of Contents
 - [Development Setup](#development-setup)
@@ -111,14 +111,26 @@ npm install
 #### Windows
 
 ```powershell
-# Install Rust from https://rustup.rs (MSVC)
-# Install Node.js LTS from https://nodejs.org
-# Ensure Visual Studio Build Tools / Desktop C++ are present for native deps
+# Prerequisites for Windows development
+# 1. Install Rust from https://rustup.rs (MSVC toolchain)
+# 2. Install Node.js LTS from https://nodejs.org
+# 3. Install Visual Studio Build Tools with Desktop C++ workload
+#    OR Visual Studio 2022 Community with Desktop C++ workload
+# 4. WebView2 runtime (usually pre-installed on Windows 10+)
+# 5. VBSCRIPT optional feature (for MSI installers - enabled by default)
 
+# Clone and setup project
 git clone https://github.com/yourusername/namdrunner.git
 cd namdrunner
 npm install
+
+# Test cross-platform build
+npm run tauri build
 ```
+
+**Note for Windows Development**: The Rust code includes cross-platform path handling that automatically detects Windows vs Unix environments. Windows builds use static OpenSSL linking to eliminate runtime dependencies.
+
+**MSI Installer Requirements**: Building MSI packages requires the VBSCRIPT optional feature to be enabled. This is enabled by default on most Windows installations. If you encounter "failed to run light.exe" errors, see `docs/WINDOWS_BUILD.md` for troubleshooting steps.
 
 ### Development Commands
 ```bash
@@ -141,82 +153,49 @@ npm run test:e2e          # WebdriverIO E2E (under Xvfb)
 # Rust (executed in `src-tauri/`)
 cargo test                # Rust unit tests
 cargo clippy              # Rust lint
+cargo check               # Fast compile check
 
 # Full Tauri application
 npm run tauri dev         # Run app with hot reload
 npm run tauri build       # Build release binary
 ```
 
+### Cross-Platform Build Information
 
-## VM Development Environment (Optional)
+NAMDRunner supports building on multiple platforms with automatic CI/CD:
 
-For developers using a Fedora VM environment (e.g., UTM on macOS).
+#### Linux Builds (Primary Development Platform)
+- **Native builds**: AppImage (portable) and .deb packages
+- **CI/CD**: Automatic builds on Ubuntu latest
+- **E2E Testing**: Full WebdriverIO testing with Xvfb
+- **Agent Testing**: UI testing with Playwright
 
-### Platform
-* **Fedora 38 ARM64** (UTM VM) for development
-* **Workspace**: `/media/share/<repo-worktree>` mounted from the host (synced with host machine)
+#### Windows Builds (GitHub Actions)
+- **Bundle formats**: MSI installer and NSIS executable
+- **CI/CD**: Automatic builds on Windows latest
+- **Static linking**: OpenSSL vendored for dependency-free distribution
+- **Cross-platform paths**: Rust code handles Windows and Unix paths
 
-### Host Setup (Outside the VM)
-1. **Port forwarding with socat**:
-   ```bash
-   socat TCP-LISTEN:2222,fork,reuseaddr TCP:<vm ip address>:22
-   ```
+#### macOS Builds (Future)
+- **Bundle formats**: .dmg and .app bundle
+- **Status**: Ready for implementation when needed
 
-2. **SSH config**:
-   ```ssh
-   Host fedora-vm
-     HostName 127.0.0.1
-     Port 2222
-     User fedora
-     IdentityFile ~/.ssh/utm_ed25519
-   ```
 
-## Host vs. VM Builds (Rust)
+## Cross-Platform Development
 
-**Goals**
-
-* Keep **sources** on the shared mount (e.g., `/media/share/<REPO>`).
-* On **Fedora VM**: send heavy I/O to VM disk.
-* On **macOS host**: use normal project-local folders.
-
-### Rust (Cargo `target/`)
-
-**Fedora VM (zsh) — add to `~/.zshrc`:**
-
-```zsh
-# Use VM-local disk for Cargo artifacts
-export CARGO_TARGET_DIR="$HOME/.cargo-target/namdrunner"
-export CARGO_INCREMENTAL=0
-```
-
-Setup folder once:
-
-```bash
-mkdir -p "$HOME/.cargo-target/namdrunner"
-```
-
-**macOS host:**
-No configuration needed. Ensure `CARGO_TARGET_DIR` is **not** set on macOS so Cargo writes to `./target` in the repo.
-
-**Verify**
-
-```bash
-# On VM: artifacts at ~/.cargo-target/namdrunner
-ls -1 "$HOME/.cargo-target/namdrunner" | head
-
-# On Mac: artifacts in ./target
-test -d target && echo "macOS using ./target ✅"
-```
+> See [`docs/WINDOWS_BUILD.md`](WINDOWS_BUILD.md) for Windows build information
 
 ## Developer Standards & Project Philosophy
 
-### Quick Start - Top 5 Critical Rules
+### Quick Start - Top 7 Critical Rules
 
 1. **No Thin Wrappers**: Don't create functions that just delegate to other functions
 2. **Direct Error Handling**: Use `Result<T>` patterns, never suppress errors with `console.warn()`
 3. **No Repository Pattern**: Use direct database calls with `with_database()`
 4. **Security First**: Always sanitize user input, never log credentials
 5. **Simple Mocks**: Predictable test behavior over complex simulation
+6. **Balance DRY with Simplicity**: Reduce redundancy and centralize common patterns, but avoid over-abstraction that creates unnecessary complexity
+7. **Easy to Reason About**: Write code that is clear and understandable when reading it
 
 ### Core Architectural Principles
 
@@ -256,45 +235,12 @@ class CompleteJobValidator {
 ```
 
 ### 2. Direct Code Patterns
-**Avoid Thin Wrappers**: Functions should add value, not just delegate.
-```typescript
-// ❌ Thin wrapper
-const ServiceFactories = {
-  createPathResolver(): PathResolver {
-    return container.get<PathResolver>('pathResolver');
-  }
-};
+- Avoid thin wrapper functions that only delegate to other functions
+- Use direct database calls with `with_database()` instead of repository patterns
+- Call automation functions directly in Tauri command handlers
+- Functions should add value, not just delegate
 
-// ✅ Direct usage
-const pathResolver = serviceContainer.get<PathResolver>('pathResolver');
-```
-
-**No Repository Pattern**: Use direct database calls.
-```rust
-// ❌ Repository wrapper
-trait JobRepository {
-    fn save_job(&self, job: &JobInfo) -> Result<()>;
-}
-
-// ✅ Direct database calls
-with_database(|db| db.save_job(&job_info))
-```
-
-**No Intermediate Business Logic**: Call `execute_with_mode` directly in commands.
-```rust
-// ❌ Unnecessary wrapper
-async fn create_job_business_logic(params: CreateJobParams) -> CreateJobResult {
-    execute_with_mode(create_job_mock(params.clone()), create_job_real(params)).await
-}
-
-// ✅ Direct in command handler
-#[tauri::command]
-pub async fn create_job(params: CreateJobParams) -> CreateJobResult {
-    execute_with_mode(create_job_mock(params.clone()), create_job_real(params)).await
-}
-```
-
-### 2. Result<T> Error Handling
+### 3. Result<T> Error Handling
 **Consistent Return Types**: All operations that can fail return `Result<T>`.
 ```typescript
 // ✅ Result pattern
@@ -348,84 +294,21 @@ function sanitizeJobId(jobId: string): Result<string> {
 }
 ```
 
-## UI Development Patterns
+## UI Development Principles
 
-### 1. Utility-First Component Design
-**Centralized Utilities**: Create focused utility functions that serve multiple components.
+### Core UI Patterns
+- **Utility-First Design**: Create focused utility functions that serve multiple components
+- **Single Source of Truth**: Centralize configuration and data definitions
+- **Component Composition**: Build reusable, focused components
+- **Reactive Data Flow**: Use Svelte's reactive statements with utility functions
+- **Consistent Design System**: Follow unified styling patterns across all components
 
-```typescript
-// ✅ Focused utility functions in utils/file-helpers.ts
-export function getFileIcon(type: string): string { /* ... */ }
-export function getTypeLabel(type: string): string { /* ... */ }
-export function parseMemoryString(memory: string): number { /* ... */ }
+### Connection-Aware UI
+- **Disable destructive actions when disconnected**: Delete job, sync, file downloads
+- **Confirmation dialogs for data loss**: Warn users before permanent deletions
+- **Clear workflow expectations**: Inform users when operations are multi-step (e.g., "Create Job" uploads files but doesn't submit to SLURM yet)
 
-// ✅ Use in components
-import { getFileIcon, getTypeLabel } from '../../utils/file-helpers';
-```
-
-**Single Source of Truth**: Centralize configuration and data definitions.
-```typescript
-// ✅ Centralized in data/cluster-config.ts
-export const PARTITIONS: PartitionSpec[] = [/* ... */];
-export function validateResourceRequest(cores, memory, walltime, partition, qos) { /* ... */ }
-
-// ❌ Duplicate definitions across components
-const partitionLimits = { amilan: { maxCores: 64 } }; // In Component A
-const limits = { amilan: { maxCores: 64 } }; // In Component B
-```
-
-### 2. Component Composition
-**Reusable Components**: Create focused, composable components.
-
-```svelte
-<!-- ✅ FormField.svelte - Reusable form component -->
-<script lang="ts">
-  export let label: string;
-  export let id: string;
-  export let type: 'text' | 'number' | 'email' = 'text';
-  export let value: string | number;
-  export let error: string = '';
-</script>
-
-<div class="namd-field-group">
-  <label class="namd-label" for={id}>{label}</label>
-  <input class="namd-input" class:error {id} {type} bind:value />
-  {#if error}<span class="namd-error-text">{error}</span>{/if}
-</div>
-```
-
-**Reactive Data Flow**: Use Svelte's reactive statements with utility functions.
-```svelte
-<script lang="ts">
-  import { validateResourceRequest, parseMemoryString } from '../../utils/helpers';
-
-  export let cores: number;
-  export let memory: string;
-
-  // ✅ Reactive validation using utilities
-  $: memoryGB = parseMemoryString(memory);
-  $: validation = validateResourceRequest(cores, memoryGB, walltime, partition, qos);
-</script>
-```
-
-### 3. Tab and Layout Systems
-**Unified Tab System**: Use consistent tab styling across all implementations.
-
-```svelte
-<!-- ✅ Consistent tab pattern -->
-<nav class="namd-tabs-nav namd-tabs-nav--grid namd-tabs-nav--grid-5">
-  {#each tabs as tab}
-    <button class="namd-tab-button" class:active={activeTab === tab.id}>
-      {tab.label}
-    </button>
-  {/each}
-</nav>
-<div class="namd-tab-content">
-  <div class="namd-tab-panel">
-    <!-- Tab content -->
-  </div>
-</div>
-```
+> **For complete UI component patterns, design system usage, and Svelte implementation examples**, see [`docs/DESIGN.md`](DESIGN.md)
 
 ## Service Development Patterns
 
@@ -492,104 +375,91 @@ export function validateResourceRequest(cores, memory, walltime, partition, qos)
 - **Over-Engineering**: Creating abstractions before you need them (YAGNI principle)
 - **Mixed Concerns**: UI logic in business logic, networking in data persistence
 
+#### Frontend-Backend Separation Anti-Patterns
+- **Business Logic in Frontend**: Validation, resource calculations, cluster configuration belongs in Rust backend
+- **Stub Implementations**: Functions marked with `// TODO: implement` or using mock data must be completed before PR
+- **Calculation Functions in UI Layer**: Cost estimation, queue time, resource validation belong in backend
+- **Connection State Not Checked**: UI actions must disable when disconnected from server
+
 #### UI-Specific Anti-Patterns
-**CSS Duplication**: Don't define the same styles in multiple components.
+- **CSS Duplication**: Use centralized `namd-*` classes instead of duplicating styles across components
+- **Hardcoded Styling**: Use CSS custom properties and design system classes, not hardcoded colors
+- **Over-Complex Component APIs**: Keep component interfaces focused and simple
 
-```svelte
-<!-- ❌ Duplicate badge styles across components -->
-<!-- Component A -->
-<style>
-  .status-badge { padding: 0.25rem 0.5rem; border-radius: 9999px; }
-  .status-running { background-color: #dbeafe; color: #1d4ed8; }
-</style>
-
-<!-- Component B -->
-<style>
-  .status-indicator { padding: 0.25rem 0.5rem; border-radius: 9999px; }
-  .running { background-color: #dbeafe; color: #1d4ed8; }
-</style>
-
-<!-- ✅ Use centralized classes -->
-<span class="namd-status-badge namd-status-badge--running">Running</span>
-```
-
-**Hardcoded Styling**: Don't use hardcoded colors or Tailwind classes without the framework.
-```svelte
-<!-- ❌ Hardcoded styles -->
-<div class="bg-blue-500 text-white px-4 py-2">Content</div>
-<div style="background-color: #3b82f6; color: white;">Content</div>
-
-<!-- ✅ Use CSS custom properties -->
-<div class="namd-button namd-button--primary">Content</div>
-```
-
-**Over-Complex Component APIs**: Keep component interfaces focused and simple.
-```svelte
-<!-- ❌ Over-complex API -->
-<FormField
-  {label} {id} {type} {value} {placeholder} {required} {error}
-  {min} {max} {step} {disabled} {readonly} {autocomplete}
-  {validation} {transform} {formatter} {parser}
-  onInput={handleInput} onBlur={handleBlur} onFocus={handleFocus}
-/>
-
-<!-- ✅ Focused, simple API -->
-<FormField {label} {id} {type} {value} {error} {required} />
-```
+> **For detailed UI patterns, design system usage, and component examples**, see [`docs/DESIGN.md`](DESIGN.md)
 
 ### Security Requirements
 
-#### Core Security Principles
-- **Secure credential handling**: Always use SecStr for passwords with automatic memory cleanup
-- **No credential persistence**: Passwords exist only in memory during active sessions
-- **Safe logging**: Never log credentials, passwords, or sensitive configuration
-- **Input sanitization**: Validate and sanitize all user input before use
-- **Path safety**: Prevent directory traversal and injection attacks
+**Security is a core requirement for NAMDRunner** - all code must follow secure patterns for credential handling, input validation, and system interactions.
 
-> **For complete security implementation patterns and examples**, see [`SSH.md#security-patterns`](SSH.md#security-patterns)
+### Server Interaction Best Practices
 
-#### Path Security & Input Validation
-**Essential Principles**:
-- Never use user input directly in path construction or shell commands
-- Always sanitize and validate input before use
-- Prevent directory traversal attacks (`../`, null bytes, etc.)
-- Use allow-lists for valid characters (alphanumeric, `_`, `-`)
-- Validate path length limits and component restrictions
+When implementing server operations, follow these guidelines for good cluster citizenship:
 
-> **For complete input validation implementations**, see [`SSH.md#input-validation`](SSH.md#input-validation)
+- **Use standardized timeouts** - Import timeout constants from `crate::config::timeouts`
+- **Validate all inputs** - Use `crate::validation::input::sanitize_job_id()` and path validation before server operations
+- **Don't spam the cluster** - Batch operations when possible, respect rate limits in retry logic
+- **Handle connection failures gracefully** - Always check `connection_manager.is_connected()` before operations
+- **Clean up resources** - Use existing retry patterns from `crate::retry::patterns`
+- **Provide actionable errors** - Use user-friendly error messages that guide users to solutions
+
+> **For complete security requirements, implementation patterns, and examples**, see [`docs/SSH.md#security-patterns`](SSH.md#security-patterns)
 
 #### Command Injection Prevention
-**Essential Principles**:
-- Always escape shell parameters when executing remote commands
-- Sanitize filenames and command arguments
-- Use parameter validation before shell execution
-- Never use user input directly in command construction
 
-> **For complete command injection prevention patterns**, see [`SSH.md#security-patterns`](SSH.md#security-patterns)
+**CRITICAL**: Always use the centralized command building functions for shell operations:
 
-#### Connection Lifecycle Management
-**Essential Principles**:
-- Always clean up connections properly
-- Clear credentials from memory on disconnect
-- Validate SSH connection before SLURM operations
-- Handle connection expiration gracefully
+```rust
+// ✅ Correct: Use safe command builder
+use crate::validation::shell;
+let cmd = shell::build_command_safely("mkdir {} && cd {}", &[dir_name, dir_name])?;
 
-> **For complete SSH connection lifecycle patterns**, see [`SSH.md#connection-management`](SSH.md#connection-management)
+// ✅ Correct: Escape individual parameters
+let safe_param = shell::escape_parameter(&user_input);
 
-### 2. Dependency Injection
-**Constructor Injection**: Services receive dependencies through constructor.
+// ❌ NEVER: Direct string concatenation with user input
+let cmd = format!("mkdir {}", user_input); // VULNERABLE TO INJECTION
+```
+
+**Required Functions**:
+- `shell::build_command_safely(template, params)` - Template-based command building
+- `shell::escape_parameter(param)` - Individual parameter escaping
+- Located in `src-tauri/src/validation.rs`
+
+#### SSH Console Debugging
+
+**For SSH/SLURM operations**, log important events to the SSH console for user debugging:
+
 ```typescript
-export class DirectoryManager {
-  constructor(
-    private sshConnection: SSHConnection,
-    private pathResolver: PathResolver
-  ) {}
+// Frontend: Add to SSH console (visible to users)
+if (typeof window !== 'undefined' && window.sshConsole) {
+  window.sshConsole.addDebug(`[JOBS] Job creation failed: ${error}`);
+  window.sshConsole.addCommand(`sbatch job.sbatch`); // Show commands being run
 }
 ```
 
-**Mock Dependencies in Tests**: Don't create service containers in tests.
+```rust
+// Backend: Use tagged console logs (captured by SSH console)
+println!("[SLURM] Submitting job: {}", job_name);
+```
 
-> **For SSH mock patterns in tests**, see [`SSH.md#testing--development`](SSH.md#testing--development)
+**SSH Console captures**:
+- Tagged console logs: `[SSH]`, `[SLURM]`, `[CONNECTION]`, `[JOBS]`
+- Backend Rust logs via Tauri events
+- User-visible debugging without production noise
+
+**Essential Security Principles**:
+- Never log or persist credentials - memory only during sessions
+- Validate and sanitize all user input before use
+- Prevent directory traversal and command injection attacks
+- Use secure memory handling for sensitive data
+- Clean up connections and clear credentials properly
+
+### 2. Service Architecture
+**Direct Dependencies**: Services use direct imports rather than complex dependency injection.
+**Mock Testing**: Use mock implementations at the service boundary level.
+
+> **For SSH/SFTP service patterns and testing approaches**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
 
 ### 3. Path Management
 Use PathResolver for all path operations. Never construct paths directly.
@@ -624,32 +494,17 @@ Use state machines for complex state management with validated transitions.
 3. Handle partial failures in batch operations
 4. Provide clear error messages to users
 
-### Retry Logic Implementation
-**Essential Principles**:
-- Implement exponential backoff for retryable operations
-- Distinguish between retryable and non-retryable errors
-- Use appropriate timeout limits and maximum attempts
-- Add jitter to prevent thundering herd effects
+### Error Handling & Recovery
 
-> **For complete retry implementations and patterns**, see [`SSH.md#retry-strategies`](SSH.md#retry-strategies)
+**All error handling patterns and implementations are consolidated in SSH.md** to avoid duplication across documentation.
 
-### Error Mapping for User Experience
-**Essential Principles**:
+> **For complete error handling, retry logic, and async patterns**, see [`docs/SSH.md#error-handling`](SSH.md#error-handling)
+
+**Essential Development Principles**:
+- Use `Result<T>` patterns consistently for all operations that can fail
+- Implement exponential backoff for retryable network operations
 - Convert technical errors to actionable user messages
-- Categorize errors by type (Network, Authentication, Permission, etc.)
-- Provide recovery suggestions for each error category
-- Maintain error context throughout the system
-
-> **For complete error mapping patterns**, see [`SSH.md#error-handling`](SSH.md#error-handling)
-
-### Async Operations with Blocking Libraries
-**Essential Principles**:
-- Use `spawn_blocking` for CPU-intensive blocking operations
-- Avoid blocking the async runtime with synchronous operations
-- Handle ssh2 and other blocking libraries properly
-- Maintain async interface boundaries for UI responsiveness
-
-> **For complete async/blocking integration patterns**, see [`SSH.md#async-patterns`](SSH.md#async-patterns)
+- Handle blocking operations properly with `spawn_blocking`
 
 ### Build Configuration
 
@@ -669,7 +524,29 @@ Use state machines for complex state management with validated transitions.
 - `rustfmt` for consistent formatting
 - `cargo-audit` for security scanning
 
-For platform support, build requirements, and system constraints, see [`ARCHITECTURE.md#architecture-principles--constraints`](ARCHITECTURE.md#architecture-principles--constraints).
+### CI/CD and Cross-Platform Builds
+
+#### GitHub Actions Workflow
+The CI pipeline (`.github/workflows/ci.yml`) includes:
+
+- **Frontend Tests**: TypeScript checking, ESLint, Vitest unit tests
+- **Backend Tests**: Rust formatting, Clippy, Cargo tests
+- **Linux Builds**: AppImage and .deb packages with E2E testing
+- **Windows Builds**: MSI and NSIS installers with verification
+- **Build Verification**: Automated artifact checking and summary reports
+
+#### Cross-Platform Support
+- **Rust Code**: Uses `cfg!(windows)` conditionals for platform-specific paths
+- **Dependencies**: OpenSSL static linking on Windows, bundled SQLite
+- **Tauri Configuration**: Platform-specific bundle settings in `tauri.conf.json`
+- **Testing**: Preserves Linux E2E and agent testing while adding Windows builds
+
+#### Deployment
+- **Linux**: Primary development and testing platform
+- **Windows**: Automated builds via GitHub Actions
+- **Release Process**: See `docs/WINDOWS_BUILD.md` for configuration
+
+For platform support, build requirements, and system constraints, see [`docs/ARCHITECTURE.md#architecture-principles--constraints`](ARCHITECTURE.md#architecture-principles--constraints).
 
 ## Summary: Key Development Principles
 
@@ -702,16 +579,47 @@ Test our logic, not external libraries. Focus on what NAMDRunner does, not how s
 ✅ **Command parsing** - SLURM output parsing, job state mapping
 ✅ **Error classification** - which errors are retryable vs fatal
 ✅ **User workflows** - complete job lifecycle (create → submit → delete)
+✅ **Frontend business logic** - utility functions, state management, form validation
+✅ **UI interactions** - button click handlers, form submissions, state changes (without full E2E)
+✅ **Component behavior** - component state changes, event handling, prop validation
 
 ### What We Don't Test
 ❌ **External crate functionality** - ssh2 connections, SFTP implementations
 ❌ **Mock performance** - testing how fast our mocks run
+❌ **"Stress Tests"** - unit tests should be fast and focused, not simulate production load
+❌ **Fake Delays** - simulating server response times or file upload delays adds no value and slows down test feedback
 ❌ **Implementation details** - internal state consistency
 ❌ **Infrastructure complexity** - no SSH test servers or integration environments
+❌ **AppHandle-dependent tests** - tests requiring Tauri's AppHandle should be avoided; test business logic directly instead
+❌ **Test-Only Code** - If only tests use a function/method, it's dead code. Delete both the code AND the tests.
 
-> **For SSH/SFTP testing patterns and mock infrastructure**, see [`SSH.md#testing--development`](SSH.md#testing--development)
+> **For SSH/SFTP testing patterns and mock infrastructure**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
+
+### Testing Tauri Commands
+
+When testing Tauri commands that require `AppHandle`:
+1. **Extract business logic** into separate functions that don't depend on AppHandle
+2. **Test the logic directly** without involving Tauri infrastructure
+3. **Use test wrapper functions** that bypass AppHandle requirements
+4. **Rely on manual/E2E testing** for the full integration with Tauri
+
+Example:
+```rust
+// Instead of testing this directly (requires AppHandle):
+#[tauri::command]
+pub async fn create_job(app: AppHandle, params: CreateJobParams) -> CreateJobResult {
+    // ... uses app for database, events, etc.
+}
+
+// Test the business logic separately:
+pub fn validate_job_params(params: &CreateJobParams) -> Result<()> {
+    // Business logic that can be tested without AppHandle
+}
+```
 
 ### Testing Commands
+
+**⏱️ Note on Test Startup Time**: The unit test suite (`npm test`) takes approximately 15-20 seconds to initialize due to jsdom environment setup. This is normal behavior - the tests are not hanging.
 
 #### Quick start for UI development and agent debugging
 ```bash
@@ -749,19 +657,10 @@ npm run test:e2e        # Desktop E2E testing (Linux)
 Scientists need reliability over performance. A desktop app that safely handles credentials and prevents security vulnerabilities is more valuable than one optimized for millisecond performance differences.
 
 ### Mock Development Philosophy
-**Core Principles**:
-- **Simple and predictable**: Mocks should behave consistently, not randomly
-- **Fast feedback**: Fixed delays and deterministic responses
-- **Easy debugging**: Predictable behavior helps identify real issues
-- **Development workflow**: Enable offline development without external dependencies
 
-**Mock Guidelines**:
-- Use environment-based switching (`USE_MOCK_SSH=true`)
-- Keep mock responses simple and deterministic
-- Provide comprehensive fixture data for testing
-- Maintain separate mock implementations for each service
+**Simple, predictable mocks for fast development feedback** - avoid random behavior and complex simulation in favor of deterministic responses that enable reliable debugging.
 
-> **For complete mock implementations and patterns**, see [`SSH.md#testing--development`](SSH.md#testing--development)
+> **For complete mock implementations and testing patterns**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
 
 ### Repository Structure
 ```
@@ -795,8 +694,8 @@ For UI/UX requirements and design specifications, see [DESIGN.md](DESIGN.md).
 
 ## Related Documentation
 
-For IPC interfaces, command specifications, and API contracts, see [`API.md`](API.md).
+For IPC interfaces, command specifications, and API contracts, see [`docs/API.md`](API.md).
 
-For database schemas, data validation, and persistence patterns, see [`DB.md`](DB.md).
+For database schemas, data validation, and persistence patterns, see [`docs/DB.md`](DB.md).
 
-For SLURM command patterns and cluster-specific details, see [`reference/slurm-commands-reference.md`](reference/slurm-commands-reference.md) and [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md).
+For SLURM command patterns and cluster-specific details, see [`docs/reference/slurm-commands-reference.md`](reference/slurm-commands-reference.md) and [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md).

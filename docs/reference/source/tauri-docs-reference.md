@@ -96,6 +96,45 @@ sudo dnf install webkit2gtk4.1-devel \
 sudo dnf group install "c-development"
 ```
 
+#### Windows
+
+Tauri uses the Microsoft C++ Build Tools for development as well as Microsoft Edge WebView2. These are both required for development on Windows.
+
+##### Microsoft C++ Build Tools
+
+- Download the Microsoft C++ Build Tools installer and open it to begin installation.
+- During installation check the "Desktop development with C++" option.
+
+Next: Install WebView2.
+
+##### WebView2
+
+> Tip
+>
+> WebView2 is already installed on Windows 10 (from version 1803 onward) and later versions of Windows. If you are developing on one of these versions then you can skip this step and go directly to installing Rust.
+
+Tauri uses Microsoft Edge WebView2 to render content on Windows.
+
+Install WebView2 by visiting the WebView2 Runtime download section. Download the "Evergreen Bootstrapper" and install it.
+
+Next: Check VBSCRIPT.
+
+##### VBSCRIPT (for MSI installers)
+
+MSI package building only.
+
+This is only required if you plan to build MSI installer packages ("targets": "msi" or "targets": "all" in `tauri.conf.json`).
+
+Building MSI packages on Windows requires the VBSCRIPT optional feature to be enabled. This feature is enabled by default on most Windows installations, but may have been disabled on some systems.
+
+If you encounter errors like failed to run `light.exe` when building MSI packages, you may need to enable the VBSCRIPT feature:
+
+- Open Settings → Apps → Optional features → More Windows features
+- Locate VBSCRIPT in the list and ensure it’s checked
+- Click Next and restart your computer if prompted
+
+Note: VBSCRIPT is currently enabled by default on most Windows installations, but is being deprecated and may be disabled in future Windows versions.
+
 ### Rust
 
 Tauri is built with Rust and requires it for development. Install Rust using one of following methods. You can view more installation methods at https://www.rust-lang.org/tools/install.
@@ -113,6 +152,28 @@ curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
 > We have audited this bash script, and it does what it says it is supposed to do. Nevertheless, before blindly curl-bashing a script, it is always wise to look at it first.
 > 
 > Here is the file as a plain script: rustup.sh
+
+Be sure to restart your Terminal (and in some cases your system) for the changes to take affect.
+
+#### Windows
+
+Visit https://www.rust-lang.org/tools/install to install rustup.
+
+Alternatively, you can use winget to install rustup using the following command in PowerShell:
+
+```bash
+winget install --id Rustlang.Rustup
+```
+
+**MSVC toolchain as default**
+
+For full support for Tauri and tools like trunk make sure the MSVC Rust toolchain is the selected default host triple in the installer dialog. Depending on your system it should be either `x86_64-pc-windows-msvc`, `i686-pc-windows-msvc`, or `aarch64-pc-windows-msvc`.
+
+If you already have Rust installed, you can make sure the correct toolchain is installed by running this command:
+
+```bash
+rustup default stable-msvc
+```
 
 Be sure to restart your Terminal (and in some cases your system) for the changes to take affect.
 
@@ -515,6 +576,146 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },
 });
+```
+
+---
+
+## GitHub (Windows Builds)
+
+This guide will show you how to use tauri-action in GitHub Actions to easily build and upload your app, and how to make Tauri’s updater query the newly created GitHub release for updates.
+
+Lastly, it will also show how to set up a more complicated build pipeline for Linux Arm AppImages.
+
+### Getting Started
+
+To set up tauri-action you must first set up a GitHub repository. You can also use this action on a repository that does not have Tauri configured yet since it can automatically initialize Tauri for you, please see the action’s readme for necessary configuration options.
+
+Go to the Actions tab on your GitHub project page and select “New workflow”, then choose “Set up a workflow yourself”. Replace the file with the workflow from below or from one of the action’s examples.
+
+### Configuration
+
+Please see the tauri-action readme for all available configuration options.
+
+When your app is not on the root of the repository, use the projectPath input.
+
+You may freely modify the workflow name, change its triggers, and add more steps such as npm run lint or npm run test. The important part is that you keep the below line at the end of the workflow since this runs the build script and releases your app.
+
+### How to Trigger
+
+The release workflow shown below and in the tauri-action examples is triggered by pushed to the release branch. The action automatically creates a git tag and a title for the GitHub release using the application version.
+
+As another example, you can also change the trigger to run the workflow on the push of a version git tag such as app-v0.7.0:
+
+```yml
+name: 'publish'
+
+on:
+  push:
+    tags:
+      - 'app-v*'
+```
+
+For a full list of possible trigger configurations, check out the official GitHub documentation.
+
+### Example Workflow
+
+Below is an example workflow that has been set up to run every time you push to the release branch.
+
+This workflow will build and release your app for Windows x64, Linux x64, Linux Arm64, macOS x64 and macOS Arm64 (M1 and above).
+
+The steps this workflow takes are:
+
+- Checkout the repository using actions/checkout@v4.
+- Install Linux system dependencies required to build the app.
+- Set up Node.js LTS and a cache for global npm/yarn/pnpm package data using actions/setup-node@v4.
+- Set up Rust and a cache for Rust’s build artifacts using dtolnay/rust-toolchain@stable and swatinem/rust-cache@v2.
+- Install the frontend dependencies and, if not configured as beforeBuildCommand, run the web app’s build script.
+- Lastly, it uses tauri-apps/tauri-action@v0 to run tauri build, generate the artifacts, and create a GitHub release.
+
+```yml
+name: 'publish'
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest' # for Arm based macs (M1 and above).
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest' # for Intel based macs.
+            args: '--target x86_64-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            args: ''
+          - platform: 'ubuntu-22.04-arm' # Only available in public repos.
+            args: ''
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'yarn' # Set this to npm, yarn or pnpm.
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable # Set this to dtolnay/rust-toolchain@nightly
+        with:
+          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: install frontend dependencies
+        # If you don't have `beforeBuildCommand` configured you may want to build your frontend here too.
+        run: yarn install # change this to npm or pnpm depending on which one you use.
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: app-v__VERSION__ # the action automatically replaces __VERSION__ with the app version.
+          releaseName: 'App v__VERSION__'
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+```
+
+For more configuration options, check out the tauri-action repository and its examples.
+
+### Troubleshooting
+
+#### GitHub Environment Token
+
+The GitHub Token is automatically issued by GitHub for each workflow run without further configuration, which means there is no risk of secret leakage. This token however only has read permissions by default and you may get a “Resource not accessible by integration” error when running the workflow. If this happens, you may need to add write permissions to this token. To do this, go to your GitHub project settings, select Actions, scroll down to Workflow permissions, and check “Read and write permissions”.
+
+You can see the GitHub Token being passed to the workflow via this line in the workflow:
+
+```yml
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ---

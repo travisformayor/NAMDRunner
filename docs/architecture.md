@@ -2,12 +2,13 @@
 
 **How the system currently works and is structured** - This document explains the NAMDRunner system design, component architecture, business requirements, and technology choices.
 
-> **For development practices and coding standards**, see [`CONTRIBUTING.md`](CONTRIBUTING.md)
-> **For SSH/SFTP connection patterns and security**, see [`SSH.md`](SSH.md)
-> **For UI/UX design patterns**, see [`DESIGN.md`](DESIGN.md)
-> **For database schemas and data management**, see [`DB.md`](DB.md)
-> **For adding commands or API changes**, see [`API.md`](API.md)
-> **For SLURM/NAMD command patterns**, see [`reference/`](reference/) directory
+> **For development practices and coding standards**, see [`docs/CONTRIBUTING.md`](CONTRIBUTING.md)
+> **For SSH/SFTP connection patterns and security**, see [`docs/SSH.md`](SSH.md)
+> **For UI/UX design patterns**, see [`docs/DESIGN.md`](DESIGN.md)
+> **For database schemas and data management**, see [`docs/DB.md`](DB.md)
+> **For adding commands or API changes**, see [`docs/API.md`](API.md)
+> **For job automation architecture and workflow patterns**, see [`docs/AUTOMATIONS.md`](AUTOMATIONS.md)
+> **For SLURM/NAMD command patterns**, see [`docs/reference/`](reference/) directory
 
 ## Table of Contents
 - [Project Overview](#project-overview)
@@ -30,11 +31,14 @@
   - [Why This Stack](#why-this-stack)
 - [System Design](#system-design)
   - [End-to-End Workflow](#end-to-end-workflow)
-    - [Primary Workflow (New Jobs)](#primary-workflow-new-jobs)
-    - [Job Restart Workflow (Post-MVP)](#job-restart-workflow-post-mvp)
+    - [Primary Workflow (Job Lifecycle)](#primary-workflow-job-lifecycle)
   - [Data Placement Strategy](#data-placement-strategy)
     - [Storage Architecture](#storage-architecture)
     - [Directory Structure](#directory-structure)
+  - [Automation Architecture](#automation-architecture)
+    - [Job Lifecycle Automation](#job-lifecycle-automation)
+    - [Progress Tracking System](#progress-tracking-system)
+    - [Automation Chain Implementation](#automation-chain-implementation)
   - [Architectural Overview](#architectural-overview)
   - [Module Structure](#module-structure)
     - [Frontend (Svelte/TypeScript)](#frontend-sveltetypescript)
@@ -141,48 +145,60 @@ A desktop application for scientists to manage NAMD molecular dynamics simulatio
   * Compile-time reactivity → small output and fewer "mystery re-renders."
   * Single-file components and explicit `$:` derivations → easier for juniors to read and reason about.
   * Solid unit/component testing story (Vitest + Svelte Testing Library).
+  > **For Svelte patterns and implementation guidelines**, see [`docs/DESIGN.md#svelte-implementation-patterns`](DESIGN.md#svelte-implementation-patterns)
 
 ### Backend (App Core)
 * **Rust** with **Tauri commands** as the IPC boundary from UI.
+* **Job Automation System** - Complete lifecycle automation with progress tracking and real-time UI feedback.
+  > **For automation architecture details**, see [`docs/AUTOMATIONS.md`](AUTOMATIONS.md)
 * **SSH/SFTP** via Rust `ssh2` (libssh2). Password and keyboard-interactive auth match cluster policies.
-* **SQLite** via `rusqlite` (or the Tauri SQL plugin). See [`DB.md`](DB.md) for complete database schemas and data management patterns.
+* **SQLite** via `rusqlite` with comprehensive schema and status history tracking. See [`docs/DB.md`](DB.md) for complete database patterns.
+* **Logging Bridge** - Real-time Rust-to-Frontend logging system for SSH debugging and progress tracking.
+* **Security Validation** - Comprehensive input sanitization, path safety, and secure password handling.
 * **Templating** (NAMD `.conf` + Slurm scripts) via `tera` or `handlebars` - **Phase 5+**: Templates stored as configurable data in database.
-  > **For NAMD configuration patterns**, see [`reference/namd-commands-reference.md`](reference/namd-commands-reference.md)
-* **Settings Management** - Dynamic cluster configuration and template management via Settings page.
+  > **For NAMD configuration patterns**, see [`docs/reference/namd-commands-reference.md`](reference/namd-commands-reference.md)
 
 ### SLURM Integration
 NAMDRunner integrates with SLURM workload managers for job submission and monitoring on HPC clusters.
 
-> **For SLURM command patterns and implementation details**, see [`reference/slurm-commands-reference.md`](reference/slurm-commands-reference.md)
+> **For SLURM command patterns and implementation details**, see [`docs/reference/slurm-commands-reference.md`](reference/slurm-commands-reference.md)
 
 ### Why This Stack
 * **Security/stability**: Rust core, minimal attack surface, no secrets on disk.
 * **Maintainability**: typed boundaries (TS ↔ Rust), clear module seams, small binary.
 * **UI velocity**: Svelte's component model is simple, predictable, and testable.
 
+### Database Architecture
+
+NAMDRunner uses SQLite for local data persistence with job lifecycle management and status tracking.
+
+**Key Features:**
+- **Local SQLite cache** for job metadata and status history
+- **Thread-safe global database** with singleton pattern
+- **Atomic operations** integrated with automation chains
+- **Schema versioning** for development iteration
+
+> **For complete database schemas, implementation patterns, and data management details**, see [`docs/DB.md`](DB.md)
+
 ## System Design
 
 ### End-to-End Workflow
 
-#### Primary Workflow (New Jobs)
+#### Primary Workflow (Job Lifecycle)
 1. **Connect via SSH** - Password authentication, session lives in memory only
-2. **Wizard** - Build NAMD `.conf` from templates; user attaches input files
-3. **Stage & upload** - Upload via SFTP to `/projects/$USER/namdrunner_jobs/...`; write JSON metadata files
-4. **Submit** - Copy staged inputs to scratch directory; submit job to SLURM; capture JobID
-5. **Track** - Monitor job status and update local cache + remote JSON
-6. **Results** - Browse remote folders, download outputs as needed
+2. **Job Creation** - Build NAMD `.conf` from templates; user attaches input files; automation creates project directory
+3. **Job Submission** - Automation creates scratch directory, copies files, submits to SLURM, captures JobID
+4. **Status Monitoring** - Continuous synchronization with SLURM queue status
+5. **Job Completion** - Automation detects completion, preserves critical results from scratch to project directory
+6. **Results Access** - Browse preserved results, download outputs as needed
+7. **Cleanup** - Safe removal of project and scratch directories when no longer needed
 
-#### Job Restart Workflow (Post-MVP)
-7. **Restart Option** - For completed/failed jobs with checkpoint files, provide "Restart Job" option
-8. **Resource Selection** - Allow researcher to choose different resource allocation for restart
-9. **Checkpoint Detection** - Automatically detect and validate NAMD checkpoint files (`.restart.coor`, `.restart.vel`, `.restart.xsc`)
-10. **Restart Submission** - Create new job with restart template, copy checkpoint files, submit with remaining steps
-11. **Lineage Tracking** - Maintain connection between original job and restart jobs for progress tracking
+**Automation Integration:** Each workflow step leverages the automation system for progress tracking, error handling, and atomic operations.
 
 ### Data Placement Strategy
 
 #### Storage Architecture
-* **Local**: SQLite cache with job metadata, timestamps, status history. See [`DB.md`](DB.md) for complete schema definitions.
+* **Local**: SQLite cache with job metadata, timestamps, status history. See [`docs/DB.md`](DB.md) for complete schema definitions.
 * **Remote** (cluster filesystem): JSON metadata files under project/job folders; job scratch directories contain runtime outputs
 * **Single-writer rule**: The application writes JSON metadata; jobs write only inside their scratch/results directories
 
@@ -202,14 +218,45 @@ NAMDRunner integrates with SLURM workload managers for job submission and monito
     └── restart.*                   # Restart files
 ```
 
+### Automation Architecture
+
+NAMDRunner implements a comprehensive job lifecycle automation system that orchestrates the complete workflow from job creation through completion and cleanup.
+
+#### Job Lifecycle Automation
+
+**Five Core Automation Chains:**
+1. **Job Creation** - Project setup, file validation, directory creation
+2. **Job Submission** - Scratch workspace setup, SLURM submission
+3. **Status Synchronization** - Real-time SLURM queue monitoring
+4. **Job Completion** - Results preservation from scratch to project storage
+5. **Job Cleanup** - Safe directory removal with security validation
+
+#### Key Automation Features
+
+**Architecture Principles:**
+- **Progress Tracking** - Real-time UI feedback via Tauri events
+- **Atomic Operations** - Complete success or clean failure for each step
+- **Workflow Separation** - Clear boundaries between automation stages
+- **Security Validation** - Input sanitization and path safety throughout
+
+**Implementation Pattern:**
+- Simple async functions with progress callbacks
+- Consistent `Result<T>` error handling
+- Direct integration with Tauri command system
+
+> **For complete automation implementation details, patterns, and integration examples**, see [`docs/AUTOMATIONS.md`](AUTOMATIONS.md)
+
 ### Architectural Overview
 
 **Clean Separation of Concerns**:
 - **Frontend**: Svelte components with TypeScript, reactive stores, and comprehensive IPC client
-  > **For UI/UX design patterns**, see [`DESIGN.md`](DESIGN.md)
+  > **For UI/UX design patterns**, see [`docs/DESIGN.md`](DESIGN.md)
 - **Backend**: Rust command handlers with SSH/SFTP services and security validation
 - **IPC Layer**: Strongly-typed communication layer between frontend and backend
+- **Demo Mode Integration**: User-selectable mode switching with persistent preference
 - **Development**: Mock implementations enable offline development
+
+**Demo Mode Architecture**: The application supports seamless switching between demo mode (rich mock data for demonstrations) and real mode (full cluster integration) through a user toggle in the connection dropdown. Mode preference persists across sessions via localStorage and synchronizes with the backend for consistent behavior.
 
 ### Module Structure
 
@@ -222,43 +269,61 @@ src/
 │   │   ├── coreClient.ts        # IPC interface definition
 │   │   ├── coreClient-tauri.ts  # Production Tauri implementation
 │   │   ├── coreClient-mock.ts   # Mock for offline development
-│   │   └── clientFactory.ts     # Smart client selection (dev/prod)
+│   │   └── clientFactory.ts     # Smart client selection with demo mode support
 │   ├── types/                   # TypeScript type definitions
-│   │   ├── api.ts               # Core API types and interfaces
+│   │   ├── api.ts               # Core API types matching Rust types
 │   │   ├── connection.ts        # Connection state and session types
 │   │   ├── errors.ts            # Error handling types
 │   │   └── errorUtils.ts        # Error utility functions
-│   ├── services/                # Business logic services
+│   ├── services/                # Frontend business logic services
 │   │   ├── connectionState.ts   # Observable connection state management
 │   │   ├── sessionManager.ts    # Session lifecycle and validation
-│   │   ├── directoryManager.ts  # Remote directory operations
-│   │   ├── connectionValidator.ts # Multi-stage connection validation
 │   │   ├── pathResolver.ts      # Centralized path generation
-│   │   ├── serviceContainer.ts  # Dependency injection container
-│   │   ├── sftp.ts              # SFTP service operations
-│   │   ├── ssh.ts               # SSH service operations
+│   │   ├── serviceContainer.ts  # Service container
+│   │   ├── sftp.ts              # SFTP service wrapper
+│   │   ├── ssh.ts               # SSH service wrapper
 │   │   └── index.ts             # Service exports
 │   ├── stores/                  # Reactive state management
 │   │   ├── session.ts           # Session state with reactive updates
+│   │   ├── jobs.ts              # Job state management with real-time updates
+│   │   ├── ui.ts                # UI state and preferences
 │   │   └── session.test.ts      # Store unit tests
-│   ├── test/                    # Testing infrastructure
-│   │   ├── fixtures/            # Test data and scenarios
-│   │   │   ├── testDataManager.ts # Test data management
-│   │   │   ├── sessionFixtures.ts # Session test data
-│   │   │   ├── jobFixtures.ts     # Job test data
-│   │   │   ├── fileFixtures.ts    # File test data
-│   │   │   └── slurmFixtures.ts   # SLURM test data
-│   │   ├── services/            # Unit tests for business logic
-│   │   │   ├── connectionState.test.ts
-│   │   │   ├── sessionManager.test.ts
-│   │   │   ├── connectionValidator.test.ts
-│   │   │   └── directoryManager.test.ts
-│   │   ├── utils/               # Test utilities
-│   │   │   └── connectionMocks.ts # Mock connection utilities
-│   │   └── setup.ts             # Test setup configuration
-│   └── components/              # Svelte UI components
-│       ├── ConnectionStatus.svelte # Connection status indicator
-│       └── ConnectionDialog.svelte # Authentication dialog
+│   ├── components/              # Svelte UI components
+│   │   ├── layout/              # Layout and infrastructure components
+│   │   │   ├── AppHeader.svelte     # Application header with connection status
+│   │   │   ├── AppSidebar.svelte    # Navigation sidebar
+│   │   │   ├── ConnectionDropdown.svelte # Connection management with demo mode toggle
+│   │   │   └── SSHConsolePanel.svelte    # SSH command logging and debugging interface
+│   │   ├── create-job/          # Job creation workflow components
+│   │   │   ├── CreateJobTabs.svelte     # Tabbed job creation interface
+│   │   │   ├── ResourcesTab.svelte      # Resource allocation configuration
+│   │   │   └── CompactQosSelector.svelte # QoS selection component
+│   │   ├── job-detail/          # Job details and management components
+│   │   ├── jobs/                # Job listing and management components
+│   │   ├── pages/               # Page-level components
+│   │   ├── ui/                  # Reusable UI components
+│   │   │   ├── Progress.svelte      # Progress indicators
+│   │   │   ├── FormField.svelte     # Form input components
+│   │   │   └── ResourceUsage.svelte # Resource usage displays
+│   │   └── AppShell.svelte      # Main application shell
+│   ├── data/                    # Static data and configuration
+│   ├── styles/                  # Global styles and themes
+│   ├── utils/                   # Utility functions
+│   │   └── file-helpers.ts      # File handling utilities
+│   └── test/                    # Testing infrastructure
+│       ├── fixtures/            # Test data and scenarios
+│       │   ├── testDataManager.ts # Test data management
+│       │   ├── sessionFixtures.ts # Session test data
+│       │   ├── jobFixtures.ts     # Job test data
+│       │   ├── fileFixtures.ts    # File test data
+│       │   └── slurmFixtures.ts   # SLURM test data
+│       ├── services/            # Unit tests for business logic
+│       │   ├── connectionState.test.ts
+│       │   └── sessionManager.test.ts
+│       ├── utils/               # Test utilities
+│       │   └── connectionMocks.ts # Mock connection utilities
+│       └── setup.ts             # Test setup configuration
+│           > **For testing tools and debugging infrastructure**, see [`docs/reference/agent-development-tools.md`](reference/agent-development-tools.md)
 ├── routes/
 │   ├── +layout.ts              # Layout configuration
 │   └── +page.svelte            # Main application interface
@@ -271,12 +336,18 @@ src/
 src-tauri/
 ├── src/
 │   ├── main.rs                  # Application entry point
-│   ├── lib.rs                   # Tauri app configuration and setup
+│   ├── lib.rs                   # Tauri app configuration and command registration
 │   ├── commands/                # Tauri IPC command handlers
 │   │   ├── mod.rs              # Command module exports
-│   │   ├── connection.rs       # Connection management commands
-│   │   ├── jobs.rs             # Job lifecycle commands (create/submit/delete)
+│   │   ├── connection.rs       # Connection management and SSH/SFTP commands
+│   │   ├── jobs.rs             # Job lifecycle commands (create/submit/sync/delete/complete)
 │   │   └── files.rs            # File management commands
+│   ├── automations/            # Job lifecycle automation system
+│   │   ├── mod.rs              # Automation module exports
+│   │   ├── job_creation.rs     # Job creation automation with progress tracking
+│   │   ├── job_submission.rs   # Job submission automation
+│   │   ├── job_completion.rs   # Job completion and results preservation
+│   │   └── progress.rs         # Progress tracking utilities
 │   ├── ssh/                    # SSH/SFTP service implementation
 │   │   ├── mod.rs              # SSH module exports
 │   │   ├── connection.rs       # Low-level SSH connection handling
@@ -291,21 +362,21 @@ src-tauri/
 │   │   ├── script_generator.rs # SLURM script generation
 │   │   └── status.rs           # Job status synchronization
 │   ├── database/               # Data persistence layer
-│   │   ├── mod.rs              # Database module exports
-│   │   ├── helpers.rs          # Database helper functions
-│   │   └── mod 2               # Additional database modules
+│   │   ├── mod.rs              # Database module with SQLite schema and operations
+│   │   └── helpers.rs          # Database helper functions
 │   ├── types/                  # Rust type definitions
 │   │   ├── mod.rs              # Type module exports
-│   │   ├── core.rs             # Core domain types (JobInfo, SessionInfo)
+│   │   ├── core.rs             # Core domain types (JobInfo, SessionInfo, ApiResult)
 │   │   └── commands.rs         # Command parameter and result types
+│   ├── logging.rs              # Rust-to-Frontend logging bridge system
 │   ├── retry.rs                # Exponential backoff retry implementation
 │   ├── validation.rs           # Input sanitization and path safety
 │   ├── security.rs             # Secure password handling with SecStr
-│   ├── security_tests.rs       # Security validation tests
-│   ├── mode_switching.rs       # Mock/real mode switching patterns
+│   ├── mode_switching.rs       # Demo/real mode switching patterns
 │   ├── mock_state.rs           # Mock state management for development
+│   ├── security_tests.rs       # Security validation tests (29 tests)
 │   └── integration_tests.rs    # Integration test suite
-├── Cargo.toml                  # Dependencies (ssh2, secstr, rusqlite)
+├── Cargo.toml                  # Dependencies (ssh2, secstr, rusqlite, anyhow, chrono)
 └── tauri.conf.json            # Tauri configuration
 ```
 
@@ -341,224 +412,125 @@ interface JobInfo {
 ```
 
 #### Rust Type System
-Core types defined in `src-tauri/src/types/`:
 
-```rust
-// Connection management
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionInfo {
-    pub host: String,
-    pub username: String,
-    #[serde(rename = "connectedAt")]
-    pub connected_at: String, // ISO 8601 format
-}
+NAMDRunner maintains strict type safety between TypeScript frontend and Rust backend:
 
-// Job management with proper serde attributes
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobInfo {
-    #[serde(rename = "jobId")]
-    pub job_id: String,
-    #[serde(rename = "jobName")]
-    pub job_name: String,
-    pub status: JobStatus,
-    #[serde(rename = "slurmJobId")]
-    pub slurm_job_id: Option<String>,
-    #[serde(rename = "createdAt")]
-    pub created_at: String, // ISO 8601 format
-    // Phase 6+ addition for job restart functionality
-    #[serde(rename = "restartInfo")]
-    pub restart_info: Option<RestartInfo>,
-}
+**Core Types:**
+- **`ApiResult<T>`** - Consistent return type for all Tauri commands
+- **`JobInfo`** - Complete job lifecycle information with all status fields
+- **`SessionInfo`** - SSH connection state and authentication data
+- **`NAMDConfig`** - NAMD simulation parameters
+- **`SlurmConfig`** - SLURM resource allocation settings
 
-// Phase 6+ addition: Job restart data model
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestartInfo {
-    #[serde(rename = "parentJobId")]
-    pub parent_job_id: String,
-    #[serde(rename = "checkpointFiles")]
-    pub checkpoint_files: Vec<String>,
-    #[serde(rename = "completedSteps")]
-    pub completed_steps: u64,
-    #[serde(rename = "remainingSteps")]
-    pub remaining_steps: u64,
-}
+**Type Safety Features:**
+- **Serde attributes** ensure consistent serialization between TS and Rust
+- **Strongly typed enums** for job status and connection states
+- **Optional fields** for lifecycle progression (submitted_at, completed_at)
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum JobStatus {
-    #[serde(rename = "CREATED")]
-    Created,
-    #[serde(rename = "PENDING")]
-    Pending,
-    // ... other statuses
-}
-```
+> **For complete type definitions, serde attributes, and API contracts**, see [`docs/API.md`](API.md)
 
 ### IPC Command Interface
 
 The application provides a complete set of commands for job management and cluster operations.
 
-> **For detailed IPC interfaces and command specifications**, see [`API.md`](API.md)
+> **For detailed IPC interfaces and command specifications**, see [`docs/API.md`](API.md)
 
 #### Available Commands
 
-```typescript
-// Connection Management
-interface ConnectionCommands {
-  connect(host: string, username: string, password: string): Promise<ConnectResult>;
-  disconnect(): Promise<DisconnectResult>;
-  getConnectionStatus(): Promise<ConnectionStatusResult>;
-}
+NAMDRunner provides 18 Tauri commands organized into three main categories:
+- **Connection Management**: SSH connectivity, mode switching, command execution
+- **Job Lifecycle**: Create, submit, monitor, sync, complete, cleanup operations
+- **File Management**: Upload, download, listing, and file operation commands
 
-// Job Lifecycle Management
-interface JobCommands {
-  createJob(params: CreateJobParams): Promise<CreateJobResult>;
-  submitJob(jobId: JobId): Promise<SubmitJobResult>;
-  getJobStatus(jobId: JobId): Promise<JobStatusResult>;
-  getAllJobs(): Promise<GetAllJobsResult>;
-  syncJobs(): Promise<SyncJobsResult>;
-  deleteJob(jobId: JobId, deleteRemote: boolean): Promise<DeleteJobResult>;
-}
+**Key Features:**
+- **Consistent `ApiResult<T>` return type** for uniform error handling
+- **Real-time progress tracking** via Tauri event system
+- **Demo/real mode switching** for development and production use
+- **Comprehensive automation** with job completion and results preservation
 
-// File Operations
-interface FileCommands {
-  uploadJobFiles(jobId: JobId, files: FileUpload[]): Promise<UploadResult>;
-  downloadJobOutput(jobId: JobId, fileName: string): Promise<DownloadResult>;
-  listJobFiles(jobId: JobId): Promise<ListFilesResult>;
-}
-```
+> **For complete command interfaces, parameter types, and response schemas**, see [`docs/API.md`](API.md)
 
-## Implementation Architecture
+## Implementation Approach
 
-### Rust Development Patterns
-*Essential patterns for SSH/SFTP backend implementation*
+### Development Philosophy
 
-**Error Chaining with Anyhow**: Use anyhow for complex error handling in Rust services.
+NAMDRunner follows **direct code patterns** and **progressive enhancement** principles:
+- Start simple, add abstraction only when proven necessary
+- Direct function calls over wrapper layers
+- Type-safe boundaries between frontend and backend
+- Security-first design with comprehensive input validation
 
-> **For detailed error handling patterns**, see [`CONTRIBUTING.md#2-resultt-error-handling`](CONTRIBUTING.md#2-resultt-error-handling)
+### Key Implementation Areas
 
-**Memory Management for Credentials**: Always wrap passwords and sensitive data in secure types. See [`API.md`](API.md) for complete SecurePassword implementation.
+**Backend (Rust):**
+- **SSH/SFTP Integration** - Complete secure cluster connectivity and file operations
+  > **For SSH/SFTP security patterns and connection management**, see [`docs/SSH.md`](SSH.md)
+  - Connection management: `src-tauri/src/ssh/manager.rs::ConnectionManager` (singleton with retry logic)
+  - Authentication: `src-tauri/src/ssh/connection.rs::SSHConnection::connect()` (password-only, SecurePassword)
+  - File operations: `src-tauri/src/ssh/sftp.rs::SFTPOperations` (upload/download with progress tracking)
+  - Directory operations: `src-tauri/src/ssh/manager.rs::create_directory()` (recursive with validation)
+  - Command execution: `src-tauri/src/ssh/commands.rs::CommandExecutor` (SLURM integration)
+  - Error handling: `src-tauri/src/ssh/errors.rs` (comprehensive categorization and retry logic)
+  - **Note**: All SSH/SFTP/directory operations are handled by Rust backend infrastructure
+- **Job Automation System** - Complete lifecycle automation with progress tracking
+  > **For complete automation implementation details, patterns, and integration examples**, see [`docs/AUTOMATIONS.md`](AUTOMATIONS.md)
+  - Job creation: `src-tauri/src/automations/job_creation.rs::execute_job_creation_with_progress()`
+  - Job submission: `src-tauri/src/automations/job_submission.rs::execute_job_submission_with_progress()`
+  - Job completion: `src-tauri/src/automations/job_completion.rs::execute_job_completion_with_progress()`
+- **Database Layer** - SQLite persistence with status history tracking
+  > **For complete database schemas, implementation patterns, and data management details**, see [`docs/DB.md`](DB.md)
+  - Main database: `src-tauri/src/database/mod.rs::NAMDRunnerDatabase`
+  - Helpers: `src-tauri/src/database/helpers.rs`
+- **Security Validation** - Input sanitization and path safety throughout
+  > **For security requirements and implementation patterns**, see [`docs/CONTRIBUTING.md#security-requirements`](CONTRIBUTING.md#security-requirements)
+  - Input validation: `src-tauri/src/validation.rs::input` module
+  - Path safety: `src-tauri/src/validation.rs::paths` module
+  - Shell escaping: `src-tauri/src/validation.rs::shell` module
 
-**Module Organization**: Organize Rust modules by responsibility layers.
+**Frontend (TypeScript/Svelte):**
+- **IPC Communication** - Strongly-typed commands with consistent error handling
+  > **For detailed IPC interfaces and command specifications**, see [`docs/API.md`](API.md)
+  - Main client: `src/lib/ports/coreClient.ts::CoreClient` interface
+  - Tauri implementation: `src/lib/ports/coreClient-tauri.ts`
+  - Mock implementation: `src/lib/ports/coreClient-mock.ts`
+- **Demo Mode Support** - Seamless switching between mock and real cluster operations
+  - Client factory: `src/lib/ports/clientFactory.ts::createClient()`
+- **Reactive State Management** - Real-time job status updates and progress tracking
+  - Job state: `src/lib/stores/jobs.ts`
+  - Session state: `src/lib/stores/session.ts`
+- **Component Architecture** - Focused, composable UI components
+  > **For UI/UX design patterns and component specifications**, see [`docs/DESIGN.md`](DESIGN.md)
+  - App shell: `src/lib/components/AppShell.svelte`
+  - Layout components: `src/lib/components/layout/` directory
+  - Page components: `src/lib/components/pages/` directory
 
-> **For module organization patterns**, see [`CONTRIBUTING.md#service-development-patterns`](CONTRIBUTING.md#service-development-patterns)
-
-**Async/Blocking Integration**: Handle ssh2's blocking nature properly.
-
-> **For async integration patterns**, see [`CONTRIBUTING.md#async-operations-with-blocking-libraries`](CONTRIBUTING.md#async-operations-with-blocking-libraries)
-
-**Type Safety for IPC**: Keep Rust and TypeScript types in sync with proper serde attributes.
-
-For complete Rust development standards and anti-patterns, see [`CONTRIBUTING.md#developer-standards--project-philosophy`](CONTRIBUTING.md#developer-standards--project-philosophy).
-
-### Security Implementation
-
-The system implements comprehensive security measures including input sanitization, path safety validation, command injection prevention, and secure memory management.
-
-> **For security principles and requirements**, see [`CONTRIBUTING.md#security-requirements`](CONTRIBUTING.md#security-requirements)
-> **For SSH/SFTP security implementation details**, see [`SSH.md#security-patterns`](SSH.md#security-patterns)
-
-### SSH/SFTP Integration
-
-NAMDRunner provides secure, password-based SSH connectivity with comprehensive SFTP file management for cluster operations.
-
-> **For complete SSH/SFTP implementation details**, see [`SSH.md`](SSH.md)
-
-### Clean Architecture Patterns
-
-For comprehensive architectural patterns and code quality standards, see [`CONTRIBUTING.md#developer-standards--project-philosophy`](CONTRIBUTING.md#developer-standards--project-philosophy).
-
-#### Dependency Injection
-**Service Container Pattern**: Clean separation of concerns through dependency injection:
-- `ServiceContainer` manages service instantiation and dependencies
-- Constructor injection for all service dependencies
-- Singleton pattern for stateful services, factory pattern for stateless utilities
-- Mock service containers for development environments
-- Clear service boundaries with explicit interfaces
-
-#### Repository Pattern Implementation
-**Separation of Database Concerns**: Clean data access layer with repository pattern:
-- **JobRepository trait**: Standardized interface for job data operations
-- **DefaultJobRepository**: Concrete implementation using existing database infrastructure
-- **JobService**: Business logic layer providing domain-specific operations
-- **Mock repositories**: In-memory implementations for development without database dependencies
-- **Domain separation**: Core types focus on business logic, repositories handle persistence
-
-#### Validation Pattern Implementation
-**Unified Validation System**: Trait-based validation with consistent error handling:
-- **Validate trait**: Generic validation interface for command parameters
-- **ValidateId trait**: Specialized validation for ID parameters with security checks
-- **ValidationError**: Structured error types with field-specific context
-- **Validator utilities**: Reusable validation functions for common patterns
-- **Type safety**: Validated types ensure clean input throughout the system
-
-#### SLURM Command Builder
-**Consistent Command Construction**: Centralized command generation with fluent builder interface for maintainable SLURM integration.
-
-#### Async Pattern Optimization
-**Efficient Memory Usage**: Optimized async patterns without unnecessary allocations:
-- **Direct async functions**: Eliminated Box::pin allocations where possible
-- **Helper methods**: Private async functions for cleaner retry integration
-- **Performance**: Reduced heap allocations for frequently-called operations
-- **Maintainability**: Cleaner code structure without boxing overhead
-
-### System Architecture Patterns
-
-#### Data Flow
-1. User action in Svelte component
-2. Call through coreClient interface
-3. Tauri command invoked
-4. Rust module processes request
-5. Result returned through IPC boundary
-6. Svelte store updated
-7. UI re-renders
-
-#### Error Handling
-Comprehensive error management system:
-- **Result Types**: All operations return `Result<T>` with structured error information
-- **Error Classification**: Network, Authentication, Timeout, Permission, Configuration errors
-- **Retry Logic**: Exponential backoff with jitter for transient failures
-- **User-Friendly Messages**: Error categorization provides actionable user guidance
-- **Recovery Strategies**: Automatic retry vs manual intervention based on error type
+> **For complete development patterns, coding standards, and implementation guidelines**, see [`docs/CONTRIBUTING.md`](CONTRIBUTING.md)
+> **For SSH/SFTP security patterns and connection management**, see [`docs/SSH.md`](SSH.md)
 
 ## Development Environment
-Optimized for rapid development and deployment:
-- **Dual Mode Operation**: Mock mode for development, real mode for production
-- **Hot Reload**: Fast development iteration with `npm run tauri dev`
-- **Type Safety**: Full TypeScript ↔ Rust type checking
-- **Portable Builds**: Single executable for Windows deployment
+
+NAMDRunner supports dual-mode development with comprehensive tooling:
+- **Demo/Real Mode Switching** for offline development and production use
+- **Hot reload development** with `npm run tauri dev`
+- **Cross-platform builds** targeting Windows, Linux, and macOS
+
+> **For complete development setup, tooling, and workflow details**, see [`docs/CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Build & Deployment
 
-### Target Platforms & Build Matrix
+### Target Platforms
 
-#### Primary Targets
-* **Users:** Windows (primary distribution target) - Portable `.exe` via GitHub Actions
-* **Development:** Linux (primary dev environment) - Day-to-day development work
-* **macOS:** Local builds for manual smoke testing (developer machine validation only)
+**Primary Distribution:**
+- **Windows** - Portable `.exe` via GitHub Actions (primary user target)
+- **Linux** - Primary development environment
+- **macOS** - Local builds for validation only
 
-#### CI/CD Strategy
-* **Windows CI:** GitHub Actions Windows runner for release builds
-* **Linux CI:** Optional for comprehensive validation
+**Build Strategy:**
+- **Cross-platform Tauri builds** with GitHub Actions CI/CD
+- **Portable executables** with embedded frontend assets
+- **Static linking** for dependency-free distribution
 
-### Packaging & Delivery
-
-#### Distribution Artifacts
-* **Windows:** Portable `.exe` built via GitHub Actions (Windows runner)
-* **Linux:** Developer builds for internal validation (optional packaging)
-* **macOS:** Local builds only for manual validation (not distributed to end users)
-
-#### Build Commands
-```bash
-# Development build
-npm run tauri dev
-
-# Production build
-npm run tauri build
-
-# Platform-specific builds (CI)
-npm run tauri build -- --target x86_64-pc-windows-msvc  # Windows
-npm run tauri build -- --target x86_64-unknown-linux-gnu # Linux
-```
+> **For complete build setup, CI/CD workflows, and deployment procedures**, see [`docs/CONTRIBUTING.md`](CONTRIBUTING.md)
 
 
 ## Status & Planning
@@ -570,7 +542,32 @@ npm run tauri build -- --target x86_64-unknown-linux-gnu # Linux
 * **Scratch Purge Cadence**: Determine when to copy back results from scratch directories
 * **Module Versions**: Make gcc/NAMD module versions configurable (not hardcoded)
 * **Resource Limits**: Document cluster-specific partition limits and QoS specifications
+  > **For cluster-specific configurations and resource limits**, see [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)
 
 ### Next Steps
 
 See [`tasks/roadmap.md`](../tasks/roadmap.md) for planned features and development timeline.
+
+## Technical Implementation Considerations
+
+### Frontend State Management Architecture
+- **Connection State**: Global Svelte store managing SSH session lifecycle
+- **Job List**: Cached in store, synced with backend via periodic refresh
+- **Form State**: Local to components using Svelte's reactive binding
+- **SSH Console Buffer**: Global store with configurable size limit for debugging
+
+### Performance Optimization Patterns
+- **Lazy loading** for job details and log content (loaded on-demand)
+- **Debounced** form validation to reduce computation overhead
+- **Throttled** SSH console updates to prevent UI blocking
+
+### Accessibility Implementation
+- **Keyboard navigation** support for all interactive elements
+- **ARIA labels** for screen readers on status indicators and controls
+- **Focus management** for modals and popup interactions
+- **Color-blind friendly** status indicators (combine icons with color coding)
+
+### UX Implementation Requirements
+- **Explicit connection controls** with visible session state indicators
+- **Clear job status** with last-polled timestamp display
+- **Non-blocking status refresh** with dismissible error banners and retry options

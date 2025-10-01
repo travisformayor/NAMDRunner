@@ -179,7 +179,7 @@ Python used UUID-based group IDs and multi-stage workflows:
 ## File Organization Requirements
 
 ### Directory Structure
-> **See [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)** for complete directory structure requirements and Alpine cluster file system details.
+> **See [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)** for complete directory structure requirements and Alpine cluster file system details.
 
 ```
 /projects/$USER/namdrunner_jobs/
@@ -247,7 +247,7 @@ The Python version used this structure (informational for future multi-stage sup
 - **Allowed file extensions**: `.pdb`, `.psf`, `.prm`, `.namd`, `.sbatch`, `.out`, `.err`, `.log`, `.dcd`, `.coor`, `.vel`, `.xsc`
 
 ### Parameter Ranges
-> **Note**: SLURM resource limits are defined in [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md) and may vary by partition.
+> **Note**: SLURM resource limits are defined in [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md) and may vary by partition.
 
 ```typescript
 interface ValidationRules {
@@ -265,7 +265,7 @@ interface ValidationRules {
 ```
 
 ### Resource Limits (Alpine Cluster)
-> **For current resource limits, partition details, and QoS specifications, see [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)**.
+> **For current resource limits, partition details, and QoS specifications, see [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md)**.
 
 - **Default partition**: "amilan"
 - **Default QOS**: "normal"
@@ -376,5 +376,5 @@ fn validate_namd_config(json: &str) -> Result<NamdConfig, ValidationError> {
 
 ---
 
-*For IPC interfaces and API contracts, see [`API.md`](API.md).*
-*For cluster-specific file system details, see [`reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md).*
+*For IPC interfaces and API contracts, see [`docs/API.md`](API.md).*
+*For cluster-specific file system details, see [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md).*

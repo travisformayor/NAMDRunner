@@ -23,8 +23,13 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters. **Tauri v
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - System design and architectural constraints
 
 ### 🎨 Working on UI?
-- [`docs/DESIGN.md`](docs/DESIGN.md) - UI/UX specifications and component architecture
-- [`docs/reference/svelte-implementation-guide.md`](docs/reference/svelte-implementation-guide.md) - Svelte patterns and best practices
+- [`docs/DESIGN.md`](docs/DESIGN.md) - UI/UX specifications, component architecture, and Svelte implementation patterns
+
+### 💼 Working on Job Management & Automation?
+- [`docs/AUTOMATIONS.md`](docs/AUTOMATIONS.md) - **Complete automation architecture** with all job lifecycle automation chains
+- [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - SLURM command patterns and job management
+- [`docs/API.md`](docs/API.md) - Job management IPC interfaces and command specifications
+- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - Proven job workflow patterns
 
 ### ⚡ Working on SLURM Integration?
 - [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - SLURM command patterns and job management
@@ -43,9 +48,10 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters. **Tauri v
 - [`docs/reference/alpine-cluster-reference.md`](docs/reference/alpine-cluster-reference.md) - Resource limits, partitions, and QoS options
 - [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - Resource allocation commands
 
-### 🔌 Working on IPC/Commands?
+### 🔌 Working on IPC/Commands (Non-Job Related)?
 - [`docs/API.md`](docs/API.md) - IPC interfaces and command specifications
 - [`docs/CONTRIBUTING.md#security-requirements`](docs/CONTRIBUTING.md#security-requirements) - Security patterns for command handling
+- For job-related commands, see **Job Management & Automation** section above
 
 ### 🗄️ Working with Database/Data?
 - [`docs/DB.md`](docs/DB.md) - SQLite schemas and JSON metadata formats
@@ -121,9 +127,15 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 - **Don't skip reference docs** - Python version has 9 completed tasks worth of learnings
 - **Don't work without task plan** - Complex application needs structured approach
 
+### Code Completeness
+- **Don't leave stubs in production** - Replace all setTimeout/mock data with real backend calls before completing tasks
+- **Don't implement business logic in frontend** - Validation, calculations, cluster config belong in Rust
+- **Don't keep orphaned code** - Delete service layers and utilities that production code never imports
+- **Don't treat test usage as real usage** - If only tests use code, delete both the code and tests
+
 ## What Success Looks Like
 - **Complete functionality** - All planned features working reliably in Tauri
-- **Windows deployment** - Portable exe that "just works"
+- **Windows deployment** - Working portable exe
 - **Maintainability** - New developers can understand and extend
 - **Reliability** - Works for months without maintenance
 

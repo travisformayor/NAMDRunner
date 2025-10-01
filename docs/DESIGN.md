@@ -223,45 +223,7 @@ Uploaded Files:
 
 ---
 
-## Future Enhancement Planning
-
-### Multi-Stage Job Groups (Post-MVP)
-
-The current single-job table design will evolve to support job groups:
-
-**Table Enhancement**:
-```
-▼ Multi-Stage Simulation Group        GROUP      3/5 Complete    ...
-  ├─ Stage 1: Minimization           COMPLETED   00:45:00        ...
-  ├─ Stage 2: Heating                COMPLETED   01:30:00        ...
-  ├─ Stage 3: Equilibration           RUNNING     02:15:30        ...
-  ├─ Stage 4: Production 1            PENDING     --              ...
-  └─ Stage 5: Production 2            PENDING     --              ...
-```
-
-- Parent rows show aggregate status
-- Expandable to show individual stage jobs
-- Visual distinction between groups and single jobs (indent, icon, or background)
-
----
-
-## Visual Design Guidelines
-
-### Typography
-- Use system fonts for native feel
-- Clear hierarchy: Headers > Subheaders > Body > Caption
-- Monospace font for: Job IDs, SSH console, log outputs
-
-### Colors
-- **Primary Actions**: Blue
-- **Destructive Actions**: Red
-- **Success States**: Green
-- **Warning/Pending**: Amber/Yellow
-- **Neutral/Disabled**: Gray shades
-- **Background**: Light gray or white
-- **Borders/Dividers**: Light gray
-
-### CSS Design System
+## CSS Design System
 
 #### Naming Convention
 **Consistent Naming**: Use `namd-*` prefix for all custom CSS classes.
@@ -375,28 +337,231 @@ The current single-job table design will evolve to support job groups:
 }
 ```
 
-### Spacing & Layout
-- Consistent padding/margins throughout
-- Clear visual grouping of related elements
-- Adequate whitespace between sections
-- No cramped interfaces, but efficient use of space
-
-### Loading & Feedback
-- **Loading States**: Simple spinner or progress bar
-- **Success Toasts**: Green, auto-dismiss after 3 seconds
-- **Error Toasts**: Red, require manual dismissal
-- **Long Operations**: Show progress with cancel option
-
 ### Form Validation
+
+#### Validation Architecture
+**Frontend validation** provides immediate user feedback for basic UX concerns only. **Backend validation** in Rust is authoritative for all business rules, security, and cluster constraints.
+
+#### Frontend Validation (UX Only)
 - **Required Field Indicators**: Asterisk (*) next to label
-- **Inline Validation**: Show errors below fields as user types or on blur
+- **Immediate Feedback**: Basic format and required field checks
+- **Error Display**: Show backend validation errors from Tauri commands
 - **Error Styling**: Red text, red border on invalid fields
-- **Success Feedback**: Optional green checkmark for valid fields
-- **Validation Types**:
-  - Required field validation
-  - Type validation (numbers only, etc.)
-  - Format validation (time formats, etc.)
-  - Range validation (min/max values)
+
+#### Implementation Pattern
+```svelte
+<!-- Frontend: UX feedback only -->
+<script lang="ts">
+  export let value: string = '';
+  export let required: boolean = false;
+
+  let error: string = '';
+  let backendError: string = ''; // From Tauri command response
+
+  function validateUX() {
+    // Only basic UX validation - NOT business rules
+    if (required && !value.trim()) {
+      error = 'This field is required';
+      return false;
+    }
+    error = '';
+    return true;
+  }
+
+  // Display backend validation errors
+  $: displayError = backendError || error;
+</script>
+
+<div class="namd-field-group">
+  <label class="namd-label">
+    Field Label {#if required}*{/if}
+  </label>
+  <input
+    class="namd-input"
+    class:error={displayError}
+    bind:value
+    on:blur={validateUX}
+  />
+  {#if displayError}
+    <span class="namd-error-text">{displayError}</span>
+  {/if}
+</div>
+```
+
+#### Validation Responsibilities
+- **Frontend**: Required fields, basic formats, immediate UX feedback
+- **Backend (Rust)**: Business rules, security validation, cluster limits, data integrity
+- **Error Flow**: Backend validation errors displayed in frontend UI
+
+> **For complete backend validation patterns**, see [`docs/CONTRIBUTING.md#security-requirements`](CONTRIBUTING.md#security-requirements)
+
+---
+
+## Svelte Implementation Patterns
+
+### Store-Based State Management
+
+NAMDRunner uses Svelte stores for global state management instead of prop drilling:
+
+```typescript
+// stores/session.ts
+import { writable, derived } from 'svelte/store';
+
+interface ConnectionState {
+  status: 'disconnected' | 'connecting' | 'connected' | 'expired';
+  host?: string;
+  username?: string;
+  connectedSince?: Date;
+}
+
+function createSessionStore() {
+  const { subscribe, set, update } = writable<ConnectionState>({
+    status: 'disconnected'
+  });
+
+  return {
+    subscribe,
+    connect: async (host: string, username: string, password: string) => {
+      update(s => ({ ...s, status: 'connecting' }));
+      try {
+        await invoke('ssh_connect', { host, username, password });
+        set({ status: 'connected', host, username, connectedSince: new Date() });
+      } catch (error) {
+        set({ status: 'disconnected' });
+      }
+    },
+    disconnect: () => {
+      invoke('ssh_disconnect');
+      set({ status: 'disconnected' });
+    }
+  };
+}
+
+export const session = createSessionStore();
+export const isConnected = derived(session, $session => $session.status === 'connected');
+```
+
+```typescript
+// stores/jobs.ts
+function createJobsStore() {
+  const { subscribe, set, update } = writable<Job[]>([]);
+
+  return {
+    subscribe,
+    load: async () => {
+      const jobs = await invoke('get_jobs');
+      set(jobs);
+    },
+    sync: async () => {
+      const updatedJobs = await invoke('sync_jobs');
+      set(updatedJobs);
+    },
+    create: async (jobData: CreateJobRequest) => {
+      const newJob = await invoke('create_job', jobData);
+      update(jobs => [...jobs, newJob]);
+      return newJob;
+    }
+  };
+}
+
+export const jobs = createJobsStore();
+export const selectedJobId = writable<string | null>(null);
+export const selectedJob = derived(
+  [jobs, selectedJobId],
+  ([$jobs, $selectedJobId]) =>
+    $selectedJobId ? $jobs.find(j => j.id === $selectedJobId) : null
+);
+```
+
+### Component Reactive Patterns
+
+**Reactive Statements for Data Processing:**
+```svelte
+<script>
+  import { connectionState } from '$lib/stores/session';
+  import { jobs } from '$lib/stores/jobs';
+
+  // Reactive data filtering
+  $: filteredJobs = $connectionState === 'connected'
+    ? $jobs.filter(job => job.status !== 'CANCELLED')
+    : [];
+
+  // Reactive validation
+  $: canCreateJob = $connectionState === 'connected';
+</script>
+
+<button disabled={!canCreateJob}>Create Job</button>
+```
+
+**Two-Way Binding for Forms:**
+```svelte
+<script>
+  export let config;
+
+  // Reactive validation
+  $: errors = validateResourceConfig(config);
+  $: isValid = !Object.keys(errors).length;
+</script>
+
+<input bind:value={config.cores} type="number" />
+{#if errors.cores}
+  <p class="namd-error-text">{errors.cores}</p>
+{/if}
+```
+
+**Event Handling Between Components:**
+```svelte
+<!-- JobsTable.svelte -->
+<script>
+  import { createEventDispatcher } from 'svelte';
+
+  export let jobs;
+  const dispatch = createEventDispatcher();
+
+  function selectJob(jobId) {
+    dispatch('jobSelect', { jobId });
+  }
+</script>
+
+{#each jobs as job (job.id)}
+  <tr on:click={() => selectJob(job.id)}>
+    <td>{job.name}</td>
+  </tr>
+{/each}
+```
+
+```svelte
+<!-- JobsPage.svelte -->
+<script>
+  import { selectedJobId } from '$lib/stores/jobs';
+
+  function handleJobSelect(event) {
+    $selectedJobId = event.detail.jobId;
+  }
+</script>
+
+<JobsTable {jobs} on:jobSelect={handleJobSelect} />
+```
+
+### Component Lifecycle
+
+```svelte
+<script>
+  import { onMount, onDestroy } from 'svelte';
+
+  let timer;
+
+  onMount(() => {
+    // Initialize component
+    timer = setInterval(syncJobs, 30000);
+  });
+
+  onDestroy(() => {
+    // Cleanup
+    clearInterval(timer);
+  });
+</script>
+```
 
 ---
 
@@ -441,61 +606,7 @@ components/
 
 ---
 
-## Implementation Priorities
+This design guide provides the essential patterns and specifications needed to implement NAMDRunner's UI consistently with the project's goals of clarity, reliability, and maintainability.
 
-### MVP Focus
-1. Core job table with status tracking
-2. Basic job creation flow with validation
-3. Connection management
-4. Job detail viewing
-5. SLURM log viewing
-
-### Post-MVP Enhancements
-1. Multi-stage job groups
-2. Bulk operations
-3. Advanced filtering/search
-4. Job templates
-5. Settings/preferences
-
----
-
-## UX Requirements
-
-* Explicit **Connect/Disconnect/Reconnect** controls and visible session state.
-* Clear job status with last-polled timestamp.
-* Non-blocking status refresh; errors as dismissible banners with retry.
-
-### Job Restart UI Flow (Phase 6+)
-* **"Restart Job" button** appears on completed/failed jobs with detected checkpoint files.
-* **Restart wizard** allows researcher to:
-  - Review original job parameters
-  - Modify resource allocation (cores, memory, walltime)
-  - See checkpoint file status and validation
-  - Preview restart job configuration
-* **Restart job tracking** shows connection to parent job and restart lineage.
-* **Progress indication** displays completed vs remaining steps across restart chain.
-
----
-
-## Technical Considerations
-
-### State Management
-- **Connection State**: Global Svelte store
-- **Job List**: Cached in store, synced with backend
-- **Form State**: Local to components
-- **SSH Console Buffer**: Global store with size limit
-
-### Performance
-- **Lazy loading** for job details and logs
-- **Debounced** form validation
-- **Throttled** SSH console updates
-
-### Accessibility
-- Keyboard navigation support
-- ARIA labels for screen readers
-- Focus management for modals
-- Color-blind friendly status indicators (use icons + color)
-
----
-
-This specification provides the foundation for creating a clean, functional UI that scientists will find reliable and easy to use. The design emphasizes clarity and utility while maintaining flexibility for future enhancements.
+> **For technical implementation details**, see [`docs/ARCHITECTURE.md#technical-implementation-considerations`](ARCHITECTURE.md#technical-implementation-considerations)
+> **For future enhancements and roadmap**, see [`tasks/roadmap.md`](../tasks/roadmap.md)
