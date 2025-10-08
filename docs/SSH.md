@@ -261,10 +261,10 @@ SSH modules are organized in `src-tauri/src/ssh/` with connection, manager, comm
 #### Frontend SSH Service
 Frontend SSH service integration follows the IPC patterns defined in [`docs/API.md`](API.md) with proper error mapping between Rust and TypeScript.
 
-### Mock/Real Mode Switching
+### Demo/Real Mode Switching
 
 #### Environment-Based Service Selection
-Mock mode selection based on environment variables and build configuration is implemented in `src-tauri/src/mode_switching.rs`.
+Demo mode selection based on environment variables and build configuration is implemented in `src-tauri/src/demo/mode.rs`.
 
 ## Testing & Development
 
@@ -285,7 +285,7 @@ Mock mode selection based on environment variables and build configuration is im
 2. **Command Execution**: Critical pattern of `source /etc/profile && module load slurm/alpine` is implemented in `src-tauri/src/ssh/commands.rs`
 3. **Error Handling**: Retry patterns from Python experience inform `src-tauri/src/retry.rs`
 4. **Progress Reporting**: Chunked 32KB uploads with progress callbacks are in `src-tauri/src/ssh/sftp.rs`
-5. **Mock Mode**: Environment-based mock switching is implemented in `src-tauri/src/mode_switching.rs`
+5. **Demo Mode**: Environment-based demo/real switching is implemented in `src-tauri/src/demo/mode.rs`
 
 ## Troubleshooting
 

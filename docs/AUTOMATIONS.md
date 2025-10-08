@@ -146,22 +146,37 @@ The `execute_job_creation_with_progress` function handles the complete job creat
    - Progress tracking per file with validation
    - Uses existing ConnectionManager with retry logic
 
-4. **Create Job Metadata**
+4. **Generate SLURM Batch Script**
+   - Use `SlurmScriptGenerator::generate_namd_script()` to create job.sbatch
+   - Upload script to `scripts/job.sbatch`
+   - Script configures SLURM resources, modules, and NAMD execution
+
+5. **Generate NAMD Configuration**
+   - Use `SlurmScriptGenerator::generate_namd_config()` to create config.namd
+   - Upload config to `scripts/config.namd`
+   - Config includes simulation parameters, input files, and output settings
+
+6. **Create Job Metadata**
    - Generate JobInfo struct with complete job specification
    - Set only project directory (scratch_dir remains None until submission)
 
-5. **Save to Local Database**
+7. **Save to Local Database**
    - Store job record in local SQLite database using existing `with_database` utility
    - Set initial status as "CREATED" (not submitted)
 
-**Result**: Job appears in UI with "CREATED" status, ready for submission
+8. **Upload Job Metadata to Server**
+   - Create `job_info.json` in project directory with complete job specification
+   - Enables job discovery even for jobs that haven't been submitted yet
+   - Serves as single source of truth for job parameters on cluster
+
+**Result**: Job appears in UI with "CREATED" status, ready for submission. Job folder on cluster contains complete metadata for discovery and sharing.
 
 ---
 
 ### 2. Job Submission Automation Chain
 
 **Trigger**: User clicks "Submit Job" button for a created job
-**Purpose**: Copy project to scratch directory and submit to SLURM scheduler
+**Purpose**: Mirror job directory to scratch and submit to SLURM scheduler
 **Status**: ✅ **IMPLEMENTED** in `src-tauri/src/automations/job_submission.rs`
 
 #### Implementation:
@@ -172,93 +187,119 @@ The `execute_job_submission_with_progress` function handles the complete job sub
    - Retrieve job from database by ID
    - Validate job status is CREATED or FAILED (eligible for submission)
 
-2. **Create Scratch Directory Structure**:
-   - Create main scratch directory: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/`
-   - Create subdirectories: `input/`, `output/`, `logs/`
+2. **Mirror Job Directory to Scratch** (using rsync):
+   - Source: `/projects/$USER/namdrunner_jobs/{job_id}/`
+   - Destination: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/`
+   - Uses single `rsync -az` command to sync entire directory structure
+   - Preserves complete directory layout with all subdirectories:
+     - `input_files/` - All NAMD input files
+     - `scripts/` - SLURM batch script and NAMD configuration
+     - `outputs/` - Empty initially, populated during job execution
+     - `job_info.json` - Job metadata
+   - **Why rsync**: Single cluster-side operation is much faster than per-file SFTP transfers, supports delta sync for resubmissions
 
-3. **Copy Files to Scratch**:
-   - Copy all input files from `{project_dir}/input_files/` to `{scratch_dir}/input/`
-   - Copy SLURM script (`job.sbatch`) and NAMD config (`config.namd`)
-   - Uses secure file copy commands with proper path escaping
-
-4. **Submit to SLURM**:
-   - Execute `sbatch job.sbatch` in scratch directory
+3. **Submit to SLURM**:
+   - Execute `sbatch` using the mirrored script in scratch location: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/scripts/job.sbatch`
    - Parse SLURM job ID from output
    - Handle submission errors with proper timeout
 
-5. **Update Job Status**:
-   - Set status to PENDING, add SLURM job ID and submission timestamp
-   - Update both database and remote JSON metadata file
+4. **Update Job Status**:
+   - Set status to PENDING, add SLURM job ID, submission timestamp, and scratch directory path
+   - Update local database
+   - Update `job_info.json` in project directory with submission details
 
-**Result**: Job status changes from CREATED to PENDING with SLURM job ID assigned
+**Directory Structure** (Mirrored Between Project and Scratch):
+```
+/projects/$USER/namdrunner_jobs/job_123/          /scratch/alpine/$USER/namdrunner_jobs/job_123/
+├── input_files/                     ⟷            ├── input_files/
+│   ├── structure.pdb                              │   ├── structure.pdb
+│   ├── structure.psf                              │   ├── structure.psf
+│   └── parameters.prm                             │   └── parameters.prm
+├── scripts/                         ⟷            ├── scripts/
+│   ├── job.sbatch                                 │   ├── job.sbatch
+│   └── config.namd                                │   └── config.namd
+├── outputs/                         ⟷            ├── outputs/
+└── job_info.json                    ⟷            └── job_info.json
+```
+
+**Result**: Job status changes from CREATED to PENDING with SLURM job ID assigned. Complete job directory mirrored to scratch for execution. SLURM jobs execute from `/scratch/alpine/` location (required for cluster access).
 
 ---
 
 ### 3. Status Synchronization Automation Chain
 
-**Trigger**: User clicks "Sync Status" button or "Sync All Jobs" button
-**Purpose**: Query SLURM for current job status and update local database
-**Status**: ✅ **IMPLEMENTED** in `src-tauri/src/commands/jobs.rs` and `src-tauri/src/slurm/status.rs`
+**Trigger**: User clicks "Sync Status" button or automatic periodic sync (if implemented)
+**Purpose**: Query SLURM for current job status and update local database + server metadata
+**Status**: ✅ **IMPLEMENTED** in `src-tauri/src/automations/job_sync.rs` and `src-tauri/src/slurm/status.rs`
 
 #### Implementation:
 
-The status synchronization automation is implemented through two main commands:
+The `sync_all_jobs` function handles real-time synchronization of job status from SLURM:
 
-1. **Single Job Status Sync** (`sync_job_status`)
-   - **Validate Inputs**: Sanitize job ID using `crate::validation::input::sanitize_job_id()`
-   - **Load Job from Database**: Retrieve job information from local SQLite database
-   - **Check for SLURM Job ID**: Only sync jobs that have been submitted to SLURM
-   - **Get Cluster Username**: Retrieve username from environment for SLURM queries
-   - **Query SLURM Status**: Use `SlurmStatusSync::sync_job_status()` to query squeue/sacct
-   - **Update Job Status**: If status changed, update job with timestamp using `helpers::update_job_status_with_timestamps()`
-   - **Return Updated Job**: Provide updated job information to UI
+1. **Validate Connection**:
+   - Verify SSH connection is active
+   - Get cluster username for SLURM queries
 
-2. **All Jobs Status Sync** (`sync_all_jobs`)
-   - **Load All Jobs**: Retrieve all jobs from local database
-   - **Filter Submitted Jobs**: Only sync jobs that have SLURM job IDs
-   - **Batch Status Updates**: Iterate through jobs and sync each one
-   - **Aggregate Results**: Collect success/failure statistics for batch operation
+2. **Load Active Jobs**:
+   - Retrieve all jobs from database
+   - Filter to only Pending or Running jobs (others don't need syncing)
 
-**Result**: Jobs display current SLURM status (PENDING → RUNNING → COMPLETED/FAILED/CANCELLED) with accurate timestamps
+3. **Query SLURM for Each Job**:
+   - Use `SlurmStatusSync::sync_job_status()` with job's SLURM ID
+   - Query `squeue` for active jobs (Pending/Running)
+   - Query `sacct` for completed jobs as fallback
+   - Parse SLURM status output to JobStatus enum
+
+4. **Update Status if Changed**:
+   - Compare new status with current status
+   - If different, update job with new status and timestamp
+   - Set `completed_at` timestamp if job finished
+   - Save to local database immediately
+
+5. **Update Server Metadata**:
+   - Upload updated `job_info.json` to project directory
+   - Ensures cluster has latest job metadata
+
+6. **Log Completion**:
+   - When job transitions to Completed/Failed/Cancelled, log the event
+   - Frontend sees status change on next job list refresh
+   - Output downloading is always manual (user explicitly requests via UI)
+
+**Result**: Jobs display current SLURM status with accurate timestamps. Database and server metadata stay synchronized.
 
 ---
 
 ### 4. Job Completion and Results Retrieval Automation Chain
 
-**Trigger**: Manual user request to preserve completed job results (NOT automatic)
-**Purpose**: Copy important output files from temporary scratch directory to permanent project directory for long-term storage
+**Trigger**: Automatic when job status changes to COMPLETED (or manual user request)
+**Purpose**: Mirror scratch directory back to project directory to preserve all results
 **Status**: ✅ **IMPLEMENTED** in `src-tauri/src/automations/job_completion.rs`
 
 #### Implementation:
 
-The `execute_job_completion_with_progress` function preserves critical simulation results:
+The `execute_job_completion_with_progress` function syncs all results back to permanent storage:
 
 1. **Validate Job Status**:
    - Verify job is in COMPLETED state
    - Ensure both project and scratch directories exist
 
-2. **Create Results Directory**:
-   - Create `{project_dir}/results/` directory for preserved files
+2. **Mirror Scratch Back to Project** (using rsync):
+   - Source: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/`
+   - Destination: `/projects/$USER/namdrunner_jobs/{job_id}/`
+   - Uses single `rsync -az` command to sync entire directory structure
+   - **Delta sync**: Only copies files that changed or were added (outputs)
+   - Preserves all job results:
+     - `outputs/` - All NAMD trajectory files, final coordinates, restart files
+     - Updated `job_info.json` - Final job metadata with completion status
+     - Any log files written during execution
+   - **Why rsync**: Efficient delta transfer only copies new/changed files (typically just the outputs), much faster than scanning and copying individual files
 
-3. **Scan and Copy Critical Files**:
-   - **NAMD trajectory files**: `*.dcd`, `*.coor`, `*.vel`, `*.xsc`
-   - **NAMD output logs**: `namd_output.log`, `*.energy`, `*.restart.*`
-   - **SLURM output logs**: `*.out`, `*.err`
-   - **Checkpoint files**: `*.restart`, `*.cpt`, `*.chk`
-   - **Final coordinates**: `final.coor`, `final.vel`, `final.xsc`
+3. **Update Job Metadata**:
+   - Mark job as results-synced in database
+   - Update completion timestamp
+   - Save updated job_info.json to project directory
 
-4. **Optimization**:
-   - Batches find operations per category to reduce SSH round-trips
-   - Uses secure file copy commands with proper path escaping
-   - Tracks file count and total size for user feedback
-
-5. **Create Completion Summary**:
-   - Generates summary with job details, files preserved, and timestamps
-   - Stores summary as `completion_summary.txt` in results directory
-
-**IMPORTANT**: This is **NOT** automatic on job completion. Results preservation is triggered manually by user request. Scratch directories remain until explicit cleanup or 90-day auto-purge.
-
-**Result**: Critical simulation results are preserved in `/projects/$USER/namdrunner_jobs/{job_id}/results/` with completion summary
+**Result**: All simulation results are synced from scratch to permanent project storage in `/projects/$USER/namdrunner_jobs/{job_id}/outputs/`. Mirrored structure ensures consistency. rsync's delta algorithm makes this efficient even for large result sets.
 
 ---
 

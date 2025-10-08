@@ -20,7 +20,7 @@
   - [VM Setup (Linux/Fedora)](#vm-setup-linuxfedora)
   - [Rust Builds](#rust-builds)
 - [Developer Standards & Project Philosophy](#developer-standards--project-philosophy)
-  - [Quick Start - Top 5 Critical Rules](#quick-start---top-5-critical-rules)
+  - [Quick Start - Top 7 Critical Rules](#quick-start---top-7-critical-rules)
   - [Core Architectural Principles](#core-architectural-principles)
     - [1. Direct Code Patterns](#1-direct-code-patterns)
     - [2. Result<T> Error Handling](#2-result<t>-error-handling)
@@ -274,22 +274,23 @@ impl ConnectionManager {
 **Never Suppress Errors**: Don't use console.warn() or hardcoded fallbacks.
 ```typescript
 // ❌ Silent failure
-function sanitizeJobId(jobId: string): string {
+async function createJob(params: CreateJobParams): Promise<string> {
   try {
-    return pathResolver.sanitizeJobId(jobId);
+    const result = await client.createJob(params);
+    return result.job_id;
   } catch (error) {
-    console.warn('Sanitization failed, using fallback');
+    console.warn('Job creation failed, using placeholder');
     return `job_${Date.now()}`;
   }
 }
 
 // ✅ Proper error handling
-function sanitizeJobId(jobId: string): Result<string> {
+async function createJob(params: CreateJobParams): Promise<Result<string>> {
   try {
-    const sanitized = pathResolver.sanitizeJobId(jobId);
-    return { success: true, data: sanitized };
+    const result = await client.createJob(params);
+    return { success: true, data: result.job_id };
   } catch (error) {
-    return { success: false, error: toConnectionError(error, 'Validation') };
+    return { success: false, error: toConnectionError(error, 'JobCreation') };
   }
 }
 ```
@@ -350,11 +351,19 @@ export function handleFileType(type: string, action: 'icon' | 'label' | 'color')
 ```
 
 **Configuration Centralization**: Keep all related configuration in one place.
-```typescript
+```rust
 // ✅ Single source of truth
-// In cluster-config.ts
-export const PARTITIONS: PartitionSpec[] = [/* ... */];
-export function validateResourceRequest(cores, memory, walltime, partition, qos) { /* ... */ }
+// In cluster.rs (backend)
+pub fn get_cluster_capabilities() -> ClusterCapabilities {
+  ClusterCapabilities {
+    partitions: get_all_partitions(),
+    qos_options: get_all_qos_options(),
+    // ...
+  }
+}
+
+// Frontend caches backend data in stores/clusterConfig.ts
+// for reactive UI access
 
 // ❌ Scattered configuration
 // In Component A: const limits = { amilan: { maxCores: 64 } };
@@ -376,7 +385,8 @@ export function validateResourceRequest(cores, memory, walltime, partition, qos)
 - **Mixed Concerns**: UI logic in business logic, networking in data persistence
 
 #### Frontend-Backend Separation Anti-Patterns
-- **Business Logic in Frontend**: Validation, resource calculations, cluster configuration belongs in Rust backend
+- **Business Logic in Frontend**: ALL validation, resource calculations, and cluster configuration belongs in Rust backend
+- **Frontend Validation**: Frontend has NO validation logic - it's purely a display layer that calls backend for all validation
 - **Stub Implementations**: Functions marked with `// TODO: implement` or using mock data must be completed before PR
 - **Calculation Functions in UI Layer**: Cost estimation, queue time, resource validation belong in backend
 - **Connection State Not Checked**: UI actions must disable when disconnected from server
@@ -462,7 +472,7 @@ println!("[SLURM] Submitting job: {}", job_name);
 > **For SSH/SFTP service patterns and testing approaches**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
 
 ### 3. Path Management
-Use PathResolver for all path operations. Never construct paths directly.
+Use centralized path validation functions from `validation::paths` module. Never construct paths directly. See `src-tauri/src/validation.rs` for safe path utilities like `project_directory()`, `scratch_directory()`, and `job_script_path()`.
 
 ### 4. State Management
 Use state machines for complex state management with validated transitions.
@@ -519,6 +529,11 @@ Use state machines for complex state management with validated transitions.
 }
 ```
 
+**Optional Property Convention**: With `exactOptionalPropertyTypes: true`, follow these patterns:
+- **`Result<void>` returns**: Use `{ success: true, data: undefined }` - this is correct for void types
+- **Optional object properties**: Use conditional assignment: `if (value !== undefined) obj.prop = value;`
+- Never assign `undefined` directly to optional properties (e.g., `prop?: string`) - either conditionally assign or omit the property
+
 ### Rust Quality Tools
 - `clippy` with `-D warnings` (deny all warnings)
 - `rustfmt` for consistent formatting
@@ -527,23 +542,27 @@ Use state machines for complex state management with validated transitions.
 ### CI/CD and Cross-Platform Builds
 
 #### GitHub Actions Workflow
-The CI pipeline (`.github/workflows/ci.yml`) includes:
+The CI pipeline (`.github/workflows/ci.yml`) currently includes:
 
-- **Frontend Tests**: TypeScript checking, ESLint, Vitest unit tests
-- **Backend Tests**: Rust formatting, Clippy, Cargo tests
-- **Linux Builds**: AppImage and .deb packages with E2E testing
-- **Windows Builds**: MSI and NSIS installers with verification
-- **Build Verification**: Automated artifact checking and summary reports
+- **Basic Linting**: ESLint and TypeScript checking (`npm run lint`, `npm run check`)
+- **Rust Checks**: Formatting (`cargo fmt --check`) and Clippy (`cargo clippy -D warnings`)
+- **Windows Builds**: Automated MSI and NSIS installer generation for Windows deployment target
+- **Build Artifacts**: Automated artifact upload with 30-day retention
+
+**Note**: The CI workflow is currently limited to Windows builds with basic linting. Full test suite runs locally only:
+- Frontend unit tests: Run `npm test` locally (Vitest with jsdom)
+- Backend unit tests: Run `cargo test` locally in `src-tauri/`
+- E2E tests: Run manually using test scripts in `tests/ui/`
 
 #### Cross-Platform Support
 - **Rust Code**: Uses `cfg!(windows)` conditionals for platform-specific paths
 - **Dependencies**: OpenSSL static linking on Windows, bundled SQLite
 - **Tauri Configuration**: Platform-specific bundle settings in `tauri.conf.json`
-- **Testing**: Preserves Linux E2E and agent testing while adding Windows builds
+- **Primary Platform**: Development on Linux, deployment target is Windows
 
 #### Deployment
-- **Linux**: Primary development and testing platform
-- **Windows**: Automated builds via GitHub Actions
+- **Windows**: Automated builds via GitHub Actions (primary deployment target)
+- **Linux**: Development and testing platform only
 - **Release Process**: See `docs/WINDOWS_BUILD.md` for configuration
 
 For platform support, build requirements, and system constraints, see [`docs/ARCHITECTURE.md#architecture-principles--constraints`](ARCHITECTURE.md#architecture-principles--constraints).
@@ -569,17 +588,18 @@ This guideline document should be treated as living documentation that evolves w
 Test our logic, not external libraries. Focus on what NAMDRunner does, not how ssh2 or other crates work.
 
 ### 3-Tier Testing Architecture
-- **Tier 1 (Frontend)**: TypeScript/Svelte unit tests - UI logic, stores, client-side validation
-- **Tier 2 (Backend)**: Rust unit tests - command parsing, error mapping, path handling, credential management
+- **Tier 1 (Frontend)**: TypeScript/Svelte unit tests - UI logic, stores, state management
+- **Tier 2 (Backend)**: Rust unit tests - command parsing, error mapping, path handling, credential management, validation
 - **Tier 3 (Integration)**: Full workflows via Playwright/WebdriverIO
 
 ### What We Test
-✅ **Security validation** - malicious inputs, path traversal, credential safety
+✅ **Security validation** - malicious inputs, path traversal, credential safety (backend only)
+✅ **Resource validation** - cluster limits, QoS rules, partition constraints (backend only)
 ✅ **File path handling** - directory generation, safety checks
 ✅ **Command parsing** - SLURM output parsing, job state mapping
 ✅ **Error classification** - which errors are retryable vs fatal
 ✅ **User workflows** - complete job lifecycle (create → submit → delete)
-✅ **Frontend business logic** - utility functions, state management, form validation
+✅ **Frontend display logic** - utility functions, state management, display formatting
 ✅ **UI interactions** - button click handlers, form submissions, state changes (without full E2E)
 ✅ **Component behavior** - component state changes, event handling, prop validation
 
@@ -642,7 +662,8 @@ npm run test:ui                    # Standard debug toolkit (non-headless)
 #### Standard testing commands
 ```bash
 # Frontend testing
-npm test                # Vitest unit tests
+npm test                # Vitest unit tests (watch mode)
+npm run test:run        # Vitest unit tests (run once)
 npm run test:ui         # UI testing with Playwright
 
 # Backend testing
@@ -652,6 +673,8 @@ cargo clippy            # Rust linting
 # Full integration testing
 npm run test:e2e        # Desktop E2E testing (Linux)
 ```
+
+**Before Completing Code Work**: Always run `npm run test:run` and `npm run check` to verify unit tests pass and types are correct. The production build command (`npm run build:check`) automatically runs these checks before building.
 
 ### Why This Works
 Scientists need reliability over performance. A desktop app that safely handles credentials and prevents security vulnerabilities is more valuable than one optimized for millisecond performance differences.
@@ -663,23 +686,11 @@ Scientists need reliability over performance. A desktop app that safely handles 
 > **For complete mock implementations and testing patterns**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
 
 ### Repository Structure
-```
-/src/                     # Svelte + TS components (no Tauri in here)
-/src/lib/ports/coreClient.ts
-/src/lib/ports/coreClient-tauri.ts
-/src/lib/ports/coreClient-mock.ts
-/src/lib/domain/          # pure logic (parsers, mapping, validation)
-/src/lib/fixtures/        # deterministic UI fixtures for tests
-/src-tauri/               # Rust: ssh/sftp/slurm/sqlite/templating + commands
-/tests/                   # Vitest + Svelte Testing Library
-/tests/e2e/               # Linux WebDriver specs (real desktop)
-/tests/ui/                # UI testing with agent debug toolkit
-/ci/                      # workflows, scripts (xvfb, deps)
-```
+For a detailed explanation of the directory layout and what each folder contains, **see [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)**.
 
 ## UX Requirements
 
-For UI/UX requirements and design specifications, see [DESIGN.md](DESIGN.md).
+For UI/UX requirements and design specifications, see [`docs/DESIGN.md`](DESIGN.md).
 
 ## References
 

@@ -51,8 +51,6 @@ To manually check on job status or manage files directly on the cluster:
 ```bash
 # Start a new tmux session
 tmux
-# Create new screen tab (ctrl+b, then c)
-# Move to next/previous tab (ctrl+b, then n or p)
 # Split screen horizontally (ctrl+b, then ")
 # Split screen vertically (ctrl+b, then %)
 # Switch between panes (ctrl+b, then arrow keys)
@@ -60,13 +58,13 @@ tmux
 
 ### Checking Job Directories
 ```bash
-# Check scratch workspace (active jobs, 90-day purge)
-cd /scratch/alpine/<username>/namdrunner_jobs/
+# Check projects directory (permanent storage)
+cd /projects/<username>/namdrunner_jobs/
 pwd # confirm location with 'print working directory'
 ls -lah
 
-# Check projects directory (permanent storage)
-cd /projects/<username>/namdrunner_jobs/
+# Check scratch workspace (active jobs, 90-day purge)
+cd /scratch/alpine/<username>/namdrunner_jobs/
 pwd # confirm location with 'print working directory'
 ls -lah
 ```

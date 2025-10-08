@@ -131,9 +131,51 @@ scontrol show job <job_id>
 sacct -j <job_id> --format=ALL
 ```
 
+### Batch Status Queries
+
+When querying status for multiple jobs, batch queries are significantly more efficient than individual queries:
+
+```bash
+# Efficient: Single query for multiple jobs (comma-separated IDs)
+squeue --job 12345,12346,12347,12348 --Format=jobid,state --noheader
+
+# Inefficient: Multiple individual queries
+squeue --job 12345 --Format=jobid,state --noheader
+squeue --job 12346 --Format=jobid,state --noheader
+squeue --job 12347 --Format=jobid,state --noheader
+```
+
+**Performance Comparison:**
+- 10 jobs with individual queries: 10 SSH commands
+- 10 jobs with batch query: 1 SSH command
+
+**Two-Stage Query Pattern:**
+
+For jobs that may have completed, use a two-stage approach:
+
+1. **Stage 1**: Query `squeue` for all jobs (running/pending show up)
+2. **Stage 2**: Query `sacct` for jobs not found in `squeue` (completed jobs)
+
+```bash
+# Stage 1: Check active jobs
+squeue --job 12345,12346,12347 --Format=jobid,state --noheader
+
+# Stage 2: Check completed jobs (not in squeue results)
+sacct -j 12346,12347 --format=JobID,State --noheader
+```
+
+**When to Use Batch Queries:**
+- ✅ Syncing status for multiple jobs (job sync automation)
+- ✅ Dashboard updates showing many jobs
+- ✅ Periodic polling of job status
+- ❌ Single job status check (no benefit)
+- ❌ Interactive user queries (adds complexity)
+
 ## Job Management
 
 ### Cancel Job
+
+Basic cancellation:
 ```bash
 # Cancel single job
 scancel <job_id>
@@ -144,6 +186,50 @@ scancel -u $USER
 # Cancel with state filter
 scancel -u $USER --state=PENDING
 ```
+
+**Job Cancellation Workflow:**
+
+When canceling jobs programmatically (e.g., during job deletion), use conditional cancellation:
+
+```rust
+// Only cancel if job is actively running or pending
+if matches!(job_info.status, JobStatus::Pending | JobStatus::Running) {
+    if let Some(slurm_job_id) = &job_info.slurm_job_id {
+        slurm_sync.cancel_job(slurm_job_id).await?;
+    }
+}
+```
+
+**Why conditional?**
+- Completed/failed jobs have no SLURM state to cancel
+- Avoids unnecessary SSH commands
+- More explicit about intent
+
+**Idempotent Cancellation:**
+
+Use `--quiet` flag to avoid errors when job is already completed:
+
+```bash
+# Silent success if job already finished
+scancel --quiet <job_id>
+```
+
+**Error Handling:**
+
+- `scancel` without `--quiet` returns non-zero exit code for completed jobs
+- With `--quiet`, it returns success (exit code 0) regardless of job state
+- Use `--quiet` for idempotent operations (e.g., cleanup scripts)
+- Don't use `--quiet` when you need to detect "job not found" errors
+
+**Integration with Delete Job:**
+
+When user deletes a job via UI:
+1. Check job status (Pending/Running/Completed)
+2. If Pending or Running: call `scancel` to prevent orphaned cluster jobs
+3. Delete from local database
+4. Optionally delete remote files
+
+This prevents the critical bug where deleted jobs continue consuming cluster resources.
 
 ### Hold/Release Jobs
 ```bash

@@ -249,14 +249,21 @@ NAMDRunner implements a comprehensive job lifecycle automation system that orche
 ### Architectural Overview
 
 **Clean Separation of Concerns**:
-- **Frontend**: Svelte components with TypeScript, reactive stores, and comprehensive IPC client
+- **Frontend**: Svelte components with TypeScript - pure UI layer with no business logic or validation
+  - Reactive stores cache backend data for instant UI updates
+  - All validation happens in backend (single source of truth)
   > **For UI/UX design patterns**, see [`docs/DESIGN.md`](DESIGN.md)
-- **Backend**: Rust command handlers with SSH/SFTP services and security validation
+- **Backend**: Rust command handlers - all business logic, validation, and cluster configuration
+  - Cluster capabilities (partitions, QOS, billing) in `cluster.rs`
+  - Resource validation in `validation/job_validation.rs`
+  - Input sanitization and security validation in `validation.rs`
+  - SSH/SFTP operations with full console logging
+  - Metadata management in `ssh/metadata.rs`
 - **IPC Layer**: Strongly-typed communication layer between frontend and backend
 - **Demo Mode Integration**: User-selectable mode switching with persistent preference
-- **Development**: Mock implementations enable offline development
+- **Development**: Self-contained mock client enables offline development
 
-**Demo Mode Architecture**: The application supports seamless switching between demo mode (rich mock data for demonstrations) and real mode (full cluster integration) through a user toggle in the connection dropdown. Mode preference persists across sessions via localStorage and synchronizes with the backend for consistent behavior.
+**Demo Mode Architecture**: The application supports seamless switching between demo mode (rich mock data for demonstrations) and real mode (full cluster integration) through a user toggle in the connection dropdown. Mode preference persists across sessions via localStorage.
 
 ### Module Structure
 
@@ -273,19 +280,11 @@ src/
 │   ├── types/                   # TypeScript type definitions
 │   │   ├── api.ts               # Core API types matching Rust types
 │   │   ├── connection.ts        # Connection state and session types
-│   │   ├── errors.ts            # Error handling types
-│   │   └── errorUtils.ts        # Error utility functions
-│   ├── services/                # Frontend business logic services
-│   │   ├── connectionState.ts   # Observable connection state management
-│   │   ├── sessionManager.ts    # Session lifecycle and validation
-│   │   ├── pathResolver.ts      # Centralized path generation
-│   │   ├── serviceContainer.ts  # Service container
-│   │   ├── sftp.ts              # SFTP service wrapper
-│   │   ├── ssh.ts               # SSH service wrapper
-│   │   └── index.ts             # Service exports
-│   ├── stores/                  # Reactive state management
+│   │   └── errors.ts            # Error handling types
+│   ├── stores/                  # Reactive state management (caches backend data)
 │   │   ├── session.ts           # Session state with reactive updates
 │   │   ├── jobs.ts              # Job state management with real-time updates
+│   │   ├── clusterConfig.ts     # Cluster capabilities cache (from backend)
 │   │   ├── ui.ts                # UI state and preferences
 │   │   └── session.test.ts      # Store unit tests
 │   ├── components/              # Svelte UI components
@@ -302,26 +301,17 @@ src/
 │   │   ├── jobs/                # Job listing and management components
 │   │   ├── pages/               # Page-level components
 │   │   ├── ui/                  # Reusable UI components
-│   │   │   ├── Progress.svelte      # Progress indicators
-│   │   │   ├── FormField.svelte     # Form input components
-│   │   │   └── ResourceUsage.svelte # Resource usage displays
 │   │   └── AppShell.svelte      # Main application shell
-│   ├── data/                    # Static data and configuration
+│   ├── types/                   # Additional TypeScript types
+│   │   └── cluster.ts           # Cluster capability types (matches backend)
 │   ├── styles/                  # Global styles and themes
 │   ├── utils/                   # Utility functions
-│   │   └── file-helpers.ts      # File handling utilities
+│   │   └── file-helpers.ts      # File display formatting utilities
 │   └── test/                    # Testing infrastructure
 │       ├── fixtures/            # Test data and scenarios
 │       │   ├── testDataManager.ts # Test data management
-│       │   ├── sessionFixtures.ts # Session test data
 │       │   ├── jobFixtures.ts     # Job test data
-│       │   ├── fileFixtures.ts    # File test data
 │       │   └── slurmFixtures.ts   # SLURM test data
-│       ├── services/            # Unit tests for business logic
-│       │   ├── connectionState.test.ts
-│       │   └── sessionManager.test.ts
-│       ├── utils/               # Test utilities
-│       │   └── connectionMocks.ts # Mock connection utilities
 │       └── setup.ts             # Test setup configuration
 │           > **For testing tools and debugging infrastructure**, see [`docs/reference/agent-development-tools.md`](reference/agent-development-tools.md)
 ├── routes/
@@ -339,7 +329,9 @@ src-tauri/
 │   ├── lib.rs                   # Tauri app configuration and command registration
 │   ├── commands/                # Tauri IPC command handlers
 │   │   ├── mod.rs              # Command module exports
-│   │   ├── connection.rs       # Connection management and SSH/SFTP commands
+│   │   ├── connection.rs       # SSH connection lifecycle commands
+│   │   ├── cluster.rs          # Cluster configuration and validation commands
+│   │   ├── system.rs           # System configuration commands
 │   │   ├── jobs.rs             # Job lifecycle commands (create/submit/sync/delete/complete)
 │   │   └── files.rs            # File management commands
 │   ├── automations/            # Job lifecycle automation system
@@ -354,6 +346,7 @@ src-tauri/
 │   │   ├── manager.rs          # Connection lifecycle and directory management
 │   │   ├── commands.rs         # SSH command execution and parsing
 │   │   ├── sftp.rs             # File transfer operations
+│   │   ├── metadata.rs         # Job metadata upload utilities
 │   │   ├── errors.rs           # SSH error mapping and classification
 │   │   └── test_utils.rs       # Development utilities
 │   ├── slurm/                  # SLURM integration
@@ -362,20 +355,23 @@ src-tauri/
 │   │   ├── script_generator.rs # SLURM script generation
 │   │   └── status.rs           # Job status synchronization
 │   ├── database/               # Data persistence layer
-│   │   ├── mod.rs              # Database module with SQLite schema and operations
-│   │   └── helpers.rs          # Database helper functions
+│   │   └── mod.rs              # Database module with SQLite schema and operations
 │   ├── types/                  # Rust type definitions
 │   │   ├── mod.rs              # Type module exports
 │   │   ├── core.rs             # Core domain types (JobInfo, SessionInfo, ApiResult)
 │   │   └── commands.rs         # Command parameter and result types
+│   ├── validation/             # Validation system
+│   │   ├── mod.rs              # Input sanitization and path safety
+│   │   └── job_validation.rs   # Resource and business logic validation
+│   ├── demo/                   # Demo mode infrastructure
+│   │   ├── mod.rs              # Demo module exports
+│   │   ├── mode.rs             # Demo/real mode switching
+│   │   └── state.rs            # Demo state management
 │   ├── logging.rs              # Rust-to-Frontend logging bridge system
 │   ├── retry.rs                # Exponential backoff retry implementation
-│   ├── validation.rs           # Input sanitization and path safety
 │   ├── security.rs             # Secure password handling with SecStr
-│   ├── mode_switching.rs       # Demo/real mode switching patterns
-│   ├── mock_state.rs           # Mock state management for development
-│   ├── security_tests.rs       # Security validation tests (29 tests)
-│   └── integration_tests.rs    # Integration test suite
+│   ├── cluster.rs              # Cluster capabilities and configuration
+│   └── security_tests.rs       # Security validation tests
 ├── Cargo.toml                  # Dependencies (ssh2, secstr, rusqlite, anyhow, chrono)
 └── tauri.conf.json            # Tauri configuration
 ```
@@ -392,21 +388,21 @@ Core types defined in `src/lib/types/api.ts`:
 type ConnectionState = 'Disconnected' | 'Connecting' | 'Connected' | 'Expired';
 type JobStatus = 'CREATED' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
-// Job management types
+// Job management types (IPC communication uses snake_case)
 interface CreateJobParams {
-  jobName: string;
-  namdConfig: NAMDConfig;
-  slurmConfig: SlurmConfig;
-  inputFiles: InputFile[];
+  job_name: string;
+  namd_config: NAMDConfig;
+  slurm_config: SlurmConfig;
+  input_files: InputFile[];
 }
 
 interface JobInfo {
-  jobId: JobId;
-  jobName: string;
+  job_id: JobId;
+  job_name: string;
   status: JobStatus;
-  slurmJobId?: SlurmJobId;
-  createdAt: Timestamp;
-  updatedAt?: Timestamp;
+  slurm_job_id?: SlurmJobId;
+  created_at: Timestamp;
+  updated_at?: Timestamp;
   // ... additional fields
 }
 ```
@@ -468,6 +464,7 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
   - Connection management: `src-tauri/src/ssh/manager.rs::ConnectionManager` (singleton with retry logic)
   - Authentication: `src-tauri/src/ssh/connection.rs::SSHConnection::connect()` (password-only, SecurePassword)
   - File operations: `src-tauri/src/ssh/sftp.rs::SFTPOperations` (upload/download with progress tracking)
+  - Metadata management: `src-tauri/src/ssh/metadata.rs::upload_job_metadata()` (centralized job metadata uploads)
   - Directory operations: `src-tauri/src/ssh/manager.rs::create_directory()` (recursive with validation)
   - Command execution: `src-tauri/src/ssh/commands.rs::CommandExecutor` (SLURM integration)
   - Error handling: `src-tauri/src/ssh/errors.rs` (comprehensive categorization and retry logic)
@@ -480,24 +477,24 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
 - **Database Layer** - SQLite persistence with status history tracking
   > **For complete database schemas, implementation patterns, and data management details**, see [`docs/DB.md`](DB.md)
   - Main database: `src-tauri/src/database/mod.rs::NAMDRunnerDatabase`
-  - Helpers: `src-tauri/src/database/helpers.rs`
-- **Security Validation** - Input sanitization and path safety throughout
+- **Validation System** - Comprehensive input sanitization and business logic validation
   > **For security requirements and implementation patterns**, see [`docs/CONTRIBUTING.md#security-requirements`](CONTRIBUTING.md#security-requirements)
-  - Input validation: `src-tauri/src/validation.rs::input` module
-  - Path safety: `src-tauri/src/validation.rs::paths` module
-  - Shell escaping: `src-tauri/src/validation.rs::shell` module
+  - Input validation: `src-tauri/src/validation/mod.rs::input` module (sanitization, path traversal prevention)
+  - Path safety: `src-tauri/src/validation/mod.rs::paths` module
+  - Shell escaping: `src-tauri/src/validation/mod.rs::shell` module
+  - Resource validation: `src-tauri/src/validation/job_validation.rs::validate_resource_allocation()` (cluster limits, QoS rules)
 
 **Frontend (TypeScript/Svelte):**
 - **IPC Communication** - Strongly-typed commands with consistent error handling
   > **For detailed IPC interfaces and command specifications**, see [`docs/API.md`](API.md)
-  - Main client: `src/lib/ports/coreClient.ts::CoreClient` interface
-  - Tauri implementation: `src/lib/ports/coreClient-tauri.ts`
-  - Mock implementation: `src/lib/ports/coreClient-mock.ts`
-- **Demo Mode Support** - Seamless switching between mock and real cluster operations
-  - Client factory: `src/lib/ports/clientFactory.ts::createClient()`
-- **Reactive State Management** - Real-time job status updates and progress tracking
-  - Job state: `src/lib/stores/jobs.ts`
-  - Session state: `src/lib/stores/session.ts`
+  - Main client: `src/lib/ports/coreClient.ts::ICoreClient` interface
+  - Tauri implementation: `src/lib/ports/coreClient-tauri.ts::TauriCoreClient` (production)
+  - Mock implementation: `src/lib/ports/coreClient-mock.ts::MockCoreClient` (self-contained for demo mode)
+  - Client factory: `src/lib/ports/clientFactory.ts::CoreClientFactory` (mode switching)
+- **Reactive State Management** - UI state caching backend data
+  - Job state: `src/lib/stores/jobs.ts` (caches job list, handles real-time updates)
+  - Session state: `src/lib/stores/session.ts` (connection status, session info)
+  - Cluster config: `src/lib/stores/clusterConfig.ts` (caches backend cluster capabilities)
 - **Component Architecture** - Focused, composable UI components
   > **For UI/UX design patterns and component specifications**, see [`docs/DESIGN.md`](DESIGN.md)
   - App shell: `src/lib/components/AppShell.svelte`

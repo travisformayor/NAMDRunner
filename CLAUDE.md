@@ -98,7 +98,7 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 
 ### Python Reference Usage
 - **SQLite schema** - Adapt Python patterns, improve and modernize as needed
-- **JSON metadata format** - Use schema_version field for current implementation tracking
+- **JSON metadata format** - Serialized from Rust `JobInfo` struct (see `docs/DB.md`)
 - **Directory structure** - `/projects/$USER/namdrunner_jobs/` pattern worked well
 - **SLURM commands** - Use proven working patterns from Python as starting point
 

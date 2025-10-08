@@ -36,8 +36,34 @@ This document defines all interfaces and data contracts for NAMDRunner, consolid
 6. **Never log or persist passwords** - memory only
 7. **Validate SSH connection** before SLURM operations
 8. **Use working directory pattern** to identify NAMDRunner jobs: `/scratch/alpine/$USER/namdrunner_jobs/*`
-9. **IPC parameter serialization**: Tauri commands expect specific parameter structures - `connect_to_cluster` takes `{params: {host, username, password}}` and `set_app_mode` takes `{isDemo: boolean}`
-10. **Demo mode synchronization**: Frontend mode preference must be synced to backend via `set_app_mode` command with `{isDemo: boolean}` parameter
+9. **IPC parameter naming convention**: **All Tauri commands use `#[tauri::command(rename_all = "snake_case")]`** to maintain consistent naming across the API boundary. This ensures frontend and backend use identical parameter names (snake_case), eliminating conversion logic and improving code searchability.
+
+   **Why this matters**: By default, Tauri v2 automatically converts Rust's snake_case parameters to JavaScript's camelCase convention. For example, a Rust parameter `job_id: String` would normally require JavaScript to pass `{jobId: "test1_123"}`. This creates confusion because:
+   - The same concept has different names in frontend vs backend
+   - Searching for `job_id` across the codebase misses frontend uses
+   - Developers must mentally translate between naming conventions
+   - Conversion bugs can occur (as seen with the submit_job parameter order issue)
+
+   **Our approach**: We add `rename_all = "snake_case"` to every command, so both sides use the same names:
+   ```rust
+   // Rust backend
+   #[tauri::command(rename_all = "snake_case")]
+   pub async fn validate_resource_allocation(
+       partition_id: String,
+       qos_id: String
+   ) -> ValidationResult
+
+   // TypeScript frontend - same names!
+   invoke('validate_resource_allocation', {
+       partition_id: "amilan",
+       qos_id: "normal"
+   })
+   ```
+
+   This consistency was a key goal of Phase 6.4, where 49 `#[serde(rename)]` attributes were removed for the same reason.
+
+10. **IPC parameter serialization for structs**: Commands that accept struct parameters (like `connect_to_cluster`) expect the struct wrapped: `{params: {host, username, password}}`. Commands with individual parameters send them directly: `{job_id: "job_001"}`.
+11. **Demo mode synchronization**: Frontend mode preference must be synced to backend via `set_app_mode` command with `{is_demo: boolean}` parameter
 
 These patterns are proven to work with the CURC Alpine cluster and provide the foundation for reliable SLURM integration in the Tauri implementation.
 
@@ -68,9 +94,12 @@ type Timestamp = string;    // ISO 8601 format
 ```typescript
 interface IApplicationCommands {
   // Set application mode (demo/real)
-  setAppMode(isDemo: boolean): Promise<void>;
+  set_app_mode(is_demo: boolean): Promise<{success: boolean, data?: string, error?: string}>;
 }
 ```
+
+**Actual Rust Command**: `set_app_mode(is_demo: bool) -> ApiResult<String>`
+Location: [src-tauri/src/commands/system.rs](../src-tauri/src/commands/system.rs)
 
 ## Connection Management Commands
 
@@ -78,13 +107,21 @@ interface IApplicationCommands {
 ```typescript
 interface IConnectionCommands {
   // Establish SSH connection to cluster
-  connect(host: string, username: string, password: string): Promise<ConnectResult>;
+  connect_to_cluster(params: ConnectParams): Promise<ConnectResult>;
 
   // Close SSH connection
   disconnect(): Promise<DisconnectResult>;
 
   // Check current connection status
-  getConnectionStatus(): Promise<ConnectionStatusResult>;
+  get_connection_status(): Promise<ConnectionStatusResult>;
+
+  // Get cluster capabilities (partitions, QoS options, etc.)
+  get_cluster_capabilities(): Promise<ApiResult<ClusterCapabilities>>;
+
+  // Helper functions for cluster resource planning
+  suggest_qos_for_partition(walltime_hours: number, partition_id: string): Promise<string>;
+  estimate_queue_time_for_job(cores: number, partition_id: string): Promise<string>;
+  calculate_job_cost(cores: number, walltime_hours: number, has_gpu: boolean, gpu_count: number): Promise<number>;
 }
 
 interface ConnectResult {
@@ -110,93 +147,134 @@ interface ConnectionStatusResult {
     connected_at: Timestamp;
   };
 }
+
+interface GetClusterCapabilitiesResult {
+  success: boolean;
+  data?: ClusterCapabilities;
+  error?: string;
+}
+
+interface ClusterCapabilities {
+  partitions: PartitionSpec[];
+  qos_options: QosSpec[];
+  job_presets: JobPreset[];
+  billing_rates: BillingRates;
+}
+
+// See src/lib/types/cluster.ts for complete type definitions
 ```
 
 
 ## Job Management Commands
 
 ### IPC Interface
+
+**Important**: All command parameters use snake_case naming per Implementation Note #9. Example invocation:
+```typescript
+// Correct - snake_case matches Rust backend
+await invoke('submit_job', { job_id: "test1_123" });
+
+// Wrong - would fail with "missing required key job_id"
+await invoke('submit_job', { jobId: "test1_123" });
+```
+
 ```typescript
 interface IJobCommands {
   // Create new job (local only, not submitted yet)
   createJob(params: CreateJobParams): Promise<CreateJobResult>;
-  
+
   // Submit job to SLURM cluster
-  submitJob(jobId: JobId): Promise<SubmitJobResult>;
-  
+  submitJob(job_id: JobId): Promise<SubmitJobResult>;
+
   // Get status of specific job
-  getJobStatus(jobId: JobId): Promise<JobStatusResult>;
-  
+  getJobStatus(job_id: JobId): Promise<JobStatusResult>;
+
   // Get all jobs from local cache
   getAllJobs(): Promise<GetAllJobsResult>;
-  
+
   // Sync job statuses with cluster
   syncJobs(): Promise<SyncJobsResult>;
-  
+
+  // Discover jobs from server and import to local database
+  discoverJobs(): Promise<DiscoverJobsResult>;
+
   // Delete job (local and optionally remote)
-  deleteJob(jobId: JobId, deleteRemote: boolean): Promise<DeleteJobResult>;
+  deleteJob(job_id: JobId, delete_remote: boolean): Promise<DeleteJobResult>;
+
+  // Complete job and sync results from scratch directory
+  completeJob(job_id: JobId): Promise<CompleteJobResult>;
+
+  // Validate resource allocation for cluster constraints
+  validate_resource_allocation(cores: number, memory: string, walltime: string, partition_id: string, qos_id: string): Promise<ValidationResult>;
 }
 ```
+
+**Note**: Command names use `snake_case` per Rust convention. The TypeScript client should maintain this naming.
 
 ### Request/Response Types
 ```typescript
 interface CreateJobParams {
-  jobName: string;
-  namdConfig: {
+  job_name: string;
+  namd_config: {
     steps: number;
     temperature: number;
     timestep: number;
     outputname: string;
-    dcdFreq?: number;
-    restartFreq?: number;
+    dcd_freq?: number;
+    restart_freq?: number;
   };
-  slurmConfig: {
+  slurm_config: {
     cores: number;
     memory: string;      // e.g., "16GB"
     walltime: string;    // e.g., "02:00:00"
     partition?: string;  // default: "amilan"
     qos?: string;        // default: "normal"
   };
-  inputFiles: InputFile[];
+  input_files: InputFile[];
 }
 
 interface InputFile {
   name: string;
-  localPath: string;
-  fileType: 'pdb' | 'psf' | 'prm' | 'other';
+  local_path: string;
+  remote_name?: string;
+  file_type?: 'pdb' | 'psf' | 'prm' | 'other';
 }
 
 interface CreateJobResult {
   success: boolean;
-  jobId?: JobId;
+  job_id?: JobId;
   error?: string;
 }
 
 interface SubmitJobResult {
   success: boolean;
-  slurmJobId?: SlurmJobId;
-  submittedAt?: Timestamp;
+  slurm_job_id?: SlurmJobId;
+  submitted_at?: Timestamp;
   error?: string;
 }
 
 interface JobStatusResult {
   success: boolean;
-  jobInfo?: JobInfo;
+  job_info?: JobInfo;
   error?: string;
 }
 
 interface JobInfo {
-  jobId: JobId;
-  jobName: string;
+  job_id: JobId;
+  job_name: string;
   status: JobStatus;
-  slurmJobId?: SlurmJobId;
-  createdAt: Timestamp;
-  updatedAt?: Timestamp;
-  submittedAt?: Timestamp;
-  completedAt?: Timestamp;
-  projectDir?: string;
-  scratchDir?: string;
-  errorInfo?: string;
+  slurm_job_id?: SlurmJobId;
+  created_at: Timestamp;
+  updated_at?: Timestamp;
+  submitted_at?: Timestamp;
+  completed_at?: Timestamp;
+  project_dir?: string;
+  scratch_dir?: string;
+  error_info?: string;
+  namd_config: NAMDConfig;
+  slurm_config: SlurmConfig;
+  input_files: InputFile[];
+  remote_directory: string;
 }
 
 interface GetAllJobsResult {
@@ -207,12 +285,25 @@ interface GetAllJobsResult {
 
 interface SyncJobsResult {
   success: boolean;
-  jobsUpdated: number;
+  jobs_updated: number;
   errors: string[];
+}
+
+interface DiscoverJobsResult {
+  success: boolean;
+  jobs_found: number;
+  jobs_imported: number;
+  error?: string;
 }
 
 interface DeleteJobResult {
   success: boolean;
+  error?: string;
+}
+
+interface CompleteJobResult {
+  success: boolean;
+  job_info?: JobInfo;  // Updated job information after completion
   error?: string;
 }
 ```
@@ -223,25 +314,25 @@ interface DeleteJobResult {
 ```typescript
 interface IFileCommands {
   // Upload files to job directory on cluster
-  uploadJobFiles(jobId: JobId, files: FileUpload[]): Promise<UploadResult>;
-  
+  uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult>;
+
   // Download job output file
-  downloadJobOutput(jobId: JobId, fileName: string): Promise<DownloadResult>;
-  
+  downloadJobOutput(job_id: JobId, file_name: string): Promise<DownloadResult>;
+
   // List files in job directory
-  listJobFiles(jobId: JobId): Promise<ListFilesResult>;
+  listJobFiles(job_id: JobId): Promise<ListFilesResult>;
 }
 
 interface FileUpload {
-  localPath: string;
-  remoteName: string;
+  local_path: string;
+  remote_name: string;
 }
 
 interface UploadResult {
   success: boolean;
-  uploadedFiles?: string[];
-  failedUploads?: Array<{
-    fileName: string;
+  uploaded_files?: string[];
+  failed_uploads?: Array<{
+    file_name: string;
     error: string;
   }>;
 }
@@ -249,16 +340,16 @@ interface UploadResult {
 interface DownloadResult {
   success: boolean;
   content?: string;      // For text files
-  filePath?: string;     // Local path for downloaded file
-  fileSize?: number;
+  file_path?: string;    // Local path for downloaded file
+  file_size?: number;
   error?: string;
 }
 
 interface RemoteFile {
   name: string;
   size: number;
-  modifiedAt: Timestamp;
-  fileType: 'input' | 'output' | 'config' | 'log';
+  modified_at: Timestamp;
+  file_type: 'input' | 'output' | 'config' | 'log';
 }
 
 interface ListFilesResult {

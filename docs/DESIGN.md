@@ -186,7 +186,7 @@ Uploaded Files:
 ┌────────────────────────┐
 │ ● Connected            │
 │ Host: cluster.edu      │
-│ User: jsmith           │
+│ User: <username>       │
 │ Since: 10:30 AM        │
 │ [Disconnect]           │
 └────────────────────────┘
@@ -213,7 +213,7 @@ Uploaded Files:
 │ SSH Console     [Copy All] [Clear] [↓ Hide] │
 │─────────────────────────────────────────────│
 │ $ module load slurm/alpine                  │
-│ $ squeue -u jsmith --format=...             │
+│ $ squeue -u <username> --format=...         │
 │ 12345678|simulation_001|R|01:30:45|...      │
 │ $ sbatch job.sbatch                         │
 │ Submitted batch job 12345679                │
@@ -518,14 +518,14 @@ export const selectedJob = derived(
   export let jobs;
   const dispatch = createEventDispatcher();
 
-  function selectJob(jobId) {
-    dispatch('jobSelect', { jobId });
+  function selectJob(job_id) {
+    dispatch('jobSelect', { job_id });
   }
 </script>
 
-{#each jobs as job (job.id)}
-  <tr on:click={() => selectJob(job.id)}>
-    <td>{job.name}</td>
+{#each jobs as job (job.job_id)}
+  <tr on:click={() => selectJob(job.job_id)}>
+    <td>{job.job_name}</td>
   </tr>
 {/each}
 ```
@@ -536,7 +536,7 @@ export const selectedJob = derived(
   import { selectedJobId } from '$lib/stores/jobs';
 
   function handleJobSelect(event) {
-    $selectedJobId = event.detail.jobId;
+    $selectedJobId = event.detail.job_id;
   }
 </script>
 

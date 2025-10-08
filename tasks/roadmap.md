@@ -290,10 +290,52 @@ See: [phase-6-5-comprehensive-testing.md](tasks/completed/phase-6-5-comprehensiv
 - **Milestone 6.6**: Production-ready deployment with Windows exe and documentation
 - **Single-job MVP ready for users with complete automation workflow and production-quality code**
 
-## Phase 7: Job Restart Feature
+## Phase 7: Production Hardening & Advanced Features
+
+### Milestone 7.1: Request Rate Limiting & Queue Management
+
+**Goal:** Prevent cluster abuse and provide graceful degradation under load
+
+**Current State:**
+- Mutex serialization provides implicit rate limiting (one request at a time)
+- Single SSH connection physically prevents parallel spam
+- No queue depth limits or time-based throttling
+- Adequate for MVP testing, but needs hardening for production
+
+**Implementation:**
+- [ ] **Rate Limiter Module** (`src-tauri/src/ssh/rate_limiter.rs`)
+  - [ ] Configurable requests per second limit (default: 5/sec)
+  - [ ] Configurable max queue depth (default: 20 pending requests)
+  - [ ] Time-based throttling with token bucket algorithm
+  - [ ] Integrates with existing ConnectionManager mutex
+
+- [ ] **Request Deduplication**
+  - [ ] Debounce rapid duplicate requests (same command within 1s)
+  - [ ] Coalesce multiple identical sync requests into single execution
+  - [ ] Track in-flight request signatures to prevent duplicates
+
+- [ ] **Queue Depth Protection**
+  - [ ] Reject new requests when queue depth exceeded
+  - [ ] Return descriptive error: "Too many pending requests, try again in a moment"
+  - [ ] User-facing popup notification via Tauri event system
+  - [ ] Log queue depth metrics for monitoring
+
+**Architecture Pattern:**
+```rust
+// Wrap existing mutex with rate limiter
+pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Result<CommandResult> {
+    self.rate_limiter.wait_for_slot().await?;     // NEW: Rate limit + queue check
+    let conn = self.connection.lock().await;       // EXISTING: Mutex serialization
+    // ... existing command execution
+}
+```
+
+**Why:**
+- Prevents accidental bugs from DOS'ing cluster, but we dont want that event to silently fail so report it in the SSH Console.
+
+### Milestone 7.2: Job Restart Feature
 *Job continuation functionality for single-job model*
 
-### Milestone 7.1: Job Restart Implementation
 - [ ] **Restart Data Model**
   - [ ] Add RestartInfo struct to JobInfo (single-job model extension)
   - [ ] Database schema update for restart_info field
@@ -311,10 +353,11 @@ See: [phase-6-5-comprehensive-testing.md](tasks/completed/phase-6-5-comprehensiv
   - [ ] Resource allocation interface for restart (allow different resources)
   - [ ] Restart job lineage display and tracking
 
-### Milestone 7.2: Advanced Restart Features
+### Milestone 7.3: Advanced Restart Features
 - [ ] **Automatic Restart Configuration**
   - [ ] Automatic restart configuration generation
   - [ ] Intelligent checkpoint interval recommendations
+  - [ ] Resource optimization for restart jobs
 
 ## Post-MVP Enhancement Roadmap
 *Future features beyond single-job restart functionality*

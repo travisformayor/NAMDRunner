@@ -30,10 +30,11 @@ Review for:
 - **Error Handling**: Consistent error patterns, proper user feedback, graceful failures
 - **Architectural Consistency**: Proper separation of concerns, consistent patterns across similar components
 - **Test Coverage**: Missing tests, untested code paths, inadequate test scenarios
+- **Reuse of Existing Implementations**: Always check if a implementation for a feature or utility already exists in the codebase. If so, ensure it is used consistently throughout the project, and refactor any special-case, hacky, or parallel solutions to use the established implementation. Avoid duplicating logic or building new systems in parallel to existing ones—prefer integration and consolidation over reinvention.
 - **Clean Architecture Violations**: Look specifically for these anti-patterns that must be eliminated:
   - **Thin Wrapper Functions**: Functions that just delegate to other functions without adding value
   - **Redundant Fallback Code**: Multiple code paths for the same operation with "backward compatibility" claims
-  - **False Compatibility Layers**: Interfaces claiming "backward compatibility" when no legacy code exists (we never need to worry about backwards compatibility with previous phase work, this is all building the first version, even phase work post-mvp)
+  - **False Compatibility Layers**: Interfaces claiming "backward compatibility" when no legacy code exists
   - **Hardcoded Fallbacks**: Console.warn() and hardcoded paths when proper error handling should be used
 
 ### 3. NAMDRunner-Specific Standards
@@ -201,6 +202,4 @@ Your recommendations should result in:
 - **Enhanced type safety**: Complete TypeScript coverage, proper Rust serde attributes, safe IPC boundaries
 - **Testing architecture compliance**: Focus on business logic testing, predictable mock behavior
 
-**Context Awareness**: Prioritize production readiness improvements over early-stage architectural changes. The automation system, security patterns, and UI design system are mature - focus on consistency and mistakes with these established patterns rather than reimagining them.
-
-Always provide specific, actionable recommendations with clear rationale. Focus on changes that genuinely improve code quality and maintainability rather than stylistic preferences. Consider the effort-to-benefit ratio for each suggestion and prioritize accordingly. Remember that sometimes the code is already well-structured and no significant refactoring is needed.
+Always provide specific, actionable recommendations with clear rationale. Focus on changes that genuinely improve code quality and maintainability rather than stylistic preferences. Remember that sometimes the code is already well-structured and no significant refactoring is needed.
