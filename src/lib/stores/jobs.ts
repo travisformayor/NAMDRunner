@@ -1,180 +1,204 @@
 import { writable, derived } from 'svelte/store';
-import type { Job, JobStatus } from '../types/api';
+import type { JobInfo, JobStatus, CreateJobParams } from '../types/api';
+import { CoreClientFactory } from '../ports/clientFactory';
+import { listen } from '@tauri-apps/api/event';
 
-// Mock job data for UI development and testing
-const mockJobs: Job[] = [
+// Mock job data for UI development and testing - one example of each status
+export const mockJobs: JobInfo[] = [
   {
-    jobId: 'job_001',
-    jobName: 'protein_folding_simulation',
+    job_id: 'job_001',
+    job_name: 'protein_folding_simulation',
     status: 'RUNNING',
-    slurmJobId: '12345678',
-    createdAt: '2024-01-15T09:30:00Z',
-    updatedAt: '2024-01-15T09:35:00Z',
-    submittedAt: '2024-01-15T09:35:00Z',
-    namdConfig: {
+    slurm_job_id: '12345678',
+    created_at: '2024-01-15T09:30:00Z',
+    updated_at: '2024-01-15T09:35:00Z',
+    submitted_at: '2024-01-15T09:35:00Z',
+    namd_config: {
+      steps: 100000,
       temperature: 300,
       timestep: 2.0,
-      numSteps: 100000,
-      outputFreq: 1000,
-      restartFreq: 1000,
-      dcdFreq: 1000
+      outputname: 'protein_output',
+      dcd_freq: 1000,
+      restart_freq: 1000
     },
-    slurmConfig: {
-      partition: 'amilan',
-      nodes: 1,
-      ntasks: 24,
-      time: '04:00:00',
-      mem: '16GB',
-      account: 'ucb-general'
+    slurm_config: {
+      cores: 24,
+      memory: '16GB',
+      walltime: '04:00:00',
+      partition: 'amilan'
     },
-    inputFiles: [
-      { fileName: 'protein.pdb', size: 524288, uploadedAt: '2024-01-15T09:30:00Z' },
-      { fileName: 'protein.psf', size: 1048576, uploadedAt: '2024-01-15T09:30:00Z' },
-      { fileName: 'par_all36_prot.prm', size: 262144, uploadedAt: '2024-01-15T09:30:00Z' }
+    input_files: [
+      { name: 'protein.pdb', local_path: '/local/protein.pdb', file_type: 'pdb' },
+      { name: 'protein.psf', local_path: '/local/protein.psf', file_type: 'psf' },
+      { name: 'par_all36_prot.prm', local_path: '/local/par_all36_prot.prm', file_type: 'prm' }
     ],
-    runtime: '02:15:30',
-    wallTimeRemaining: '01:44:30'
+    remote_directory: '/projects/mockuser/namdrunner_jobs/job_001'
   },
   {
-    jobId: 'job_002',
-    jobName: 'membrane_dynamics',
+    job_id: 'job_002',
+    job_name: 'membrane_dynamics',
     status: 'COMPLETED',
-    slurmJobId: '12345677',
-    createdAt: '2024-01-14T14:20:00Z',
-    updatedAt: '2024-01-14T18:50:00Z',
-    submittedAt: '2024-01-14T14:25:00Z',
-    completedAt: '2024-01-14T18:50:00Z',
-    namdConfig: {
+    slurm_job_id: '12345677',
+    created_at: '2024-01-14T14:20:00Z',
+    updated_at: '2024-01-14T18:50:00Z',
+    submitted_at: '2024-01-14T14:25:00Z',
+    completed_at: '2024-01-14T18:50:00Z',
+    namd_config: {
+      steps: 200000,
       temperature: 310,
       timestep: 2.0,
-      numSteps: 200000,
-      outputFreq: 1000,
-      restartFreq: 1000,
-      dcdFreq: 1000
+      outputname: 'membrane_output',
+      dcd_freq: 1000,
+      restart_freq: 1000
     },
-    slurmConfig: {
-      partition: 'amilan',
-      nodes: 2,
-      ntasks: 48,
-      time: '06:00:00',
-      mem: '32GB',
-      account: 'ucb-general'
+    slurm_config: {
+      cores: 48,
+      memory: '32GB',
+      walltime: '06:00:00',
+      partition: 'amilan'
     },
-    inputFiles: [
-      { fileName: 'membrane.pdb', size: 2097152, uploadedAt: '2024-01-14T14:20:00Z' },
-      { fileName: 'membrane.psf', size: 4194304, uploadedAt: '2024-01-14T14:20:00Z' }
+    input_files: [
+      { name: 'membrane.pdb', local_path: '/local/membrane.pdb', file_type: 'pdb' },
+      { name: 'membrane.psf', local_path: '/local/membrane.psf', file_type: 'psf' }
     ],
-    runtime: '04:25:30',
-    wallTimeRemaining: '00:00:00'
+    remote_directory: '/projects/mockuser/namdrunner_jobs/job_002'
   },
   {
-    jobId: 'job_003',
-    jobName: 'drug_binding_analysis',
+    job_id: 'job_003',
+    job_name: 'drug_binding_analysis',
     status: 'PENDING',
-    slurmJobId: '12345679',
-    createdAt: '2024-01-15T11:45:00Z',
-    updatedAt: '2024-01-15T11:50:00Z',
-    submittedAt: '2024-01-15T11:50:00Z',
-    namdConfig: {
+    slurm_job_id: '12345679',
+    created_at: '2024-01-15T11:45:00Z',
+    updated_at: '2024-01-15T11:50:00Z',
+    submitted_at: '2024-01-15T11:50:00Z',
+    namd_config: {
+      steps: 500000,
       temperature: 300,
       timestep: 1.0,
-      numSteps: 500000,
-      outputFreq: 2000,
-      restartFreq: 2000,
-      dcdFreq: 2000
+      outputname: 'drug_analysis',
+      dcd_freq: 2000,
+      restart_freq: 2000
     },
-    slurmConfig: {
-      partition: 'amilan',
-      nodes: 4,
-      ntasks: 96,
-      time: '08:00:00',
-      mem: '64GB',
-      account: 'ucb-general'
+    slurm_config: {
+      cores: 96,
+      memory: '64GB',
+      walltime: '08:00:00',
+      partition: 'amilan'
     },
-    inputFiles: [
-      { fileName: 'complex.pdb', size: 1572864, uploadedAt: '2024-01-15T11:45:00Z' },
-      { fileName: 'complex.psf', size: 3145728, uploadedAt: '2024-01-15T11:45:00Z' },
-      { fileName: 'drug.pdb', size: 32768, uploadedAt: '2024-01-15T11:45:00Z' }
+    input_files: [
+      { name: 'complex.pdb', local_path: '/local/complex.pdb', file_type: 'pdb' },
+      { name: 'complex.psf', local_path: '/local/complex.psf', file_type: 'psf' },
+      { name: 'drug.pdb', local_path: '/local/drug.pdb', file_type: 'pdb' }
     ],
-    runtime: '--',
-    wallTimeRemaining: '--'
+    remote_directory: '/projects/mockuser/namdrunner_jobs/job_003'
   },
   {
-    jobId: 'job_004',
-    jobName: 'enzyme_kinetics',
-    status: 'FAILED',
-    slurmJobId: '12345676',
-    createdAt: '2024-01-15T08:15:00Z',
-    updatedAt: '2024-01-15T08:50:00Z',
-    submittedAt: '2024-01-15T08:20:00Z',
-    failedAt: '2024-01-15T08:50:00Z',
-    namdConfig: {
-      temperature: 298,
-      timestep: 2.0,
-      numSteps: 150000,
-      outputFreq: 1500,
-      restartFreq: 1500,
-      dcdFreq: 1500
-    },
-    slurmConfig: {
-      partition: 'amilan',
-      nodes: 1,
-      ntasks: 12,
-      time: '02:00:00',
-      mem: '8GB',
-      account: 'ucb-general'
-    },
-    inputFiles: [
-      { fileName: 'enzyme.pdb', size: 786432, uploadedAt: '2024-01-15T08:15:00Z' },
-      { fileName: 'enzyme.psf', size: 1572864, uploadedAt: '2024-01-15T08:15:00Z' }
-    ],
-    runtime: '00:30:15',
-    wallTimeRemaining: '00:00:00',
-    errorMessage: 'NAMD configuration error: Invalid temperature setting'
-  },
-  {
-    jobId: 'job_005',
-    jobName: 'dna_replication_study',
+    job_id: 'job_004',
+    job_name: 'enzyme_study_draft',
     status: 'CREATED',
-    createdAt: '2024-01-15T12:30:00Z',
-    updatedAt: '2024-01-15T12:30:00Z',
-    namdConfig: {
-      temperature: 300,
+    created_at: '2024-01-15T14:30:00Z',
+    updated_at: '2024-01-15T14:30:00Z',
+    namd_config: {
+      steps: 75000,
+      temperature: 310,
       timestep: 2.0,
-      numSteps: 250000,
-      outputFreq: 1000,
-      restartFreq: 1000,
-      dcdFreq: 1000
+      outputname: 'enzyme_output',
+      dcd_freq: 1000,
+      restart_freq: 1000
     },
-    slurmConfig: {
-      partition: 'amilan',
-      nodes: 2,
-      ntasks: 48,
-      time: '12:00:00',
-      mem: '48GB',
-      account: 'ucb-general'
+    slurm_config: {
+      cores: 16,
+      memory: '12GB',
+      walltime: '02:00:00',
+      partition: 'amilan'
     },
-    inputFiles: [
-      { fileName: 'dna.pdb', size: 3145728, uploadedAt: '2024-01-15T12:30:00Z' },
-      { fileName: 'dna.psf', size: 6291456, uploadedAt: '2024-01-15T12:30:00Z' }
+    input_files: [
+      { name: 'enzyme.pdb', local_path: '/local/enzyme.pdb', file_type: 'pdb' },
+      { name: 'enzyme.psf', local_path: '/local/enzyme.psf', file_type: 'psf' }
     ],
-    runtime: '--',
-    wallTimeRemaining: '--'
+    remote_directory: '/projects/mockuser/namdrunner_jobs/job_004'
+  },
+  {
+    job_id: 'job_005',
+    job_name: 'lipid_bilayer_crashed',
+    status: 'FAILED',
+    slurm_job_id: '12345680',
+    created_at: '2024-01-14T10:15:00Z',
+    updated_at: '2024-01-14T11:45:00Z',
+    submitted_at: '2024-01-14T10:20:00Z',
+    error_info: 'Job failed during execution',
+    namd_config: {
+      steps: 300000,
+      temperature: 300,
+      timestep: 2.5,
+      outputname: 'lipid_output',
+      dcd_freq: 1500,
+      restart_freq: 1500
+    },
+    slurm_config: {
+      cores: 32,
+      memory: '24GB',
+      walltime: '05:00:00',
+      partition: 'amilan'
+    },
+    input_files: [
+      { name: 'lipid.pdb', local_path: '/local/lipid.pdb', file_type: 'pdb' },
+      { name: 'lipid.psf', local_path: '/local/lipid.psf', file_type: 'psf' }
+    ],
+    remote_directory: '/projects/mockuser/namdrunner_jobs/job_005'
+  },
+  {
+    job_id: 'job_006',
+    job_name: 'canceled_test_run',
+    status: 'CANCELLED',
+    slurm_job_id: '12345681',
+    created_at: '2024-01-15T08:00:00Z',
+    updated_at: '2024-01-15T08:15:00Z',
+    submitted_at: '2024-01-15T08:05:00Z',
+    namd_config: {
+      steps: 50000,
+      temperature: 298,
+      timestep: 1.5,
+      outputname: 'test_output',
+      dcd_freq: 500,
+      restart_freq: 500
+    },
+    slurm_config: {
+      cores: 8,
+      memory: '8GB',
+      walltime: '01:00:00',
+      partition: 'amilan'
+    },
+    input_files: [
+      { name: 'test.pdb', local_path: '/local/test.pdb', file_type: 'pdb' },
+      { name: 'test.psf', local_path: '/local/test.psf', file_type: 'psf' }
+    ],
+    remote_directory: '/projects/mockuser/namdrunner_jobs/job_006'
   }
 ];
 
-// Jobs store state with sync timing
-interface JobsState {
-  jobs: Job[];
-  lastSyncTime: Date;
-  isSyncing: boolean;
+// Progress tracking interface
+interface JobProgress {
+  message: string;
+  isActive: boolean;
 }
 
-// Initialize with realistic mock sync time (15 minutes ago)
+// Jobs store state with sync timing and progress tracking
+interface JobsState {
+  jobs: JobInfo[];
+  lastSyncTime: Date;
+  isSyncing: boolean;
+  creationProgress: JobProgress;
+  submissionProgress: JobProgress;
+}
+
+// Initialize with empty state - jobs will be loaded when connected
 const initialJobsState: JobsState = {
-  jobs: mockJobs,
-  lastSyncTime: new Date(Date.now() - 15 * 60 * 1000), // 15 minutes ago
-  isSyncing: false
+  jobs: [],
+  lastSyncTime: new Date(0), // No sync yet
+  isSyncing: false,
+  creationProgress: { message: '', isActive: false },
+  submissionProgress: { message: '', isActive: false }
 };
 
 // Create jobs store
@@ -183,46 +207,304 @@ function createJobsStore() {
 
   return {
     subscribe,
-    // For UI testing - add a new job
-    addJob: (job: Job) => update(state => ({
-      ...state,
-      jobs: [...state.jobs, job]
-    })),
-    // For UI testing - update job status
-    updateJobStatus: (jobId: string, status: JobStatus) => update(state => ({
-      ...state,
-      jobs: state.jobs.map(job => job.jobId === jobId ? {
-        ...job,
-        status,
-        updatedAt: new Date().toISOString(),
-        ...(status === 'COMPLETED' && { completedAt: new Date().toISOString() }),
-        ...(status === 'FAILED' && { failedAt: new Date().toISOString() })
-      } : job)
-    })),
-    // For UI testing - remove a job
-    removeJob: (jobId: string) => update(state => ({
-      ...state,
-      jobs: state.jobs.filter(job => job.jobId !== jobId)
-    })),
-    // Sync with backend (mock for now)
+    // Sync with backend
     sync: async () => {
       // Set syncing state
       update(state => ({ ...state, isSyncing: true }));
 
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const currentMode = CoreClientFactory.getUserMode();
 
-      // Update sync time and clear syncing state
+      try {
+        if (currentMode === 'demo') {
+          // Demo mode: simulate sync but keep the same mockJobs for consistency
+          // Add a small delay to simulate network activity
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          update(state => ({
+            ...state,
+            jobs: mockJobs, // Always use the same mockJobs in demo mode
+            lastSyncTime: new Date(),
+            isSyncing: false
+          }));
+          // Demo mode: simulated sync completed
+        } else {
+          // Real mode: actual sync with backend
+          const result = await CoreClientFactory.getClient().getAllJobs();
+
+          if (result.success && result.jobs) {
+            // Check if database is empty - trigger job discovery if so
+            if (result.jobs.length === 0) {
+              if (typeof window !== 'undefined' && window.sshConsole) {
+                window.sshConsole.addDebug('[JOBS] No jobs in database - attempting to discover jobs from server');
+              }
+
+              // Attempt to discover jobs from server
+              const discoveryResult = await CoreClientFactory.getClient().discoverJobsFromServer();
+
+              if (discoveryResult.success && discoveryResult.jobs_imported > 0) {
+                if (typeof window !== 'undefined' && window.sshConsole) {
+                  window.sshConsole.addDebug(`[JOBS] Discovered ${discoveryResult.jobs_imported} jobs from server`);
+                }
+
+                // Re-fetch jobs after discovery
+                const updatedResult = await CoreClientFactory.getClient().getAllJobs();
+                update(state => ({
+                  ...state,
+                  jobs: updatedResult.jobs || [],
+                  lastSyncTime: new Date(),
+                  isSyncing: false
+                }));
+                return;
+              } else if (discoveryResult.success) {
+                if (typeof window !== 'undefined' && window.sshConsole) {
+                  window.sshConsole.addDebug('[JOBS] No jobs found on server to discover');
+                }
+              }
+            }
+
+            // Update jobs and sync time
+            update(state => ({
+              ...state,
+              jobs: result.jobs || [],
+              lastSyncTime: new Date(),
+              isSyncing: false
+            }));
+            // Jobs synced successfully from backend
+          } else {
+            // Keep existing jobs but update sync time on error
+            update(state => ({
+              ...state,
+              lastSyncTime: new Date(),
+              isSyncing: false
+            }));
+            // Sync failed - maintaining existing jobs
+            if (typeof window !== 'undefined' && window.sshConsole) {
+              window.sshConsole.addDebug(`[JOBS] Sync failed: ${result.error}`);
+            }
+          }
+        }
+      } catch (error) {
+        // Keep existing jobs but update sync time on error
+        update(state => ({
+          ...state,
+          lastSyncTime: new Date(),
+          isSyncing: false
+        }));
+        // Sync error - maintaining existing jobs
+        if (typeof window !== 'undefined' && window.sshConsole) {
+          window.sshConsole.addDebug(`[JOBS] Sync error: ${error}`);
+        }
+      }
+    },
+
+    // Create a new job via backend with progress tracking
+    createJob: async (params: CreateJobParams) => {
+      // Set up progress tracking
       update(state => ({
         ...state,
-        lastSyncTime: new Date(),
-        isSyncing: false
+        creationProgress: { message: 'Starting job creation...', isActive: true }
       }));
 
-      console.log('Syncing jobs with backend...');
+      // Listen for progress events from the automation system
+      const unlisten = await listen('job-creation-progress', (event) => {
+        const message = event.payload as string;
+        update(state => ({
+          ...state,
+          creationProgress: { message, isActive: true }
+        }));
+      });
+
+      try {
+        const result = await CoreClientFactory.getClient().createJob(params);
+
+        if (result.success && result.job_id && result.job) {
+          // Update progress to completion
+          update(state => ({
+            ...state,
+            creationProgress: { message: 'Job created successfully!', isActive: false }
+          }));
+
+          // Add the returned job directly to the store (no second backend call)
+          update(state => ({
+            ...state,
+            jobs: [...state.jobs, result.job!]
+          }));
+
+          return result;
+        } else {
+          // Job creation failed - error shown in UI
+          if (typeof window !== 'undefined' && window.sshConsole) {
+            window.sshConsole.addDebug(`[JOBS] Job creation failed: ${result.error}`);
+          }
+          update(state => ({
+            ...state,
+            creationProgress: { message: `Job creation failed: ${result.error}`, isActive: false }
+          }));
+          return result;
+        }
+      } catch (error) {
+        // Job creation error - error shown in UI
+        if (typeof window !== 'undefined' && window.sshConsole) {
+          window.sshConsole.addDebug(`[JOBS] Job creation error: ${error}`);
+        }
+        update(state => ({
+          ...state,
+          creationProgress: { message: 'Job creation failed due to unexpected error', isActive: false }
+        }));
+        return { success: false, error: 'Job creation failed' };
+      } finally {
+        // Clean up event listener
+        unlisten();
+      }
     },
+
+    // Submit a job for execution via backend with progress tracking
+    submitJob: async (job_id: string) => {
+      // Set up progress tracking
+      update(state => ({
+        ...state,
+        submissionProgress: { message: 'Starting job submission...', isActive: true }
+      }));
+
+      // Listen for progress events from the automation system
+      const unlisten = await listen('job-submission-progress', (event) => {
+        const message = event.payload as string;
+        update(state => ({
+          ...state,
+          submissionProgress: { message, isActive: true }
+        }));
+      });
+
+      try {
+        const result = await CoreClientFactory.getClient().submitJob(job_id);
+
+        if (result.success) {
+          // Update progress to completion
+          update(state => ({
+            ...state,
+            submissionProgress: { message: 'Job submitted successfully!', isActive: false },
+            jobs: state.jobs.map(job => {
+              if (job.job_id === job_id) {
+                const updatedJob: JobInfo = {
+                  ...job,
+                  status: 'PENDING' as JobStatus,
+                  submitted_at: result.submitted_at || new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                };
+                if (result.slurm_job_id) {
+                  updatedJob.slurm_job_id = result.slurm_job_id;
+                }
+                return updatedJob;
+              }
+              return job;
+            })
+          }));
+        } else {
+          update(state => ({
+            ...state,
+            submissionProgress: { message: `Job submission failed: ${result.error}`, isActive: false }
+          }));
+        }
+
+        return result;
+      } catch (error) {
+        // Job submission error - handled by UI state
+        if (typeof window !== 'undefined' && window.sshConsole) {
+          window.sshConsole.addDebug(`[JOBS] Job submission error: ${error}`);
+        }
+        update(state => ({
+          ...state,
+          submissionProgress: { message: 'Job submission failed due to unexpected error', isActive: false }
+        }));
+        return { success: false, error: 'Job submission failed' };
+      } finally {
+        // Clean up event listener
+        unlisten();
+      }
+    },
+
+    // Delete a job via backend
+    deleteJob: async (job_id: string) => {
+      try {
+        const result = await CoreClientFactory.getClient().deleteJob(job_id, true);
+
+        if (result.success) {
+          // Remove job from local state
+          update(state => ({
+            ...state,
+            jobs: state.jobs.filter(job => job.job_id !== job_id)
+          }));
+        }
+
+        return result;
+      } catch (error) {
+        // Job deletion error - handled by UI state
+        if (typeof window !== 'undefined' && window.sshConsole) {
+          window.sshConsole.addDebug(`[JOBS] Job deletion error: ${error}`);
+        }
+        return { success: false, error: 'Job deletion failed' };
+      }
+    },
+
+    // Get detailed job status via backend
+    getJobStatus: async (job_id: string) => {
+      try {
+        const result = await CoreClientFactory.getClient().getJobStatus(job_id);
+
+        if (result.success && result.job_info) {
+          // Update the specific job in local state
+          update(state => ({
+            ...state,
+            jobs: state.jobs.map(job => job.job_id === job_id ? result.job_info! : job)
+          }));
+        }
+
+        return result;
+      } catch (error) {
+        // Job status check error - handled by UI state
+        return { success: false, error: 'Job status check failed' };
+      }
+    },
+
+    // Sync results from scratch directory to project directory for completed jobs
+    syncResultsFromScratch: async (job_id: string) => {
+      try {
+        const result = await CoreClientFactory.getClient().completeJob(job_id);
+
+        if (result.success && result.job_info) {
+          // Update the specific job in local state with updated info
+          update(state => ({
+            ...state,
+            jobs: state.jobs.map(job => job.job_id === job_id ? result.job_info! : job)
+          }));
+        }
+
+        return result;
+      } catch (error) {
+        // Job completion error - handled by UI state
+        if (typeof window !== 'undefined' && window.sshConsole) {
+          window.sshConsole.addDebug(`[JOBS] Job completion error: ${error}`);
+        }
+        return { success: false, error: 'Job completion failed' };
+      }
+    },
+
     // Reset to initial mock data
-    reset: () => set(initialJobsState)
+    reset: () => set(initialJobsState),
+
+    // Load demo jobs for offline/demo mode
+    loadDemoJobs: () => update(state => ({
+      ...state,
+      jobs: mockJobs,
+      lastSyncTime: new Date(Date.now() - 15 * 60 * 1000), // 15 minutes ago for offline feel
+    })),
+
+    // Clear all jobs
+    clearJobs: () => update(state => ({
+      ...state,
+      jobs: [],
+      lastSyncTime: new Date(0),
+    }))
   };
 }
 
@@ -233,19 +515,23 @@ export const jobs = derived(jobsStore, $store => $store.jobs);
 export const lastSyncTime = derived(jobsStore, $store => $store.lastSyncTime);
 export const isSyncing = derived(jobsStore, $store => $store.isSyncing);
 
+// Progress tracking stores
+export const creationProgress = derived(jobsStore, $store => $store.creationProgress);
+export const submissionProgress = derived(jobsStore, $store => $store.submissionProgress);
+
 export const selectedJob = derived(
   [jobs, writable<string | null>(null)],
-  ([$jobs, $selectedId]) => $selectedId ? $jobs.find(job => job.jobId === $selectedId) : null
+  ([$jobs, $selectedId]) => $selectedId ? $jobs.find(job => job.job_id === $selectedId) : null
 );
 
 export const jobsByStatus = derived(jobs, $jobs => {
   const grouped = {
-    CREATED: [] as Job[],
-    PENDING: [] as Job[],
-    RUNNING: [] as Job[],
-    COMPLETED: [] as Job[],
-    FAILED: [] as Job[],
-    CANCELLED: [] as Job[]
+    CREATED: [] as JobInfo[],
+    PENDING: [] as JobInfo[],
+    RUNNING: [] as JobInfo[],
+    COMPLETED: [] as JobInfo[],
+    FAILED: [] as JobInfo[],
+    CANCELLED: [] as JobInfo[]
   };
 
   $jobs.forEach(job => {

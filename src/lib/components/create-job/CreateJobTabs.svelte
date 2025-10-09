@@ -1,9 +1,11 @@
 <script lang="ts">
+  import type { NAMDConfig } from '../../types/api';
   import ResourcesTab from './ResourcesTab.svelte';
   import ConfigurationTab from './ConfigurationTab.svelte';
   import FilesTab from './FilesTab.svelte';
   import ReviewTab from './ReviewTab.svelte';
-  import { getPartitionLimits } from '../../data/cluster-config';
+
+  export let job_name: string;
 
   export let resourceConfig: {
     cores: number;
@@ -13,30 +15,22 @@
     qos: string;
   };
 
-  export let uploadedFiles: { name: string; size: number; type: string; file: File }[];
+  export let uploadedFiles: { name: string; size: number; type: string; path: string }[];
 
-  export let namdConfig: {
-    jobName: string;
-    simulationSteps: number;
-    temperature: number;
-    timestep: number;
-    outputName: string;
-    dcdFreq: number;
-    restartFreq: number;
-  };
+  export let namdConfig: NAMDConfig;
 
   export let errors: Record<string, string>;
   export let selectedPresetId: string;
   export let onPresetSelect: (preset: any) => void;
   export let onPartitionChange: (partition: string) => void;
   export let onQosChange: (qos: string) => void;
-  export let onFileUpload: (event: Event) => void;
-  export let onFileSelect: (files: FileList | null) => void;
+  export let onFileUpload: () => void;
   export let onRemoveFile: (index: number) => void;
   export let formatFileSize: (bytes: number) => string;
   export let onSubmit: () => void;
   export let onCancel: () => void;
   export let isSubmitting: boolean = false;
+  export let uploadProgress: Map<string, { percentage: number }> = new Map();
 
   type TabId = 'resources' | 'configuration' | 'files' | 'review';
 
@@ -49,64 +43,36 @@
 
   let activeTab: TabId = 'resources';
 
-  // Validation function
+  // UI-only validation (format checking only - business logic in backend)
   function validateConfiguration() {
     const newErrors: Record<string, string> = {};
 
-    // Resource validation
+    // Basic format validation only - backend will do comprehensive validation
     if (!resourceConfig.cores || resourceConfig.cores <= 0) {
-      newErrors.cores = "Cores must be a positive number";
+      newErrors.cores = "Cores is required";
     }
 
-    // Check partition limits
-    const partitionLimits = getPartitionLimits(resourceConfig.partition);
-    if (partitionLimits && resourceConfig.cores > partitionLimits.maxCores) {
-      newErrors.cores = `Cores exceed partition limit of ${partitionLimits.maxCores}`;
-    }
-
-    if (!resourceConfig.memory || parseFloat(resourceConfig.memory) <= 0) {
-      newErrors.memory = "Memory must be a positive number";
-    }
-
-    // Check memory limits
-    if (partitionLimits) {
-      const memoryPerCore = parseFloat(resourceConfig.memory) / resourceConfig.cores;
-      if (memoryPerCore > partitionLimits.maxMemoryPerCore) {
-        newErrors.memory = `Memory per core (${memoryPerCore.toFixed(1)}GB) exceeds partition limit of ${partitionLimits.maxMemoryPerCore}GB per core`;
-      }
+    if (!resourceConfig.memory || !resourceConfig.memory.trim()) {
+      newErrors.memory = "Memory is required";
     }
 
     if (!resourceConfig.wallTime || !/^\d{2}:\d{2}:\d{2}$/.test(resourceConfig.wallTime)) {
       newErrors.wallTime = "Wall time must be in HH:MM:SS format";
     }
 
-    // File validation
-    const requiredFiles = [".pdb", ".psf", ".prm"];
-    const fileExtensions = uploadedFiles.map(f => f.name.split('.').pop()?.toLowerCase());
-
-    for (const ext of requiredFiles) {
-      if (!fileExtensions.some(fe => fe === ext.substring(1))) {
-        newErrors.files = `Missing required file type: ${ext}`;
-        break;
-      }
+    if (!job_name.trim()) {
+      newErrors.job_name = "Job name is required";
     }
 
-    // NAMD validation
-    if (!namdConfig.jobName.trim()) {
-      newErrors.jobName = "Job name is required";
+    if (!namdConfig.outputname.trim()) {
+      newErrors.outputname = "Output name is required";
     }
-    if (!namdConfig.simulationSteps || namdConfig.simulationSteps <= 0) {
-      newErrors.simulationSteps = "Simulation steps must be a positive number";
-    }
-    if (!namdConfig.temperature || namdConfig.temperature <= 0) {
-      newErrors.temperature = "Temperature must be a positive number";
-    }
-    if (!namdConfig.timestep || namdConfig.timestep <= 0) {
-      newErrors.timestep = "Timestep must be a positive number";
-    }
-    if (!namdConfig.outputName.trim()) {
-      newErrors.outputName = "Output name is required";
-    }
+
+    // Note: Backend will validate:
+    // - Partition limits and resource constraints
+    // - File types and requirements
+    // - NAMD parameter ranges
+    // - QOS compatibility
 
     errors = newErrors;
     return Object.keys(newErrors).length === 0;
@@ -118,6 +84,10 @@
   }
 </script>
 
+<style>
+  /* All styling is handled by parent namd-card and namd-tabs classes in global CSS */
+</style>
+
 <div class="namd-tabs-container namd-card">
   <div class="namd-tabs-header">
     <nav class="namd-tabs-nav namd-tabs-nav--grid namd-tabs-nav--grid-4">
@@ -125,7 +95,12 @@
         <button
           class="namd-tab-button"
           class:active={activeTab === tab.id}
-          on:click={() => activeTab = tab.id}
+          on:click={() => {
+            activeTab = tab.id as TabId;
+            if (window.sshConsole) {
+              window.sshConsole.addDebug(`[USER] Switched to tab: ${tab.label}`);
+            }
+          }}
         >
           {tab.label}
         </button>
@@ -145,7 +120,8 @@
       />
     {:else if activeTab === 'configuration'}
       <ConfigurationTab
-        {namdConfig}
+        bind:job_name
+        bind:namdConfig
         {errors}
       />
     {:else if activeTab === 'files'}
@@ -153,12 +129,12 @@
         {uploadedFiles}
         {errors}
         {onFileUpload}
-        {onFileSelect}
         {onRemoveFile}
         {formatFileSize}
       />
     {:else if activeTab === 'review'}
       <ReviewTab
+        {job_name}
         {resourceConfig}
         {namdConfig}
         {uploadedFiles}
@@ -167,6 +143,7 @@
         {onSubmit}
         {onCancel}
         {isSubmitting}
+        {uploadProgress}
       />
     {/if}
   </div>

@@ -1,48 +1,89 @@
 <script lang="ts">
   import { consoleOpen, uiStore } from '../../stores/ui';
+  import { onMount } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
 
-  // Mock console output matching the React mockup exactly
-  const mockConsoleOutput = [
-    '$ module load slurm/alpine',
-    '$ squeue -u jsmith --format="%.10i %.20j %.8T %.10M %.6D %R"',
-    '    JOBID                 NAME     STATE       TIME  NODES NODELIST(REASON)',
-    '12345678     protein_folding_sim        R    2:15:30      4 compute-[001-004]',
-    '12345679        drug_binding_ana       PD       0:00      2 (Resources)',
-    '$ sbatch job.sbatch',
-    'Submitted batch job 12345680',
-    '$ scancel 12345676',
-    'Job cancelled successfully',
-    '$ scontrol show job 12345678',
-    'JobId=12345678 JobName=protein_folding_sim',
-    '   UserId=jsmith(1001) GroupId=research(1001) MCS_label=N/A',
-    '   Priority=1000 Nice=0 Account=research QOS=normal',
-    '   JobState=RUNNING Reason=None Dependency=(null)',
-    '   Requeue=1 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0',
-    '   RunTime=02:15:30 TimeLimit=04:00:00 TimeMin=N/A',
-    '   SubmitTime=2024-01-15T09:35:00 EligibleTime=2024-01-15T09:35:00',
-    '   AccrueTime=2024-01-15T09:35:00',
-    '   StartTime=2024-01-15T09:35:00 EndTime=2024-01-15T13:35:00 Deadline=N/A',
-    '   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2024-01-15T09:35:00',
-    '   Partition=amilan AllocNode:Sid=login01:12345',
-    '   ReqNodeList=(null) ExcNodeList=(null)',
-    '   NodeList=compute-[001-004]',
-    '   BatchHost=compute-001',
-    '   NumNodes=4 NumCPUs=128 NumTasks=128 CPUs/Task=1 ReqB:S:C:T=0:0:*:*',
-    '$'
-  ];
+  interface ConsoleEntry {
+    timestamp: string;
+    type: 'ssh-command' | 'ssh-output' | 'app-debug';
+    content: string;
+  }
 
-  let consoleOutput = mockConsoleOutput;
+  let consoleEntries: ConsoleEntry[] = [];
+  let currentPrompt = '$';
+
+  function addEntry(type: ConsoleEntry['type'], content: string) {
+    const timestamp = new Date().toLocaleTimeString();
+    consoleEntries = [...consoleEntries, { timestamp, type, content }];
+  }
+
+  function addDebugEntry(content: string) {
+    addEntry('app-debug', content);
+  }
+
+  function addSSHCommandEntry(command: string) {
+    addEntry('ssh-command', `$ ${command}`);
+  }
+
+  function addSSHOutputEntry(output: string) {
+    addEntry('ssh-output', output);
+  }
+
+  // Export functions globally so other components can use them
+  if (typeof window !== 'undefined') {
+    window.sshConsole = {
+      addCommand: addSSHCommandEntry,
+      addOutput: addSSHOutputEntry,
+      addDebug: addDebugEntry
+    };
+  }
+
+  // Listen for backend logs via Tauri events
+  onMount(() => {
+    // Listen for Rust logs from the backend (async setup)
+    let unlisten: (() => void) | undefined;
+
+    (async () => {
+      unlisten = await listen('rust-log', (event: any) => {
+        const logData = event.payload;
+        const logLevel = logData.level?.toLowerCase() || 'info';
+        const timestamp = new Date(logData.timestamp).toLocaleTimeString() || new Date().toLocaleTimeString();
+        const message = `[${logLevel.toUpperCase()}] [${logData.target}] ${logData.message}`;
+
+        // Add to console with appropriate styling based on log level
+        if (logLevel === 'error') {
+          addDebugEntry(`🔴 ${message}`);
+        } else if (logLevel === 'warn') {
+          addDebugEntry(`🟡 ${message}`);
+        } else if (logLevel === 'info') {
+          addDebugEntry(`🔵 ${message}`);
+        } else if (logLevel === 'debug') {
+          addDebugEntry(`⚪ ${message}`);
+        } else {
+          addDebugEntry(message);
+        }
+      });
+    })();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  });
 
   function toggleConsole() {
     uiStore.toggleConsole();
   }
 
   function handleCopyAll() {
-    navigator.clipboard.writeText(consoleOutput.join('\n'));
+    const output = consoleEntries.map(entry => {
+      const prefix = entry.type === 'app-debug' ? `[${entry.timestamp}] ` : '';
+      return `${prefix}${entry.content}`;
+    }).join('\n');
+    navigator.clipboard.writeText(output + '\n' + currentPrompt);
   }
 
   function handleClear() {
-    consoleOutput = ['$'];
+    consoleEntries = [];
   }
 </script>
 
@@ -88,11 +129,17 @@
 
     <!-- Console output area -->
     <div class="console-output">
-      {#each consoleOutput as line}
-        <div class="output-line">{line}</div>
+      {#each consoleEntries as entry}
+        <div class="output-line {entry.type}">
+          {#if entry.type === 'app-debug'}
+            <span class="timestamp">[{entry.timestamp}]</span>
+          {/if}
+          <span class="content">{entry.content}</span>
+        </div>
       {/each}
-      <!-- Blinking cursor -->
-      <div class="cursor-line">
+      <!-- Current prompt with cursor -->
+      <div class="prompt-line">
+        <span class="prompt">{currentPrompt}</span>
         <span class="cursor"></span>
       </div>
     </div>
@@ -196,12 +243,46 @@
   }
 
   .output-line {
-    margin: 0;
+    margin: 2px 0;
     white-space: pre-wrap;
+    display: flex;
+    gap: 8px;
   }
 
-  .cursor-line {
-    display: inline-block;
+  .output-line.ssh-command {
+    color: var(--namd-text-primary);
+    font-weight: 500;
+  }
+
+  .output-line.ssh-output {
+    color: var(--namd-text-secondary);
+  }
+
+  .output-line.app-debug {
+    color: #6b7280;
+    font-size: 0.9em;
+  }
+
+  .timestamp {
+    color: #9ca3af;
+    font-size: 0.85em;
+    flex-shrink: 0;
+  }
+
+  .content {
+    flex: 1;
+  }
+
+  .prompt-line {
+    display: flex;
+    align-items: center;
+    margin: 2px 0;
+  }
+
+  .prompt {
+    color: var(--namd-text-primary);
+    font-weight: 500;
+    margin-right: 4px;
   }
 
   .cursor {
@@ -210,7 +291,6 @@
     height: 16px;
     background-color: var(--namd-text-primary);
     animation: blink 1s infinite;
-    margin-left: 4px;
   }
 
   @keyframes blink {

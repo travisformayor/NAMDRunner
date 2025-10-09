@@ -9,8 +9,20 @@
   import { currentView, selectedJobId, consoleOpen, uiStore } from '../stores/ui';
   import { jobsStore } from '../stores/jobs';
   import { sessionActions } from '../stores/session';
+  import { clusterConfig } from '../stores/clusterConfig';
 
   onMount(() => {
+    // Initialize cluster configuration from backend (async, but don't block mount)
+    (async () => {
+      try {
+        await clusterConfig.init();
+      } catch (error) {
+        if (window.sshConsole) window.sshConsole.addDebug(`[AppShell] Failed to load cluster configuration: ${error}`);
+        console.error('[AppShell] Failed to load cluster configuration:', error);
+        // App can still run but cluster-dependent features won't work
+      }
+    })();
+
     // Initialize theme from localStorage or system preference
     const savedTheme = localStorage.getItem('namd-theme');
     const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -25,11 +37,6 @@
       }
     };
     mediaQuery.addEventListener('change', handleThemeChange);
-
-    // Add mock connected state for UI testing - wait for components to mount
-    setTimeout(() => {
-      sessionActions.mockConnected();
-    }, 500);
 
     return () => {
       mediaQuery.removeEventListener('change', handleThemeChange);

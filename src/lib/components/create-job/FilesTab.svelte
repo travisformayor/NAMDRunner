@@ -1,21 +1,21 @@
 <script lang="ts">
-  export let uploadedFiles: { name: string; size: number; type: string; file: File }[];
+  export let uploadedFiles: { name: string; size: number; type: string; path: string }[];
   export let errors: Record<string, string>;
-  export let onFileUpload: (event: Event) => void;
-  export let onFileSelect: (files: FileList | null) => void;
+  export let onFileUpload: () => void;
   export let onRemoveFile: (index: number) => void;
   export let formatFileSize: (bytes: number) => string;
 
   // File upload functionality
   let isDragOver = false;
-  let fileInput: HTMLInputElement;
 
   const acceptedExtensions = [".pdb", ".psf", ".prm"];
 
   function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragOver = false;
-    onFileSelect(event.dataTransfer?.files || null);
+    // Trigger the file dialog instead of using dropped files directly
+    // (browser File objects don't have accessible absolute paths)
+    onFileUpload();
   }
 
   function handleDragOver(event: DragEvent) {
@@ -29,7 +29,7 @@
   }
 
   function handleBrowseClick() {
-    fileInput?.click();
+    onFileUpload();
   }
 </script>
 
@@ -40,17 +40,7 @@
     </div>
 
     <div class="file-upload-area">
-      <!-- Hidden file input -->
-      <input
-        type="file"
-        multiple
-        accept=".pdb,.psf,.prm"
-        on:change={onFileUpload}
-        bind:this={fileInput}
-        class="file-input-hidden"
-      />
-
-      <!-- Drag and drop upload zone -->
+      <!-- Drag and drop upload zone (triggers Tauri file dialog) -->
       <div
         class="file-upload-zone"
         class:drag-over={isDragOver}
@@ -101,7 +91,7 @@
                   {formatFileSize(file.size)} • {file.type.toUpperCase()} file
                 </div>
               </div>
-              <button type="button" class="remove-file" on:click={() => onRemoveFile(index)}>
+              <button type="button" class="remove-file" on:click={() => onRemoveFile(index)} aria-label="Remove file">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18"/>
                   <line x1="6" y1="6" x2="18" y2="18"/>
@@ -131,10 +121,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--namd-spacing-lg);
-  }
-
-  .file-input-hidden {
-    display: none;
   }
 
   .file-upload-zone {
@@ -279,6 +265,12 @@
 
   .requirements-list li {
     margin-bottom: var(--namd-spacing-xs);
+  }
+
+  .error-text {
+    color: var(--namd-error);
+    font-size: var(--namd-font-size-sm);
+    margin-top: var(--namd-spacing-xs);
   }
 
   .error-text {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getQosForPartition, suggestQos, walltimeToHours } from '../../data/cluster-config';
+  import { getQosForPartition, walltimeToHours } from '../../stores/clusterConfig';
 
   export let selectedPartition: string;
   export let selectedQos: string;
@@ -9,8 +9,15 @@
   // Filter QOS options based on selected partition
   $: availableQos = getQosForPartition(selectedPartition);
 
-  // Auto-suggest QOS based on walltime
-  $: suggestedQos = suggestQos(walltimeToHours(wallTime), selectedPartition);
+  // Simple synchronous QOS suggestion based on walltime
+  // Matches backend logic: longer jobs need higher QOS limits
+  $: suggestedQos = (() => {
+    const hours = walltimeToHours(wallTime);
+    // Sort QOS by max walltime and find first that can accommodate
+    const sorted = [...availableQos].sort((a, b) => a.max_walltime_hours - b.max_walltime_hours);
+    const suitable = sorted.find(q => q.max_walltime_hours >= hours);
+    return suitable?.id || availableQos.find(q => q.is_default)?.id || availableQos[0]?.id || '';
+  })();
 
   function handleQosSelect(qosId: string) {
     selectedQos = qosId;
@@ -24,9 +31,9 @@
 </script>
 
 <div class="compact-qos-selector">
-  <label class="namd-label">Quality of Service (QOS)</label>
+  <div class="namd-label">Quality of Service (QOS)</div>
 
-  <div class="qos-options">
+  <div class="qos-options" role="radiogroup" aria-label="Quality of Service (QOS)">
     {#each availableQos as qos}
       <label class="qos-option">
         <input
@@ -37,7 +44,7 @@
         />
         <span class="qos-label">
           {qos.name}
-          {#if qos.id === 'normal'}
+          {#if qos.is_default}
             <span class="namd-badge namd-badge--success">Default</span>
           {/if}
           {#if suggestedQos === qos.id && suggestedQos !== selectedQos}
@@ -45,16 +52,10 @@
           {/if}
         </span>
         <span class="qos-description">
-          {#if qos.id === 'normal'}
-            {qos.maxWalltimeHours}h max, {qos.nodeLimit} nodes max
-          {:else if qos.id === 'long'}
-            {qos.maxWalltimeHours}h max ({Math.floor(qos.maxWalltimeHours / 24)} days), {qos.nodeLimit} nodes max
-          {:else if qos.id === 'mem'}
-            {qos.maxWalltimeHours}h max ({Math.floor(qos.maxWalltimeHours / 24)} days), {qos.nodeLimit} nodes max
-          {:else if qos.id === 'testing'}
-            {qos.maxWalltimeHours}h max, {qos.nodeLimit} nodes max
+          {#if qos.max_walltime_hours >= 24}
+            {qos.max_walltime_hours}h max ({Math.floor(qos.max_walltime_hours / 24)} days), {qos.node_limit} nodes max
           {:else}
-            {qos.title}
+            {qos.max_walltime_hours}h max, {qos.node_limit} nodes max
           {/if}
         </span>
       </label>

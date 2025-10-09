@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { PARTITIONS, type PartitionSpec } from '../../data/cluster-config';
+  import { partitions } from '../../stores/clusterConfig';
+  import type { PartitionSpec } from '../../types/cluster';
 
-  export let selectedPartition: string = 'amilan';
+  export let selectedPartition: string;  // No hardcoded default! Parent provides backend default
   export let onChange: (partition: string) => void;
 
-  // Use production partitions (excluding testing partitions for main selection)
-  const partitions = PARTITIONS;
-
   function handlePartitionSelect(partitionId: string) {
+    if (typeof window !== 'undefined' && window.sshConsole) {
+      window.sshConsole.addDebug(`[USER] Selected partition: ${partitionId}`);
+    }
     selectedPartition = partitionId;
     onChange(partitionId);
   }
@@ -22,11 +23,11 @@
   </div>
 
   <div class="partition-grid">
-    {#each partitions as partition}
+    {#each $partitions as partition}
       <div
         class="partition-card"
         class:selected={selectedPartition === partition.id}
-        class:standard={partition.isStandard}
+        class:standard={partition.is_standard}
         on:click={() => handlePartitionSelect(partition.id)}
         role="button"
         tabindex="0"
@@ -34,10 +35,8 @@
       >
         <div class="card-header">
           <div class="partition-icon">
-            {#if partition.gpuType}
+            {#if partition.gpu_type}
               🔥
-            {:else if partition.category === 'memory'}
-              🧠
             {:else}
               ⚡
             {/if}
@@ -45,7 +44,7 @@
           <div class="partition-info">
             <div class="partition-name">
               {partition.name}
-              {#if partition.isStandard}
+              {#if partition.is_standard}
                 <span class="standard-badge">Standard</span>
               {/if}
             </div>
@@ -54,10 +53,10 @@
 
           <!-- Key specs (inline) -->
           <div class="specs-inline">
-            <span class="spec-chip">{partition.coresPerNode} cores</span>
-            <span class="spec-chip">{partition.ramPerCore}</span>
-            {#if partition.gpuType}
-              <span class="spec-chip gpu">{partition.gpuType}</span>
+            <span class="spec-chip">{partition.cores_per_node} cores</span>
+            <span class="spec-chip">{partition.ram_per_core}</span>
+            {#if partition.gpu_type}
+              <span class="spec-chip gpu">{partition.gpu_type}</span>
             {/if}
           </div>
         </div>
@@ -69,7 +68,7 @@
             <span class="stat-label">Nodes</span>
           </div>
           <div class="stat-item">
-            <span class="stat-value">{partition.maxWalltime}</span>
+            <span class="stat-value">{partition.max_walltime}</span>
             <span class="stat-label">Max Time</span>
           </div>
         </div>
@@ -86,16 +85,20 @@
     {/each}
   </div>
 
-  <!-- Help section -->
+  <!-- Help section - Generated from backend data, no hardcoded cluster info! -->
   <div class="help-section">
     <details>
       <summary>Need help choosing a partition?</summary>
       <div class="help-content">
         <ul>
-          <li><strong>amilan</strong> - Standard choice for most simulations</li>
-          <li><strong>amilan128c</strong> - For jobs requiring 64+ cores</li>
-          <li><strong>amem</strong> - For memory-intensive simulations (256GB+)</li>
-          <li><strong>aa100</strong> - For GPU-accelerated NAMD</li>
+          {#each $partitions.filter(p => p.is_standard) as partition}
+            <li>
+              <strong>{partition.name}</strong> - {partition.description}
+              {#if partition.is_default}
+                <span class="default-badge">(Recommended)</span>
+              {/if}
+            </li>
+          {/each}
         </ul>
       </div>
     </details>

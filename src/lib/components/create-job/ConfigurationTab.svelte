@@ -1,14 +1,8 @@
 <script lang="ts">
-  export let namdConfig: {
-    jobName: string;
-    simulationSteps: number;
-    temperature: number;
-    timestep: number;
-    outputName: string;
-    dcdFreq: number;
-    restartFreq: number;
-  };
+  import type { NAMDConfig } from '../../types/api';
 
+  export let job_name: string;
+  export let namdConfig: NAMDConfig;
   export let errors: Record<string, string>;
 </script>
 
@@ -24,12 +18,12 @@
           class="namd-input"
           id="jobName"
           type="text"
-          bind:value={namdConfig.jobName}
+          bind:value={job_name}
           placeholder="my-simulation"
-          class:error={errors.jobName}
+          class:error={errors.job_name}
         />
-        {#if errors.jobName}
-          <span class="error-text">{errors.jobName}</span>
+        {#if errors.job_name}
+          <span class="error-text">{errors.job_name}</span>
         {/if}
       </div>
 
@@ -39,12 +33,12 @@
           class="namd-input"
           id="outputName"
           type="text"
-          bind:value={namdConfig.outputName}
+          bind:value={namdConfig.outputname}
           placeholder="output"
-          class:error={errors.outputName}
+          class:error={errors.outputname}
         />
-        {#if errors.outputName}
-          <span class="error-text">{errors.outputName}</span>
+        {#if errors.outputname}
+          <span class="error-text">{errors.outputname}</span>
         {/if}
       </div>
 
@@ -54,12 +48,12 @@
           class="namd-input"
           id="simulationSteps"
           type="number"
-          bind:value={namdConfig.simulationSteps}
+          bind:value={namdConfig.steps}
           min="1"
-          class:error={errors.simulationSteps}
+          class:error={errors.steps}
         />
-        {#if errors.simulationSteps}
-          <span class="error-text">{errors.simulationSteps}</span>
+        {#if errors.steps}
+          <span class="error-text">{errors.steps}</span>
         {/if}
       </div>
 
@@ -100,7 +94,7 @@
           class="namd-input"
           id="dcdFreq"
           type="number"
-          bind:value={namdConfig.dcdFreq}
+          bind:value={namdConfig.dcd_freq}
           min="1"
         />
       </div>
@@ -111,7 +105,7 @@
           class="namd-input"
           id="restartFreq"
           type="number"
-          bind:value={namdConfig.restartFreq}
+          bind:value={namdConfig.restart_freq}
           min="1"
         />
       </div>

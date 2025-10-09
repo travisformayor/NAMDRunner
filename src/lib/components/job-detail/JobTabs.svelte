@@ -1,8 +1,11 @@
 <script lang="ts">
-  import type { Job } from '../../types/api';
+  import type { JobInfo } from '../../types/api';
   import { getFileIcon, getTypeLabel, getTypeColor, formatFileSize, getStatusBadgeClass } from '../../utils/file-helpers';
+  import { CoreClientFactory } from '../../ports/clientFactory';
+  import { isConnected } from '../../stores/session';
+  import { mockJobs } from '../../stores/jobs';
 
-  export let job: Job;
+  export let job: JobInfo;
 
   type TabId = 'overview' | 'slurm-logs' | 'input-files' | 'output-files' | 'configuration';
 
@@ -16,6 +19,9 @@
 
   let activeTab: TabId = 'overview';
   let activeLogTab: 'stdout' | 'stderr' = 'stdout';
+
+  // Check if we're in demo mode
+  $: isDemoMode = CoreClientFactory.getUserMode() === 'demo';
 
   const mockStdout = `NAMD 3.0beta3 for LINUX-X86_64-multicore
 Built Thu Aug 26 16:49:51 CDT 2021 by jim on belfast.ks.uiuc.edu
@@ -217,12 +223,76 @@ Info: Load balancing completed, performance improved by 3.2%`;
 
   function getStdoutContent(): string {
     if (job.status === 'CREATED') return '';
-    return mockStdout;
+    if (isDemoMode) {
+      return mockStdout;
+    }
+    // Real mode: would fetch from backend via get_job_logs
+    return "SLURM stdout logs will be fetched from server when job log retrieval is implemented.";
   }
 
   function getStderrContent(): string {
     if (job.status === 'CREATED') return '';
-    return mockStderr;
+    if (isDemoMode) {
+      return mockStderr;
+    }
+    // Real mode: would fetch from backend via get_job_logs
+    return "SLURM stderr logs will be fetched from server when job log retrieval is implemented.";
+  }
+
+  function getInputFiles() {
+    if (isDemoMode) {
+      return mockInputFiles;
+    }
+    // Real mode: use job.input_files from job info
+    return job.input_files?.map(file => ({
+      name: file.name || file.remote_name || 'unknown',
+      size: '--',  // Size not tracked in InputFile
+      type: file.file_type || getTypeFromName(file.name || file.remote_name || ''),
+      description: getDescriptionForType(file.file_type || '')
+    })) || [];
+  }
+
+  function getOutputFiles() {
+    if (isDemoMode) {
+      return mockOutputFiles;
+    }
+    // Real mode: would need to call listJobFiles() to get real output files
+    // For now, return empty array until implemented
+    return [];
+  }
+
+  function getTypeFromName(filename: string): string {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    const typeMap: Record<string, string> = {
+      'pdb': 'structure',
+      'psf': 'structure',
+      'prm': 'parameters',
+      'rtf': 'parameters',
+      'str': 'parameters',
+      'conf': 'configuration',
+      'namd': 'configuration',
+      'dcd': 'trajectory',
+      'log': 'log',
+      'coor': 'checkpoint',
+      'vel': 'checkpoint',
+      'xsc': 'checkpoint'
+    };
+    return typeMap[ext || ''] || 'other';
+  }
+
+  function getDescriptionForType(type: string): string {
+    const descriptions: Record<string, string> = {
+      'pdb': 'Protein structure file',
+      'psf': 'Protein structure file (PSF format)',
+      'prm': 'Parameter file',
+      'parameters': 'Parameter file',
+      'structure': 'Structure file',
+      'configuration': 'Configuration file',
+      'trajectory': 'Trajectory data',
+      'log': 'Log file',
+      'checkpoint': 'Checkpoint file'
+    };
+    return descriptions[type] || 'Data file';
   }
 
   function copyLogs() {
@@ -232,7 +302,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
 
   function downloadLogs() {
     const content = activeLogTab === 'stdout' ? getStdoutContent() : getStderrContent();
-    const filename = `${job.jobId}_${activeLogTab}.log`;
+    const filename = `${job.job_id}_${activeLogTab}.log`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -258,7 +328,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
   }
 
   function getTotalSteps(): number {
-    return job.namdConfig?.numSteps || 1000000;
+    return job.namd_config?.steps || 1000000;
   }
 
   function getEstimatedTimeRemaining(): string {
@@ -299,10 +369,45 @@ Info: Load balancing completed, performance improved by 3.2%`;
   }
 
   // File handling functions
-  function downloadFile(fileName: string) {
-    console.log('Download file:', fileName);
-    // Mock download functionality
-    alert(`Downloading ${fileName}...`);
+  let downloadingFiles = new Set<string>();
+  let downloadErrors = new Map<string, string>();
+
+  async function downloadFile(file_name: string) {
+    if (!$isConnected) {
+      downloadErrors.set(file_name, 'Connect to server to download files');
+      setTimeout(() => downloadErrors.delete(file_name), 3000);
+      return;
+    }
+
+    downloadingFiles.add(file_name);
+    downloadingFiles = downloadingFiles; // Trigger reactivity
+    downloadErrors.delete(file_name);
+
+    try {
+      const result = await CoreClientFactory.getClient().downloadJobOutput(job.job_id, file_name);
+
+      if (result.success && result.content) {
+        // Create blob and trigger download
+        const blob = new Blob([result.content], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file_name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        downloadErrors.set(file_name, result.error || 'Failed to download file');
+        setTimeout(() => downloadErrors.delete(file_name), 5000);
+      }
+    } catch (error) {
+      downloadErrors.set(file_name, error instanceof Error ? error.message : 'Download failed');
+      setTimeout(() => downloadErrors.delete(file_name), 5000);
+    } finally {
+      downloadingFiles.delete(file_name);
+      downloadingFiles = downloadingFiles; // Trigger reactivity
+    }
   }
 
 </script>
@@ -314,7 +419,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
         <button
           class="namd-tab-button"
           class:active={activeTab === tab.id}
-          on:click={() => activeTab = tab.id}
+          on:click={() => activeTab = tab.id as TabId}
         >
           {tab.label}
         </button>
@@ -403,14 +508,6 @@ Info: Load balancing completed, performance improved by 3.2%`;
                 <span class="info-value namd-status-badge {getStatusBadgeClass(job.status)}">{job.status}</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Runtime</span>
-                <span class="info-value">{job.runtime || '--'}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Wall Time Remaining</span>
-                <span class="info-value">{job.wallTimeRemaining || '--'}</span>
-              </div>
-              <div class="info-item">
                 <span class="info-label">Performance</span>
                 <span class="info-value">{getPerformance()}</span>
               </div>
@@ -483,12 +580,12 @@ Info: Load balancing completed, performance improved by 3.2%`;
           <div class="files-header">
             <h3>Input Files</h3>
             <div class="namd-text-sm namd-text-muted">
-              Input files used for job: {job.name}
+              Input files used for job: {job.job_name}
             </div>
           </div>
 
           <div class="files-grid">
-            {#each mockInputFiles as file}
+            {#each getInputFiles() as file}
               <div class="file-card">
                 <div class="file-card-content">
                   <div class="file-info">
@@ -508,14 +605,19 @@ Info: Load balancing completed, performance improved by 3.2%`;
                   <button
                     class="download-button"
                     on:click={() => downloadFile(file.name)}
+                    disabled={!$isConnected || downloadingFiles.has(file.name)}
+                    title={!$isConnected ? "Connect to server to download files" : "Download file"}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                       <polyline points="7,10 12,15 17,10"/>
                       <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
-                    Download
+                    {downloadingFiles.has(file.name) ? 'Downloading...' : 'Download'}
                   </button>
+                  {#if downloadErrors.has(file.name)}
+                    <div class="file-error">{downloadErrors.get(file.name)}</div>
+                  {/if}
                 </div>
               </div>
             {/each}
@@ -526,15 +628,15 @@ Info: Load balancing completed, performance improved by 3.2%`;
             <div class="summary-grid">
               <div class="summary-item">
                 <span class="summary-label">Structure Files:</span>
-                <span class="summary-value">{mockInputFiles.filter(f => f.type === 'structure').length}</span>
+                <span class="summary-value">{getInputFiles().filter(f => f.type === 'structure').length}</span>
               </div>
               <div class="summary-item">
                 <span class="summary-label">Parameter Files:</span>
-                <span class="summary-value">{mockInputFiles.filter(f => f.type === 'parameters').length}</span>
+                <span class="summary-value">{getInputFiles().filter(f => f.type === 'parameters').length}</span>
               </div>
               <div class="summary-item">
                 <span class="summary-label">Configuration Files:</span>
-                <span class="summary-value">{mockInputFiles.filter(f => f.type === 'configuration').length}</span>
+                <span class="summary-value">{getInputFiles().filter(f => f.type === 'configuration').length}</span>
               </div>
             </div>
           </div>
@@ -549,11 +651,11 @@ Info: Load balancing completed, performance improved by 3.2%`;
             </div>
           {:else}
             <!-- Available Files -->
-            {#if mockOutputFiles.filter(f => f.available).length > 0}
+            {#if getOutputFiles().filter(f => f.available).length > 0}
               <div class="files-section">
                 <h3>Available Files</h3>
                 <div class="files-grid">
-                  {#each mockOutputFiles.filter(f => f.available) as file}
+                  {#each getOutputFiles().filter(f => f.available) as file}
                     <div class="file-card">
                       <div class="file-card-content">
                         <div class="file-info">
@@ -575,14 +677,19 @@ Info: Load balancing completed, performance improved by 3.2%`;
                         <button
                           class="download-button"
                           on:click={() => downloadFile(file.name)}
+                          disabled={!$isConnected || downloadingFiles.has(file.name)}
+                          title={!$isConnected ? "Connect to server to download files" : "Download file"}
                         >
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                             <polyline points="7,10 12,15 17,10"/>
                             <line x1="12" y1="15" x2="12" y2="3"/>
                           </svg>
-                          Download
+                          {downloadingFiles.has(file.name) ? 'Downloading...' : 'Download'}
                         </button>
+                        {#if downloadErrors.has(file.name)}
+                          <div class="file-error">{downloadErrors.get(file.name)}</div>
+                        {/if}
                       </div>
                     </div>
                   {/each}
@@ -591,14 +698,14 @@ Info: Load balancing completed, performance improved by 3.2%`;
             {/if}
 
             <!-- Unavailable/Expected Files -->
-            {#if mockOutputFiles.filter(f => !f.available).length > 0}
+            {#if getOutputFiles().filter(f => !f.available).length > 0}
               <div class="files-section">
                 <h3>Expected Files</h3>
                 <div class="namd-text-sm namd-text-muted expected-files-description">
                   These files will be available once the simulation produces them.
                 </div>
                 <div class="files-grid">
-                  {#each mockOutputFiles.filter(f => !f.available) as file}
+                  {#each getOutputFiles().filter(f => !f.available) as file}
                     <div class="file-card unavailable">
                       <div class="file-card-content">
                         <div class="file-info">
@@ -635,19 +742,19 @@ Info: Load balancing completed, performance improved by 3.2%`;
               <div class="summary-grid">
                 <div class="summary-item">
                   <span class="summary-label">Trajectory Files:</span>
-                  <span class="summary-value">{mockOutputFiles.filter(f => f.type === 'trajectory').length}</span>
+                  <span class="summary-value">{getOutputFiles().filter(f => f.type === 'trajectory').length}</span>
                 </div>
                 <div class="summary-item">
                   <span class="summary-label">Log Files:</span>
-                  <span class="summary-value">{mockOutputFiles.filter(f => f.type === 'log').length}</span>
+                  <span class="summary-value">{getOutputFiles().filter(f => f.type === 'log').length}</span>
                 </div>
                 <div class="summary-item">
                   <span class="summary-label">Analysis Files:</span>
-                  <span class="summary-value">{mockOutputFiles.filter(f => f.type === 'analysis').length}</span>
+                  <span class="summary-value">{getOutputFiles().filter(f => f.type === 'analysis').length}</span>
                 </div>
                 <div class="summary-item">
                   <span class="summary-label">Checkpoint Files:</span>
-                  <span class="summary-value">{mockOutputFiles.filter(f => f.type === 'checkpoint').length}</span>
+                  <span class="summary-value">{getOutputFiles().filter(f => f.type === 'checkpoint').length}</span>
                 </div>
               </div>
             </div>
@@ -867,10 +974,6 @@ Info: Load balancing completed, performance improved by 3.2%`;
 
 
 
-  .progress-info p {
-    margin: var(--namd-spacing-sm) 0;
-    color: var(--namd-text-secondary);
-  }
 
   /* Overview Tab Styles */
   .overview-content {
@@ -1440,6 +1543,15 @@ Info: Load balancing completed, performance improved by 3.2%`;
     font-style: italic;
     text-align: center;
     padding: var(--namd-spacing-xl);
+  }
+
+  .file-error {
+    margin-top: var(--namd-spacing-xs);
+    padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
+    background-color: var(--namd-error-bg, #fee);
+    color: var(--namd-error-text, #c33);
+    border-radius: var(--namd-border-radius-sm);
+    font-size: var(--namd-font-size-xs);
   }
 
   @media (max-width: 768px) {

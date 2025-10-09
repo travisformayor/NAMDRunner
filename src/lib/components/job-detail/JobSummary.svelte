@@ -1,27 +1,17 @@
 <script lang="ts">
-  import type { Job } from '../../types/api';
+  import type { JobInfo } from '../../types/api';
   import JobStatusBadge from '../jobs/JobStatusBadge.svelte';
 
-  export let job: Job;
+  export let job: JobInfo;
 
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
     return date.toLocaleDateString();
   }
 
-  function formatWallTime(job: Job): string {
-    if (!job.slurmConfig) return '--';
-    const wallTime = job.slurmConfig.time;
-    if (job.wallTimeRemaining && job.wallTimeRemaining !== '--') {
-      return wallTime;
-    }
-    return wallTime;
-  }
-
-  function formatWallTimeLeft(job: Job): string | null {
-    if (!job.wallTimeRemaining || job.wallTimeRemaining === '--') return null;
-    if (job.status === 'COMPLETED' || job.status === 'FAILED') return null;
-    return job.wallTimeRemaining;
+  function formatWallTime(job: JobInfo): string {
+    if (!job.slurm_config) return '--';
+    return job.slurm_config.walltime;
   }
 </script>
 
@@ -29,11 +19,11 @@
   <div class="namd-card-header">
     <div class="summary-header">
       <div class="title-section">
-        <h2 class="job-title">{job.jobName}</h2>
+        <h2 class="job-title">{job.job_name}</h2>
         <div class="job-ids">
-          <span class="job-id">Job ID: <span class="id-value">{job.jobId}</span></span>
-          {#if job.slurmJobId}
-            <span class="slurm-id">SLURM ID: <span class="id-value">{job.slurmJobId}</span></span>
+          <span class="job-id">Job ID: <span class="id-value">{job.job_id}</span></span>
+          {#if job.slurm_job_id}
+            <span class="slurm-id">SLURM ID: <span class="id-value">{job.slurm_job_id}</span></span>
           {/if}
         </div>
       </div>
@@ -45,27 +35,17 @@
     <div class="summary-grid">
       <div class="grid-item">
         <div class="grid-label">Created</div>
-        <div class="grid-value">{formatDate(job.createdAt)}</div>
+        <div class="grid-value">{formatDate(job.created_at)}</div>
       </div>
 
       <div class="grid-item">
         <div class="grid-label">Submitted</div>
-        <div class="grid-value">{job.submittedAt ? formatDate(job.submittedAt) : '--'}</div>
-      </div>
-
-      <div class="grid-item">
-        <div class="grid-label">Runtime</div>
-        <div class="grid-value namd-text-mono">{job.runtime || '--'}</div>
+        <div class="grid-value">{job.submitted_at ? formatDate(job.submitted_at) : '--'}</div>
       </div>
 
       <div class="grid-item">
         <div class="grid-label">Wall Time</div>
-        <div class="grid-value">
-          <div>{formatWallTime(job)}</div>
-          {#if formatWallTimeLeft(job)}
-            <div class="wall-time-left">{formatWallTimeLeft(job)}</div>
-          {/if}
-        </div>
+        <div class="grid-value">{formatWallTime(job)}</div>
       </div>
     </div>
   </div>
@@ -127,10 +107,6 @@
     color: var(--namd-text-primary);
   }
 
-  .wall-time-left {
-    font-size: var(--namd-font-size-xs);
-    color: var(--namd-text-muted);
-  }
 
   @media (max-width: 768px) {
     .summary-header {

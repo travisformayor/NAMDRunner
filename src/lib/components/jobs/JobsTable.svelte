@@ -2,14 +2,14 @@
   import { createEventDispatcher } from 'svelte';
   import { jobs } from '../../stores/jobs';
   import JobStatusBadge from './JobStatusBadge.svelte';
-  import type { Job } from '../../types/api';
+  import type { JobInfo } from '../../types/api';
 
   const dispatch = createEventDispatcher<{ jobSelect: string }>();
 
-  type SortField = 'jobName' | 'status' | 'createdAt' | 'runtime' | 'slurmJobId';
+  type SortField = 'job_name' | 'status' | 'created_at' | 'slurm_job_id';
   type SortDirection = 'asc' | 'desc';
 
-  let sortField: SortField = 'createdAt';
+  let sortField: SortField = 'created_at';
   let sortDirection: SortDirection = 'desc';
 
   // Sort jobs based on current sort settings
@@ -18,29 +18,25 @@
     let bValue: any;
 
     switch (sortField) {
-      case 'jobName':
-        aValue = a.jobName.toLowerCase();
-        bValue = b.jobName.toLowerCase();
+      case 'job_name':
+        aValue = a.job_name.toLowerCase();
+        bValue = b.job_name.toLowerCase();
         break;
       case 'status':
         aValue = a.status;
         bValue = b.status;
         break;
-      case 'createdAt':
-        aValue = new Date(a.createdAt);
-        bValue = new Date(b.createdAt);
+      case 'created_at':
+        aValue = new Date(a.created_at);
+        bValue = new Date(b.created_at);
         break;
-      case 'runtime':
-        aValue = a.runtime === '--' ? 0 : parseRuntimeToSeconds(a.runtime);
-        bValue = b.runtime === '--' ? 0 : parseRuntimeToSeconds(b.runtime);
-        break;
-      case 'slurmJobId':
-        aValue = a.slurmJobId || '';
-        bValue = b.slurmJobId || '';
+      case 'slurm_job_id':
+        aValue = a.slurm_job_id || '';
+        bValue = b.slurm_job_id || '';
         break;
       default:
-        aValue = a.createdAt;
-        bValue = b.createdAt;
+        aValue = a.created_at;
+        bValue = b.created_at;
     }
 
     if (typeof aValue === 'string') {
@@ -55,16 +51,6 @@
     }
   });
 
-  function parseRuntimeToSeconds(runtime: string): number {
-    if (runtime === '--' || !runtime) return 0;
-    const parts = runtime.split(':');
-    if (parts.length === 3) {
-      const [hours, minutes, seconds] = parts.map(Number);
-      return hours * 3600 + minutes * 60 + seconds;
-    }
-    return 0;
-  }
-
   function handleSort(field: SortField) {
     if (sortField === field) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -74,8 +60,8 @@
     }
   }
 
-  function handleJobClick(job: Job) {
-    dispatch('jobSelect', job.jobId);
+  function handleJobClick(job: JobInfo) {
+    dispatch('jobSelect', job.job_id);
   }
 
   function formatDate(dateString: string): string {
@@ -83,13 +69,9 @@
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  function formatWallTime(job: Job): string {
-    if (!job.slurmConfig) return '--';
-    const wallTime = job.slurmConfig.time;
-    if (job.wallTimeRemaining && job.wallTimeRemaining !== '--') {
-      return `${wallTime} (${job.wallTimeRemaining} left)`;
-    }
-    return wallTime;
+  function formatWallTime(job: JobInfo): string {
+    if (!job.slurm_config) return '--';
+    return job.slurm_config.walltime;
   }
 </script>
 
@@ -100,11 +82,11 @@
         <th>
           <button
             class="sort-header"
-            class:active={sortField === 'jobName'}
-            on:click={() => handleSort('jobName')}
+            class:active={sortField === 'job_name'}
+            on:click={() => handleSort('job_name')}
           >
             Job Name
-            {#if sortField === 'jobName'}
+            {#if sortField === 'job_name'}
               <span class="sort-indicator" class:desc={sortDirection === 'desc'}>▲</span>
             {/if}
           </button>
@@ -121,27 +103,15 @@
             {/if}
           </button>
         </th>
-        <th>
-          <button
-            class="sort-header"
-            class:active={sortField === 'runtime'}
-            on:click={() => handleSort('runtime')}
-          >
-            Runtime
-            {#if sortField === 'runtime'}
-              <span class="sort-indicator" class:desc={sortDirection === 'desc'}>▲</span>
-            {/if}
-          </button>
-        </th>
         <th>Wall Time</th>
         <th>
           <button
             class="sort-header"
-            class:active={sortField === 'createdAt'}
-            on:click={() => handleSort('createdAt')}
+            class:active={sortField === 'created_at'}
+            on:click={() => handleSort('created_at')}
           >
             Created
-            {#if sortField === 'createdAt'}
+            {#if sortField === 'created_at'}
               <span class="sort-indicator" class:desc={sortDirection === 'desc'}>▲</span>
             {/if}
           </button>
@@ -149,11 +119,11 @@
         <th>
           <button
             class="sort-header"
-            class:active={sortField === 'slurmJobId'}
-            on:click={() => handleSort('slurmJobId')}
+            class:active={sortField === 'slurm_job_id'}
+            on:click={() => handleSort('slurm_job_id')}
           >
             Job ID
-            {#if sortField === 'slurmJobId'}
+            {#if sortField === 'slurm_job_id'}
               <span class="sort-indicator" class:desc={sortDirection === 'desc'}>▲</span>
             {/if}
           </button>
@@ -161,25 +131,22 @@
       </tr>
     </thead>
     <tbody>
-      {#each sortedJobs as job (job.jobId)}
+      {#each sortedJobs as job (job.job_id)}
         <tr class="job-row" on:click={() => handleJobClick(job)}>
           <td class="job-name">
-            <span class="name-text">{job.jobName}</span>
+            <span class="name-text">{job.job_name}</span>
           </td>
           <td class="job-status">
             <JobStatusBadge status={job.status} />
-          </td>
-          <td class="job-runtime">
-            <span class="runtime-text">{job.runtime || '--'}</span>
           </td>
           <td class="job-walltime">
             <span class="walltime-text">{formatWallTime(job)}</span>
           </td>
           <td class="job-created">
-            <span class="date-text">{formatDate(job.createdAt)}</span>
+            <span class="date-text">{formatDate(job.created_at)}</span>
           </td>
           <td class="job-id">
-            <span class="id-text">{job.slurmJobId || 'Not submitted'}</span>
+            <span class="id-text">{job.slurm_job_id || 'Not submitted'}</span>
           </td>
         </tr>
       {/each}
@@ -279,7 +246,6 @@
     color: var(--namd-text-primary);
   }
 
-  .runtime-text,
   .id-text {
     font-family: var(--namd-font-mono);
     color: var(--namd-text-secondary);

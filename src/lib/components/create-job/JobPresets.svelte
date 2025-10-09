@@ -1,14 +1,15 @@
 <script lang="ts">
-  import { JOB_PRESETS, type JobPreset } from '../../data/cluster-config';
+  import { jobPresets } from '../../stores/clusterConfig';
+  import type { JobPreset } from '../../types/cluster';
 
   export let onPresetSelect: (preset: JobPreset) => void;
   export let selectedPresetId: string = '';
 
-  // Use centralized presets data
-  const presets = JOB_PRESETS;
-
   function handlePresetClick(preset: JobPreset) {
     selectedPresetId = preset.id;
+    if (window.sshConsole) {
+      window.sshConsole.addDebug(`[USER] Selected preset: ${preset.name}`);
+    }
     onPresetSelect(preset);
   }
 </script>
@@ -22,7 +23,7 @@
   </div>
 
   <div class="presets-grid">
-    {#each presets as preset}
+    {#each $jobPresets as preset}
       <div
         class="preset-card"
         class:selected={selectedPresetId === preset.id}
@@ -49,7 +50,7 @@
             <span class="resource-spec">{preset.config.cores} cores</span>
             <span class="resource-spec">{preset.config.memory}GB</span>
             <span class="resource-spec">{preset.config.partition}</span>
-            {#if preset.requiresGpu}
+            {#if preset.requires_gpu}
               <span class="resource-spec gpu">GPU</span>
             {/if}
           </div>
@@ -58,11 +59,11 @@
         <!-- Quick stats -->
         <div class="card-stats">
           <div class="stat-item">
-            <span class="stat-value">{preset.estimatedCost}</span>
+            <span class="stat-value">{preset.estimated_cost}</span>
             <span class="stat-label">Cost</span>
           </div>
           <div class="stat-item">
-            <span class="stat-value">{preset.estimatedQueue}</span>
+            <span class="stat-value">{preset.estimated_queue}</span>
             <span class="stat-label">Queue</span>
           </div>
         </div>
@@ -262,115 +263,6 @@
     border-radius: 50%;
     padding: var(--namd-spacing-xs);
     box-shadow: var(--namd-shadow);
-  }
-
-  .resource-summary {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--namd-spacing-xs);
-    padding: var(--namd-spacing-sm);
-    background-color: var(--namd-bg-muted);
-    border-radius: var(--namd-border-radius-sm);
-  }
-
-  .resource-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: var(--namd-font-size-xs);
-  }
-
-  .resource-label {
-    color: var(--namd-text-secondary);
-    font-weight: var(--namd-font-weight-medium);
-  }
-
-  .resource-value {
-    color: var(--namd-text-primary);
-    font-family: var(--namd-font-mono);
-    font-weight: var(--namd-font-weight-medium);
-  }
-
-  .resource-value.partition {
-    color: var(--namd-primary);
-  }
-
-  .estimates {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--namd-spacing-md);
-  }
-
-  .estimate-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-  }
-
-  .estimate-label {
-    font-size: var(--namd-font-size-xs);
-    color: var(--namd-text-secondary);
-    font-weight: var(--namd-font-weight-medium);
-    margin-bottom: var(--namd-spacing-xs);
-  }
-
-  .estimate-value {
-    font-size: var(--namd-font-size-sm);
-    color: var(--namd-text-primary);
-    font-weight: var(--namd-font-weight-semibold);
-  }
-
-  .gpu-notice {
-    display: flex;
-    align-items: center;
-    gap: var(--namd-spacing-sm);
-    padding: var(--namd-spacing-sm);
-    background-color: var(--namd-warning-bg);
-    color: var(--namd-warning-fg);
-    border-radius: var(--namd-border-radius-sm);
-    font-size: var(--namd-font-size-xs);
-    font-weight: var(--namd-font-weight-medium);
-  }
-
-  .use-cases {
-    display: flex;
-    flex-direction: column;
-    gap: var(--namd-spacing-xs);
-  }
-
-  .use-cases-label {
-    font-size: var(--namd-font-size-xs);
-    font-weight: var(--namd-font-weight-medium);
-    color: var(--namd-text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-  }
-
-  .use-cases-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--namd-spacing-xs);
-  }
-
-  .use-case {
-    background-color: var(--namd-accent);
-    color: var(--namd-text-secondary);
-    font-size: var(--namd-font-size-xs);
-    padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
-    border-radius: var(--namd-border-radius-sm);
-  }
-
-  .action-hint {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--namd-spacing-sm);
-    padding-top: var(--namd-spacing-sm);
-    border-top: 1px solid var(--namd-border);
-    color: var(--namd-text-muted);
-    font-size: var(--namd-font-size-xs);
-    font-weight: var(--namd-font-weight-medium);
   }
 
   .custom-option {

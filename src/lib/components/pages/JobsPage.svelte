@@ -9,7 +9,7 @@
     try {
       await jobsStore.sync();
     } catch (error) {
-      console.error('Sync failed:', error);
+      // Sync failed - error handled by store state
     }
   }
 

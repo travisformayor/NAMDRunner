@@ -7,7 +7,7 @@
     id: string;
     label: string;
     icon: string;
-    view: 'jobs' | 'create' | 'settings';
+    view: 'jobs' | 'create';
     disabled?: boolean;
     badge?: string | number;
   }
@@ -29,7 +29,7 @@
     }
   ] as NavItem[];
 
-  function handleNavClick(view: 'jobs' | 'create') {
+  function handleNavClick(view: NavItem['view']) {
     if (navItems.find(item => item.view === view)?.disabled) return;
     uiStore.setView(view);
   }

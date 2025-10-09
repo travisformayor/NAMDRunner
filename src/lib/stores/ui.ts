@@ -1,5 +1,4 @@
 import { writable, derived } from 'svelte/store';
-import type { Job } from '../types/api';
 
 export type View = 'jobs' | 'create';
 
@@ -13,7 +12,7 @@ interface UIState {
 
 interface BreadcrumbItem {
   label: string;
-  onClick?: () => void;
+  onClick: (() => void) | undefined;
 }
 
 // Initialize UI state
@@ -31,14 +30,17 @@ function createUIStore() {
 
   return {
     subscribe,
-    setView: (view: View) => update(state => ({
+    setView: (view: View) => {
+      if (typeof window !== 'undefined' && window.sshConsole) window.sshConsole.addDebug(`[UIStore] Setting view: ${view}`);
+      update(state => ({
+        ...state,
+        currentView: view,
+        selectedJobId: null // Clear selection when changing views
+      }));
+    },
+    selectJob: (job_id: string | null) => update(state => ({
       ...state,
-      currentView: view,
-      selectedJobId: null // Clear selection when changing views
-    })),
-    selectJob: (jobId: string | null) => update(state => ({
-      ...state,
-      selectedJobId: jobId
+      selectedJobId: job_id
     })),
     toggleConsole: () => update(state => ({
       ...state,
@@ -77,17 +79,19 @@ export const breadcrumbs = derived(
     const items: BreadcrumbItem[] = [];
 
     // Always start with Jobs
+    const onClick = ($ui.currentView !== 'jobs' || $ui.selectedJobId) ?
+      () => uiStore.setView('jobs') : undefined;
+
     items.push({
       label: 'Jobs',
-      onClick: $ui.currentView !== 'jobs' || $ui.selectedJobId ?
-        () => uiStore.setView('jobs') : undefined
+      onClick
     });
 
     // Add current view specifics
     if ($ui.currentView === 'create') {
-      items.push({ label: 'Create New Job' });
+      items.push({ label: 'Create New Job', onClick: undefined });
     } else if ($ui.currentView === 'jobs' && $ui.selectedJobId) {
-      items.push({ label: 'Job Details' });
+      items.push({ label: 'Job Details', onClick: undefined });
     }
 
     return items;

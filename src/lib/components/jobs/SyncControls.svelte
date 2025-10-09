@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { isConnected } from '../../stores/session';
   import { lastSyncTime, isSyncing } from '../../stores/jobs';
+  import { CoreClientFactory } from '../../ports/clientFactory';
 
   let autoSync = false;
   let syncInterval = 5;
@@ -32,10 +33,20 @@
   }
 
   function getStatusText(): string {
-    if ($isConnected) {
-      return `Last synced: ${formatSyncTime($lastSyncTime)}`;
+    const isDemoMode = CoreClientFactory.getUserMode() === 'demo';
+
+    if (isDemoMode) {
+      if ($isConnected) {
+        return `Demo mode - sample data (last updated: ${formatSyncTime($lastSyncTime)})`;
+      } else {
+        return `Demo mode - sample data (offline)`;
+      }
     } else {
-      return `Offline - showing cached data from ${$lastSyncTime.toLocaleString()}`;
+      if ($isConnected) {
+        return `Last synced: ${formatSyncTime($lastSyncTime)}`;
+      } else {
+        return `Offline - showing cached data from ${$lastSyncTime.toLocaleString()}`;
+      }
     }
   }
 
@@ -45,7 +56,7 @@
 <!-- Match React mockup: flex items-center justify-between -->
 <div class="sync-status">
   <div class="sync-left">
-    <span class="status-text" class:offline={!$isConnected}>
+    <span class="status-text" class:offline={!$isConnected && CoreClientFactory.getUserMode() !== 'demo'} class:demo={CoreClientFactory.getUserMode() === 'demo'}>
       {statusText}
     </span>
 
@@ -110,6 +121,11 @@
 
   .status-text.offline {
     color: var(--namd-text-muted);
+  }
+
+  .status-text.demo {
+    color: #f59e0b;
+    font-weight: var(--namd-font-weight-medium);
   }
 
   .sync-button {

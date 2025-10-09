@@ -142,6 +142,8 @@ html, body {
   padding: 0;
   height: 100%;
   width: 100%;
+  min-width: 1200px; /* Prevent layout collapse - desktop app only */
+  overflow-x: auto; /* Allow horizontal scroll if needed */
   font-family: var(--namd-font-sans);
   font-size: var(--namd-font-size-base);
   color: var(--namd-text-primary);

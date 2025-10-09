@@ -13,7 +13,11 @@
     "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "moduleResolution": "bundler"
-  }
+  },
+  "exclude": [
+    "tests/ui/**/*.js",
+    "e2e-test.js"
+  ]
   // Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
   // except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
   //

@@ -143,4 +143,5 @@
   .theme-toggle:hover {
     background-color: var(--namd-accent);
   }
+
 </style>

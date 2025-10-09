@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { validateResourceRequest, calculateJobCost, estimateQueueTime, walltimeToHours, getAllPartitions } from '../../data/cluster-config';
-  import { parseMemoryString } from '../../utils/file-helpers';
+  import { onMount } from 'svelte';
+  import { validateResourceRequest, calculateJobCost, estimateQueueTime, walltimeToHours, getPartition, billingRates } from '../../stores/clusterConfig';
+  import type { ValidationResult } from '../../types/cluster';
 
   export let cores: number;
   export let memory: string;
@@ -8,31 +9,66 @@
   export let partition: string;
   export let qos: string;
 
-  // Calculate validation results using centralized functions
-  $: memoryGB = parseMemoryString(memory);
-  $: walltimeHours = walltimeToHours(wallTime);
-  $: validation = validateResourceRequest(cores, memoryGB, walltimeHours, partition, qos);
-  $: costEstimate = calculateCostEstimate(cores, memory, wallTime, partition);
+  // State for async validation result
+  let validation: ValidationResult = {
+    is_valid: true,
+    issues: [],
+    warnings: [],
+    suggestions: []
+  };
 
-  function calculateCostEstimate(cores: number, memory: string, wallTime: string, partition: string) {
+  // State for async cost estimate
+  let costEstimate = {
+    coreCost: 0,
+    gpuCost: 0,
+    totalCost: 0,
+    queueEstimate: 'Unknown',
+    hasGpu: false
+  };
+
+  // Trigger validation and cost calculation when inputs change
+  $: if (cores || memory || wallTime || partition || qos) {
+    updateValidation();
+    updateCostEstimate();
+  }
+
+  async function updateCostEstimate() {
+    costEstimate = await calculateCostEstimate(cores, memory, wallTime, partition);
+  }
+
+  async function updateValidation() {
+    // Pass values directly to backend - no frontend parsing
+    validation = await validateResourceRequest(cores, memory, wallTime, partition, qos);
+    // Log only if validation fails
+    if (!validation.is_valid && typeof window !== 'undefined' && window.sshConsole) {
+      window.sshConsole.addDebug(`[ResourceValidator] Validation failed: ${validation.issues.join(', ')}`);
+    }
+  }
+
+  async function calculateCostEstimate(cores: number, memory: string, wallTime: string, partition: string) {
     const walltimeHours = walltimeToHours(wallTime);
 
     // Determine if partition has GPU
-    const allPartitions = getAllPartitions();
-    const partitionSpec = allPartitions.find(p => p.id === partition);
-    const hasGpu = partitionSpec?.gpuType ? true : false;
-    const gpuCount = partitionSpec?.gpuCount || 1;
+    const partitionSpec = getPartition(partition);
+    const hasGpu = partitionSpec?.gpu_type ? true : false;
+    const gpuCount = partitionSpec?.gpu_count || 1;
 
-    // Calculate costs using centralized function
-    const totalCost = calculateJobCost(cores, walltimeHours, hasGpu, gpuCount);
-    const coreCost = cores * walltimeHours; // 1.0 SU per core-hour
-    const gpuCost = hasGpu ? gpuCount * walltimeHours * 108.2 : 0;
+    // Calculate costs via backend (single source of truth!)
+    const totalCost = await calculateJobCost(cores, walltimeHours, hasGpu, gpuCount);
+
+    // Calculate breakdown using billing rates from backend
+    const rates = $billingRates;
+    const coreCost = rates ? cores * walltimeHours * rates.cpu_cost_per_core_hour : cores * walltimeHours;
+    const gpuCost = hasGpu && rates ? gpuCount * walltimeHours * rates.gpu_cost_per_gpu_hour : 0;
+
+    // Get queue time estimate from backend
+    const queueEstimate = await estimateQueueTime(cores, partition);
 
     return {
       coreCost: Math.round(coreCost),
       gpuCost: Math.round(gpuCost),
       totalCost,
-      queueEstimate: estimateQueueTime(cores, partition),
+      queueEstimate,
       hasGpu
     };
   }
@@ -50,8 +86,8 @@
     <!-- Validation Status -->
     <div class="validation-status">
       <div class="status-header">
-        <div class="status-icon" class:valid={validation.isValid} class:invalid={!validation.isValid}>
-          {#if validation.isValid}
+        <div class="status-icon" class:valid={validation.is_valid} class:invalid={!validation.is_valid}>
+          {#if validation.is_valid}
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="20,6 9,17 4,12"/>
             </svg>
@@ -65,10 +101,10 @@
         </div>
         <div class="status-text">
           <div class="status-title">
-            {validation.isValid ? 'Configuration Valid' : 'Configuration Issues'}
+            {validation.is_valid ? 'Configuration Valid' : 'Configuration Issues'}
           </div>
           <div class="status-subtitle">
-            {validation.isValid ? 'Ready to submit' : 'Please fix issues below'}
+            {validation.is_valid ? 'Ready to submit' : 'Please fix issues below'}
           </div>
         </div>
       </div>

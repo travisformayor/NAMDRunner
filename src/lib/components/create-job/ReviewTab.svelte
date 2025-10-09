@@ -1,4 +1,8 @@
 <script lang="ts">
+  import type { NAMDConfig } from '../../types/api';
+
+  export let job_name: string;
+
   export let resourceConfig: {
     cores: number;
     memory: string;
@@ -7,22 +11,15 @@
     qos: string;
   };
 
-  export let namdConfig: {
-    jobName: string;
-    simulationSteps: number;
-    temperature: number;
-    timestep: number;
-    outputName: string;
-    dcdFreq: number;
-    restartFreq: number;
-  };
+  export let namdConfig: NAMDConfig;
 
-  export let uploadedFiles: { name: string; size: number; type: string; file: File }[];
+  export let uploadedFiles: { name: string; size: number; type: string; path: string }[];
   export let errors: Record<string, string>;
   export let formatFileSize: (bytes: number) => string;
   export let onSubmit: () => void;
   export let onCancel: () => void;
   export let isSubmitting: boolean = false;
+  export let uploadProgress: Map<string, { percentage: number }> = new Map();
 </script>
 
 <div class="namd-tab-panel">
@@ -91,24 +88,24 @@
     <div class="review-section">
       <h4 class="review-section-title">NAMD Configuration</h4>
       <div class="review-grid">
-        <div class="review-item" class:error={errors.jobName}>
+        <div class="review-item" class:error={errors.job_name}>
           <span class="review-label">Job Name:</span>
-          <span class="review-value">{namdConfig.jobName || 'Not set'}</span>
-          {#if errors.jobName}
+          <span class="review-value">{job_name || 'Not set'}</span>
+          {#if errors.job_name}
             <span class="error-indicator">⚠</span>
           {/if}
         </div>
-        <div class="review-item" class:error={errors.outputName}>
+        <div class="review-item" class:error={errors.outputname}>
           <span class="review-label">Output Name:</span>
-          <span class="review-value">{namdConfig.outputName || 'Not set'}</span>
-          {#if errors.outputName}
+          <span class="review-value">{namdConfig.outputname || 'Not set'}</span>
+          {#if errors.outputname}
             <span class="error-indicator">⚠</span>
           {/if}
         </div>
-        <div class="review-item" class:error={errors.simulationSteps}>
+        <div class="review-item" class:error={errors.steps}>
           <span class="review-label">Simulation Steps:</span>
-          <span class="review-value">{namdConfig.simulationSteps?.toLocaleString() || 'Not set'}</span>
-          {#if errors.simulationSteps}
+          <span class="review-value">{namdConfig.steps?.toLocaleString() || 'Not set'}</span>
+          {#if errors.steps}
             <span class="error-indicator">⚠</span>
           {/if}
         </div>
@@ -128,7 +125,7 @@
         </div>
         <div class="review-item">
           <span class="review-label">DCD Frequency:</span>
-          <span class="review-value">{namdConfig.dcdFreq || 'Not set'}</span>
+          <span class="review-value">{namdConfig.dcd_freq || 'Not set'}</span>
         </div>
       </div>
     </div>
@@ -140,12 +137,20 @@
         <div class="files-summary" class:error={errors.files}>
           {#each uploadedFiles as file}
             <div class="file-summary-item">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                <polyline points="14,2 14,8 20,8"/>
-              </svg>
-              <span class="file-name">{file.name}</span>
-              <span class="file-size">({formatFileSize(file.size)})</span>
+              {#if uploadProgress.has(file.name)}
+                <div class="file-progress-bg" style="width: {uploadProgress.get(file.name)?.percentage || 0}%"></div>
+              {/if}
+              <div class="file-content">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                  <polyline points="14,2 14,8 20,8"/>
+                </svg>
+                <span class="file-name">{file.name}</span>
+                <span class="file-size">({formatFileSize(file.size)})</span>
+                {#if uploadProgress.has(file.name)}
+                  <span class="file-progress-text">{uploadProgress.get(file.name)?.percentage.toFixed(0)}%</span>
+                {/if}
+              </div>
             </div>
           {/each}
           {#if errors.files}
@@ -269,12 +274,34 @@
   }
 
   .file-summary-item {
+    position: relative;
+    overflow: hidden;
     display: flex;
     align-items: center;
     gap: var(--namd-spacing-sm);
     padding: var(--namd-spacing-sm);
     background-color: var(--namd-bg-primary);
     border-radius: var(--namd-border-radius-sm);
+  }
+
+  .file-progress-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.4) 100%);
+    transition: width 0.3s ease;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .file-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--namd-spacing-sm);
+    width: 100%;
   }
 
   .file-name {
@@ -284,6 +311,13 @@
 
   .file-size {
     color: var(--namd-text-secondary);
+    font-size: var(--namd-font-size-sm);
+  }
+
+  .file-progress-text {
+    margin-left: auto;
+    font-weight: var(--namd-font-weight-semibold);
+    color: var(--namd-primary);
     font-size: var(--namd-font-size-sm);
   }
 
