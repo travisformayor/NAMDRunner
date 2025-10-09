@@ -32,17 +32,6 @@ impl Default for RetryConfig {
 }
 
 impl RetryConfig {
-    /// Create a new retry configuration
-    pub fn new(max_attempts: u32, base_delay: Duration, max_delay: Duration) -> Self {
-        Self {
-            max_attempts,
-            base_delay,
-            max_delay,
-            backoff_multiplier: 2.0,
-            use_jitter: true,
-        }
-    }
-
     /// Create a quick retry configuration for fast operations
     pub fn quick() -> Self {
         Self {
@@ -64,17 +53,6 @@ impl RetryConfig {
             use_jitter: true,
         }
     }
-
-    /// Create a configuration for network operations
-    pub fn network() -> Self {
-        Self {
-            max_attempts: 3,
-            base_delay: Duration::from_millis(1000),
-            max_delay: Duration::from_secs(15),
-            backoff_multiplier: 2.0,
-            use_jitter: true,
-        }
-    }
 }
 
 /// Manager for retry operations with exponential backoff
@@ -87,11 +65,6 @@ impl RetryManager {
     /// Create a new retry manager with the given configuration
     pub fn new(config: RetryConfig) -> Self {
         Self { config }
-    }
-
-    /// Create a retry manager with default configuration
-    pub fn default() -> Self {
-        Self::new(RetryConfig::default())
     }
 
     /// Retry an async operation with exponential backoff
@@ -160,6 +133,7 @@ impl RetryManager {
 }
 
 /// Error classification for retry logic
+#[allow(dead_code)]
 pub mod classification {
     use super::*;
 
@@ -233,6 +207,7 @@ pub mod classification {
 }
 
 /// Convenience functions for common retry patterns
+#[allow(dead_code)]
 pub mod patterns {
     use super::*;
 
@@ -242,7 +217,13 @@ pub mod patterns {
         F: FnMut() -> Fut,
         Fut: Future<Output = Result<T, SSHError>>,
     {
-        let retry_manager = RetryManager::new(RetryConfig::network());
+        let retry_manager = RetryManager::new(RetryConfig {
+            max_attempts: 3,
+            base_delay: Duration::from_millis(1000),
+            max_delay: Duration::from_secs(15),
+            backoff_multiplier: 2.0,
+            use_jitter: true,
+        });
         retry_manager.retry_with_backoff(operation, classification::is_ssh_error_retryable).await
     }
 
@@ -311,7 +292,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_with_eventual_success() {
-        let retry_manager = RetryManager::new(RetryConfig::new(3, Duration::from_millis(10), Duration::from_millis(100)));
+        let retry_manager = RetryManager::new(RetryConfig {
+            max_attempts: 3,
+            base_delay: Duration::from_millis(10),
+            max_delay: Duration::from_millis(100),
+            backoff_multiplier: 2.0,
+            use_jitter: true,
+        });
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
@@ -336,7 +323,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_exhausted() {
-        let retry_manager = RetryManager::new(RetryConfig::new(2, Duration::from_millis(10), Duration::from_millis(100)));
+        let retry_manager = RetryManager::new(RetryConfig {
+            max_attempts: 2,
+            base_delay: Duration::from_millis(10),
+            max_delay: Duration::from_millis(100),
+            backoff_multiplier: 2.0,
+            use_jitter: true,
+        });
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
@@ -357,7 +350,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_non_retryable_error() {
-        let retry_manager = RetryManager::new(RetryConfig::new(3, Duration::from_millis(10), Duration::from_millis(100)));
+        let retry_manager = RetryManager::new(RetryConfig {
+            max_attempts: 3,
+            base_delay: Duration::from_millis(10),
+            max_delay: Duration::from_millis(100),
+            backoff_multiplier: 2.0,
+            use_jitter: true,
+        });
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
@@ -443,7 +442,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_backoff_progression() {
-        let config = RetryConfig::new(4, Duration::from_millis(100), Duration::from_secs(2));
+        let config = RetryConfig {
+            max_attempts: 4,
+            base_delay: Duration::from_millis(100),
+            max_delay: Duration::from_secs(2),
+            backoff_multiplier: 2.0,
+            use_jitter: true,
+        };
         let retry_manager = RetryManager::new(config);
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();

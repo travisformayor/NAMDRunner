@@ -1,23 +1,66 @@
 use crate::types::*;
 use crate::ssh::get_connection_manager;
-use crate::mode_switching::execute_with_mode;
+use crate::demo::{execute_with_mode, get_demo_state};
 use crate::validation::input::sanitize_job_id;
 use crate::database::with_database;
-use crate::mock_state::get_mock_state;
 use chrono::Utc;
 use anyhow::{Result, anyhow};
 use std::fs;
 use std::path::Path;
+use tauri::AppHandle;
 
-#[tauri::command]
-pub async fn upload_job_files(job_id: String, files: Vec<FileUpload>) -> UploadResult {
+/// Open a file dialog to select NAMD input files
+/// Returns list of selected file paths with metadata
+#[tauri::command(rename_all = "snake_case")]
+pub async fn select_input_files(_app: AppHandle) -> Result<Vec<SelectedFile>, String> {
+    use rfd::FileDialog;
+
+    let files = FileDialog::new()
+        .add_filter("NAMD Files", &["pdb", "psf", "prm"])
+        .set_title("Select NAMD Input Files")
+        .pick_files();
+
+    match files {
+        Some(paths) => {
+            let mut selected_files = Vec::new();
+
+            for path in paths {
+                let path_str = path.to_string_lossy().to_string();
+
+                // Get file metadata
+                if let Ok(metadata) = fs::metadata(&path) {
+                    if let Some(filename) = path.file_name() {
+                        let filename_str = filename.to_string_lossy().to_string();
+                        let extension = path.extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|s| format!(".{}", s))
+                            .unwrap_or_else(|| String::from(""));
+
+                        selected_files.push(SelectedFile {
+                            name: filename_str,
+                            path: path_str,
+                            size: metadata.len(),
+                            file_type: extension,
+                        });
+                    }
+                }
+            }
+
+            Ok(selected_files)
+        }
+        None => Ok(Vec::new()), // User cancelled
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn upload_job_files(app_handle: AppHandle, job_id: String, files: Vec<FileUpload>) -> UploadResult {
     execute_with_mode(
-        upload_job_files_mock(job_id.clone(), files.clone()),
-        upload_job_files_real(job_id, files)
+        upload_job_files_demo(job_id.clone(), files.clone()),
+        upload_job_files_real(app_handle, job_id, files)
     ).await
 }
 
-async fn upload_job_files_mock(_job_id: String, files: Vec<FileUpload>) -> UploadResult {
+async fn upload_job_files_demo(_job_id: String, files: Vec<FileUpload>) -> UploadResult {
     // Mock implementation - simulate file upload
     // Simulate upload time based on file count
     let upload_time = files.len() as u64 * 200;
@@ -27,7 +70,7 @@ async fn upload_job_files_mock(_job_id: String, files: Vec<FileUpload>) -> Uploa
     let mut uploaded_files = Vec::new();
     let mut failed_uploads = Vec::new();
 
-    let should_fail = get_mock_state(|state| state.should_simulate_error()).unwrap_or(false);
+    let should_fail = get_demo_state(|state| state.should_simulate_error()).unwrap_or(false);
 
     for file in files {
         if should_fail {
@@ -47,7 +90,7 @@ async fn upload_job_files_mock(_job_id: String, files: Vec<FileUpload>) -> Uploa
     }
 }
 
-async fn upload_job_files_real(job_id: String, files: Vec<FileUpload>) -> UploadResult {
+async fn upload_job_files_real(app_handle: AppHandle, job_id: String, files: Vec<FileUpload>) -> UploadResult {
     // Validate and sanitize job ID
     let clean_job_id = match sanitize_job_id(&job_id) {
         Ok(id) => id,
@@ -129,8 +172,8 @@ async fn upload_job_files_real(job_id: String, files: Vec<FileUpload>) -> Upload
         // Construct remote path
         let remote_path = format!("{}/{}", input_files_dir, file.remote_name);
 
-        // Upload file using ConnectionManager with retry logic
-        match connection_manager.upload_file(&file.local_path, &remote_path).await {
+        // Upload file using ConnectionManager with progress events
+        match connection_manager.upload_file_with_progress(&file.local_path, &remote_path, Some(app_handle.clone())).await {
             Ok(_progress) => {
                 uploaded_files.push(file.remote_name);
             }
@@ -197,15 +240,15 @@ fn validate_upload_file(file: &FileUpload) -> Result<()> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn download_job_output(job_id: String, file_name: String) -> DownloadResult {
     execute_with_mode(
-        download_job_output_mock(job_id.clone(), file_name.clone()),
+        download_job_output_demo(job_id.clone(), file_name.clone()),
         download_job_output_real(job_id, file_name)
     ).await
 }
 
-async fn download_job_output_mock(job_id: String, file_name: String) -> DownloadResult {
+async fn download_job_output_demo(job_id: String, file_name: String) -> DownloadResult {
     // Mock implementation - simulate file download
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
@@ -359,15 +402,15 @@ async fn download_file_to_string(connection_manager: &crate::ssh::ConnectionMana
     Ok((content, progress.total_bytes))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn list_job_files(job_id: String) -> ListFilesResult {
     execute_with_mode(
-        list_job_files_mock(job_id.clone()),
+        list_job_files_demo(job_id.clone()),
         list_job_files_real(job_id)
     ).await
 }
 
-async fn list_job_files_mock(job_id: String) -> ListFilesResult {
+async fn list_job_files_demo(job_id: String) -> ListFilesResult {
     // Mock implementation - return sample file list
     tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
@@ -551,337 +594,6 @@ fn classify_file_type(filename: &str, dir_type: &DirectoryType) -> FileType {
 }
 
 /// New command for log aggregation
-#[tauri::command]
-pub async fn get_job_logs(job_id: String) -> DownloadResult {
-    execute_with_mode(
-        get_job_logs_mock(job_id.clone()),
-        get_job_logs_real(job_id)
-    ).await
-}
-
-async fn get_job_logs_mock(job_id: String) -> DownloadResult {
-    tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
-
-    let mock_logs = format!(
-        "=== SLURM Job Logs for {} ===\n\
-        Job submitted at: {}\n\
-        Job started at: {}\n\
-        Job completed at: {}\n\
-        \n\
-        SLURM Output:\n\
-        Module loading successful\n\
-        NAMD execution started\n\
-        Simulation progress: 100%\n\
-        \n\
-        NAMD Logs:\n\
-        Info: Running on 24 processors\n\
-        Info: Simulation step 1000 of 100000\n\
-        Info: Simulation completed successfully\n\
-        \n\
-        === End of Logs ===",
-        job_id,
-        Utc::now().to_rfc3339(),
-        Utc::now().to_rfc3339(),
-        Utc::now().to_rfc3339()
-    );
-
-    DownloadResult {
-        success: true,
-        content: Some(mock_logs.clone()),
-        file_path: Some(format!("aggregated_logs_{}", job_id)),
-        file_size: Some(mock_logs.len() as u64),
-        error: None,
-    }
-}
-
-async fn get_job_logs_real(job_id: String) -> DownloadResult {
-    // Validate and sanitize job ID
-    let clean_job_id = match sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(e) => return DownloadResult {
-            success: false,
-            content: None,
-            file_path: None,
-            file_size: None,
-            error: Some(format!("Invalid job ID: {}", e)),
-        },
-    };
-
-    // Get job info from database
-    
-    let job_info = match with_database(|db| db.load_job(&clean_job_id)) {
-        Ok(Some(job)) => job,
-        Ok(None) => return DownloadResult {
-            success: false,
-            content: None,
-            file_path: None,
-            file_size: None,
-            error: Some(format!("Job {} not found", clean_job_id)),
-        },
-        Err(e) => return DownloadResult {
-            success: false,
-            content: None,
-            file_path: None,
-            file_size: None,
-            error: Some(format!("Database error: {}", e)),
-        },
-    };
-
-    match aggregate_job_logs(&job_info).await {
-        Ok(aggregated_logs) => DownloadResult {
-            success: true,
-            content: Some(aggregated_logs.content),
-            file_path: Some(format!("aggregated_logs_{}", clean_job_id)),
-            file_size: Some(aggregated_logs.total_size),
-            error: None,
-        },
-        Err(e) => DownloadResult {
-            success: false,
-            content: None,
-            file_path: None,
-            file_size: None,
-            error: Some(format!("Failed to aggregate logs: {}", e)),
-        },
-    }
-}
-
-#[derive(Debug)]
-struct AggregatedLogs {
-    content: String,
-    total_size: u64,
-}
-
-/// Aggregate all logs for a job (SLURM + NAMD)
-async fn aggregate_job_logs(job_info: &JobInfo) -> Result<AggregatedLogs> {
-    let connection_manager = get_connection_manager();
-    let mut aggregated_content = String::new();
-    let mut total_size = 0u64;
-
-    // Add header
-    aggregated_content.push_str(&format!(
-        "=== NAMDRunner Job Logs ===\n\
-        Job ID: {}\n\
-        Job Name: {}\n\
-        Status: {:?}\n\
-        Created: {}\n\
-        Updated: {}\n\
-        SLURM Job ID: {}\n\
-        \n",
-        job_info.job_id,
-        job_info.job_name,
-        job_info.status,
-        job_info.created_at,
-        job_info.updated_at.as_deref().unwrap_or("N/A"),
-        job_info.slurm_job_id.as_deref().unwrap_or("N/A")
-    ));
-
-    // Collect log files to aggregate
-    let log_files = get_log_files_to_aggregate(job_info);
-
-    for (file_path, log_type) in log_files {
-        aggregated_content.push_str(&format!("\n=== {} ===\n", log_type));
-
-        // Check if file exists and download content
-        match connection_manager.file_exists(&file_path).await {
-            Ok(true) => {
-                match download_file_to_string(&connection_manager, &file_path).await {
-                    Ok((content, size)) => {
-                        aggregated_content.push_str(&content);
-                        total_size += size;
-                    }
-                    Err(e) => {
-                        let error_msg = format!("Error reading {}: {}\n", log_type, e);
-                        aggregated_content.push_str(&error_msg);
-                        log::warn!("Failed to download log file {}: {}", file_path, e);
-                    }
-                }
-            }
-            Ok(false) => {
-                let not_found_msg = format!("{} not found at: {}\n", log_type, file_path);
-                aggregated_content.push_str(&not_found_msg);
-            }
-            Err(e) => {
-                let error_msg = format!("Error checking {}: {}\n", log_type, e);
-                aggregated_content.push_str(&error_msg);
-                log::warn!("Error checking existence of {}: {}", file_path, e);
-            }
-        }
-
-        aggregated_content.push_str("\n");
-    }
-
-    aggregated_content.push_str("=== End of Aggregated Logs ===\n");
-
-    let content_len = aggregated_content.len() as u64;
-    Ok(AggregatedLogs {
-        content: aggregated_content,
-        total_size: total_size + content_len,
-    })
-}
-
-/// Get list of log files to aggregate for a job
-fn get_log_files_to_aggregate(job_info: &JobInfo) -> Vec<(String, String)> {
-    let mut log_files = Vec::new();
-
-    if let Some(scratch_dir) = &job_info.scratch_dir {
-        // SLURM output files (if we have SLURM job ID)
-        if let Some(slurm_job_id) = &job_info.slurm_job_id {
-            log_files.push((
-                format!("{}/{}_{}.out", scratch_dir, job_info.job_name.replace(' ', "_"), slurm_job_id),
-                "SLURM Output (.out)".to_string(),
-            ));
-            log_files.push((
-                format!("{}/{}_{}.err", scratch_dir, job_info.job_name.replace(' ', "_"), slurm_job_id),
-                "SLURM Error (.err)".to_string(),
-            ));
-        }
-
-        // NAMD output log
-        log_files.push((
-            format!("{}/namd_output.log", scratch_dir),
-            "NAMD Output Log".to_string(),
-        ));
-
-        // Other common log files
-        log_files.push((
-            format!("{}/{}.log", scratch_dir, job_info.namd_config.outputname),
-            "NAMD Simulation Log".to_string(),
-        ));
-    }
-
-    log_files
-}
-
-/// New command for job cleanup and deletion
-#[tauri::command]
-pub async fn cleanup_job_files(job_id: String) -> DownloadResult {
-    execute_with_mode(
-        cleanup_job_files_mock(job_id.clone()),
-        cleanup_job_files_real(job_id)
-    ).await
-}
-
-async fn cleanup_job_files_mock(_job_id: String) -> DownloadResult {
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-
-    DownloadResult {
-        success: true,
-        content: Some("Mock cleanup completed successfully".to_string()),
-        file_path: None,
-        file_size: None,
-        error: None,
-    }
-}
-
-async fn cleanup_job_files_real(job_id: String) -> DownloadResult {
-    // Validate and sanitize job ID
-    let clean_job_id = match sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(e) => return DownloadResult {
-            success: false,
-            content: None,
-            file_path: None,
-            file_size: None,
-            error: Some(format!("Invalid job ID: {}", e)),
-        },
-    };
-
-    // Get job info from database
-    
-    let job_info = match with_database(|db| db.load_job(&clean_job_id)) {
-        Ok(Some(job)) => job,
-        Ok(None) => return DownloadResult {
-            success: false,
-            content: None,
-            file_path: None,
-            file_size: None,
-            error: Some(format!("Job {} not found", clean_job_id)),
-        },
-        Err(e) => return DownloadResult {
-            success: false,
-            content: None,
-            file_path: None,
-            file_size: None,
-            error: Some(format!("Database error: {}", e)),
-        },
-    };
-
-    match cleanup_job_directories(&job_info).await {
-        Ok(cleanup_summary) => DownloadResult {
-            success: true,
-            content: Some(cleanup_summary),
-            file_path: None,
-            file_size: None,
-            error: None,
-        },
-        Err(e) => DownloadResult {
-            success: false,
-            content: None,
-            file_path: None,
-            file_size: None,
-            error: Some(format!("Cleanup failed: {}", e)),
-        },
-    }
-}
-
-/// Clean up all remote directories for a job
-async fn cleanup_job_directories(job_info: &JobInfo) -> Result<String> {
-    let connection_manager = get_connection_manager();
-    let mut cleanup_summary = String::new();
-
-    cleanup_summary.push_str(&format!("Cleaning up directories for job: {}\n\n", job_info.job_id));
-
-    // Clean up scratch directory first (most important)
-    if let Some(scratch_dir) = &job_info.scratch_dir {
-        cleanup_summary.push_str(&format!("Cleaning scratch directory: {}\n", scratch_dir));
-
-        match connection_manager.delete_directory(scratch_dir).await {
-            Ok(_) => {
-                cleanup_summary.push_str("✓ Scratch directory deleted successfully\n");
-            }
-            Err(e) => {
-                let error_msg = format!("✗ Failed to delete scratch directory: {}\n", e);
-                cleanup_summary.push_str(&error_msg);
-                log::warn!("Failed to delete scratch directory {}: {}", scratch_dir, e);
-            }
-        }
-    }
-
-    // Clean up project directory (be more careful - might contain important files)
-    if let Some(project_dir) = &job_info.project_dir {
-        cleanup_summary.push_str(&format!("\nCleaning project directory: {}\n", project_dir));
-
-        // First, try to clean up the input_files subdirectory
-        let input_files_dir = format!("{}/input_files", project_dir);
-        match connection_manager.delete_directory(&input_files_dir).await {
-            Ok(_) => {
-                cleanup_summary.push_str("✓ Input files directory deleted successfully\n");
-            }
-            Err(e) => {
-                let error_msg = format!("✗ Failed to delete input files directory: {}\n", e);
-                cleanup_summary.push_str(&error_msg);
-                log::warn!("Failed to delete input files directory {}: {}", input_files_dir, e);
-            }
-        }
-
-        // Then delete the main project directory
-        match connection_manager.delete_directory(project_dir).await {
-            Ok(_) => {
-                cleanup_summary.push_str("✓ Project directory deleted successfully\n");
-            }
-            Err(e) => {
-                let error_msg = format!("✗ Failed to delete project directory: {}\n", e);
-                cleanup_summary.push_str(&error_msg);
-                log::warn!("Failed to delete project directory {}: {}", project_dir, e);
-            }
-        }
-    }
-
-    cleanup_summary.push_str("\nCleanup operation completed.\n");
-
-    Ok(cleanup_summary)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -953,7 +665,7 @@ mod tests {
 
             // Use tokio test runtime to test async function
             let rt = tokio::runtime::Runtime::new().unwrap();
-            let _result = rt.block_on(upload_job_files_mock(input.to_string(), files));
+            let _result = rt.block_on(upload_job_files_demo(input.to_string(), files));
 
             // Should either fail immediately or reject the dangerous input
             // In mock mode, it might succeed but real validation should catch it
@@ -1006,7 +718,7 @@ mod tests {
             },
         ];
 
-        let result = upload_job_files_mock("valid_job_001".to_string(), files).await;
+        let result = upload_job_files_demo("valid_job_001".to_string(), files).await;
 
         // Mock should always succeed with valid inputs
         assert!(result.success || !result.failed_uploads.as_ref().unwrap_or(&vec![]).is_empty());
@@ -1017,7 +729,7 @@ mod tests {
     async fn test_list_files_mock_returns_expected_structure() {
         setup_test_environment();
 
-        let result = list_job_files_mock("valid_job_001".to_string()).await;
+        let result = list_job_files_demo("valid_job_001".to_string()).await;
 
         assert!(result.success);
         assert!(result.files.is_some());
@@ -1030,37 +742,6 @@ mod tests {
         assert!(file_types.contains(&FileType::Input));
         assert!(file_types.contains(&FileType::Config));
         assert!(file_types.contains(&FileType::Log));
-    }
-
-    #[tokio::test]
-    async fn test_get_job_logs_mock_aggregation() {
-        setup_test_environment();
-
-        let result = get_job_logs_mock("valid_job_001".to_string()).await;
-
-        assert!(result.success);
-        assert!(result.content.is_some());
-
-        let logs = result.content.unwrap();
-        assert!(logs.contains("SLURM Output"));
-        assert!(logs.contains("NAMD"));
-        assert!(logs.contains("Info") || logs.contains("warning") || logs.contains("successful"));
-    }
-
-    #[tokio::test]
-    async fn test_cleanup_files_mock_safety() {
-        setup_test_environment();
-
-        let result = cleanup_job_files_mock("valid_job_001".to_string()).await;
-
-        assert!(result.success);
-        assert!(result.content.is_some());
-
-        let message = result.content.unwrap();
-        assert!(message.contains("cleanup") || message.contains("completed"));
-        // Should not contain dangerous operations
-        assert!(!message.contains("rm -rf /"));
-        assert!(!message.contains("sudo"));
     }
 
     // Path safety tests
@@ -1114,11 +795,11 @@ mod tests {
             }];
 
             // Test upload with invalid ID
-            let _upload_result = upload_job_files_mock(invalid_id.to_string(), files).await;
+            let _upload_result = upload_job_files_demo(invalid_id.to_string(), files).await;
             // Mock may succeed, but real implementation should validate
 
             // Test list files with invalid ID
-            let list_result = list_job_files_mock(invalid_id.to_string()).await;
+            let list_result = list_job_files_demo(invalid_id.to_string()).await;
             // Mock should handle gracefully
             assert!(list_result.success || list_result.error.is_some());
         }
@@ -1158,7 +839,7 @@ mod tests {
         ];
 
         let start_time = std::time::Instant::now();
-        let result = upload_job_files_mock("test_job".to_string(), files.clone()).await;
+        let result = upload_job_files_demo("test_job".to_string(), files.clone()).await;
         let elapsed = start_time.elapsed();
 
         // Mock should simulate reasonable upload time based on file count
@@ -1170,28 +851,6 @@ mod tests {
             assert!(result.uploaded_files.is_some());
         } else {
             assert!(result.failed_uploads.is_some());
-        }
-    }
-
-    #[test]
-    fn test_log_file_paths_generation() {
-        let mut job_info = create_test_job();
-        job_info.scratch_dir = Some("/scratch/testuser/test_job_001".to_string());
-        job_info.slurm_job_id = Some("12345678".to_string());
-
-        let log_files = get_log_files_to_aggregate(&job_info);
-
-        assert!(!log_files.is_empty());
-
-        for (file_path, description) in log_files {
-            // Paths should be safe
-            assert!(!file_path.contains(".."));
-            assert!(file_path.starts_with("/scratch"));
-            assert!(file_path.contains("test_job_001") || file_path.contains("testuser"));
-
-            // Descriptions should be informative
-            assert!(!description.is_empty());
-            assert!(description.contains("SLURM") || description.contains("NAMD"));
         }
     }
 

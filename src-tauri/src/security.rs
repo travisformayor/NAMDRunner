@@ -38,6 +38,11 @@ impl SecurePassword {
     pub fn is_empty(&self) -> bool {
         self.0.unsecure().is_empty()
     }
+
+    /// Get the length of the password (for debugging/logging purposes)
+    pub fn len(&self) -> usize {
+        self.0.unsecure().len()
+    }
 }
 
 impl std::fmt::Debug for SecurePassword {
@@ -66,6 +71,7 @@ impl<'de> Deserialize<'de> for SecurePassword {
 /// Utility functions for secure memory operations
 pub mod memory {
     /// Clear a string's memory by overwriting with zeros
+    #[allow(dead_code)]
     pub fn clear_string(s: &mut String) {
         // Convert to bytes and zero them
         unsafe {
@@ -78,6 +84,7 @@ pub mod memory {
     }
 
     /// Clear a vector's memory by overwriting with zeros
+    #[allow(dead_code)]
     pub fn clear_bytes(bytes: &mut [u8]) {
         for byte in bytes.iter_mut() {
             *byte = 0;
@@ -130,5 +137,67 @@ mod tests {
         memory::clear_bytes(&mut test_bytes);
 
         assert!(test_bytes.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_secure_password_never_logged() {
+        let password = SecurePassword::new("super_secret_password".to_string());
+
+        // Test that Debug output doesn't contain password
+        let debug_output = format!("{:?}", password);
+        assert!(debug_output.contains("REDACTED"));
+        assert!(!debug_output.contains("super_secret_password"));
+        assert!(!debug_output.contains("secret"));
+        assert!(!debug_output.contains("password"));
+
+        // Test that Display is not implemented (would compile error if it was)
+        // This ensures passwords can't accidentally be printed with {}
+        // Note: This test passes because SecurePassword doesn't implement Display
+    }
+
+    #[test]
+    fn test_connection_params_sanitized() {
+        use crate::types::commands::ConnectParams;
+
+        let params = ConnectParams {
+            host: "test.example.com".to_string(),
+            username: "testuser".to_string(),
+            password: SecurePassword::new("secret123".to_string()),
+        };
+
+        // Test that Debug output of connection params doesn't expose password
+        let debug_output = format!("{:?}", params);
+        assert!(debug_output.contains("test.example.com"));
+        assert!(debug_output.contains("testuser"));
+        assert!(debug_output.contains("REDACTED"));
+        assert!(!debug_output.contains("secret123"));
+        assert!(!debug_output.contains("secret"));
+    }
+
+    #[test]
+    fn test_secure_password_clone_safety() {
+        let password1 = SecurePassword::new("original_password".to_string());
+        let password2 = password1.clone();
+
+        // Both clones should work independently
+        password1.with_password(|p| assert_eq!(p, "original_password"));
+        password2.with_password(|p| assert_eq!(p, "original_password"));
+
+        // Both should redact in debug output
+        assert!(format!("{:?}", password1).contains("REDACTED"));
+        assert!(format!("{:?}", password2).contains("REDACTED"));
+    }
+
+    #[test]
+    fn test_secure_password_length_safe() {
+        let password = SecurePassword::new("test123".to_string());
+
+        // Length should be accessible for validation without exposing content
+        assert_eq!(password.len(), 7);
+        assert!(!password.is_empty());
+
+        let empty_password = SecurePassword::new("".to_string());
+        assert_eq!(empty_password.len(), 0);
+        assert!(empty_password.is_empty());
     }
 }

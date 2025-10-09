@@ -92,34 +92,20 @@ pub enum NAMDFileType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobInfo {
-    #[serde(rename = "jobId")]
     pub job_id: String,
-    #[serde(rename = "jobName")]
     pub job_name: String,
     pub status: JobStatus,
-    #[serde(rename = "slurmJobId")]
     pub slurm_job_id: Option<String>,
-    #[serde(rename = "createdAt")]
     pub created_at: String,
-    #[serde(rename = "updatedAt")]
     pub updated_at: Option<String>,
-    #[serde(rename = "submittedAt")]
     pub submitted_at: Option<String>,
-    #[serde(rename = "completedAt")]
     pub completed_at: Option<String>,
-    #[serde(rename = "projectDir")]
     pub project_dir: Option<String>,
-    #[serde(rename = "scratchDir")]
     pub scratch_dir: Option<String>,
-    #[serde(rename = "errorInfo")]
     pub error_info: Option<String>,
-    #[serde(rename = "namdConfig")]
     pub namd_config: NAMDConfig,
-    #[serde(rename = "slurmConfig")]
     pub slurm_config: SlurmConfig,
-    #[serde(rename = "inputFiles")]
     pub input_files: Vec<InputFile>,
-    #[serde(rename = "remoteDirectory")]
     pub remote_directory: String,
 }
 
@@ -159,9 +145,7 @@ pub struct NAMDConfig {
     pub temperature: f64,
     pub timestep: f64,
     pub outputname: String,
-    #[serde(rename = "dcdFreq")]
     pub dcd_freq: Option<u32>,
-    #[serde(rename = "restartFreq")]
     pub restart_freq: Option<u32>,
 }
 
@@ -203,11 +187,8 @@ impl Default for SlurmConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputFile {
     pub name: String,
-    #[serde(rename = "localPath")]
     pub local_path: String,
-    #[serde(rename = "remoteName")]
     pub remote_name: Option<String>,
-    #[serde(rename = "fileType")]
     pub file_type: Option<NAMDFileType>,
 }
 
@@ -215,25 +196,28 @@ pub struct InputFile {
 pub struct SessionInfo {
     pub host: String,
     pub username: String,
-    #[serde(rename = "connectedAt")]
     pub connected_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileUpload {
-    #[serde(rename = "localPath")]
     pub local_path: String,
-    #[serde(rename = "remoteName")]
     pub remote_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectedFile {
+    pub name: String,
+    pub path: String,
+    pub size: u64,
+    pub file_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteFile {
     pub name: String,
     pub size: u64,
-    #[serde(rename = "modifiedAt")]
     pub modified_at: String,
-    #[serde(rename = "fileType")]
     pub file_type: FileType,
 }
 
@@ -242,7 +226,6 @@ pub struct RemoteFile {
 pub struct CommandResult {
     pub stdout: String,
     pub stderr: String,
-    #[serde(rename = "exitCode")]
     pub exit_code: i32,
 }
 
@@ -250,7 +233,6 @@ pub struct CommandResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionStatusResponse {
     pub state: ConnectionState,
-    #[serde(rename = "sessionInfo")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_info: Option<SessionInfo>,
 }
@@ -261,8 +243,16 @@ pub struct FileInfo {
     pub name: String,
     pub path: String,
     pub size: u64,
-    #[serde(rename = "modifiedAt")]
     pub modified_at: String,
-    #[serde(rename = "isDirectory")]
     pub is_directory: bool,
+}
+
+/// File upload progress information for real-time progress tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileUploadProgress {
+    pub file_name: String,
+    pub bytes_transferred: u64,
+    pub total_bytes: u64,
+    pub percentage: f32,
+    pub transfer_rate_mbps: f64,
 }

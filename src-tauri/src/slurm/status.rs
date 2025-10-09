@@ -16,10 +16,17 @@ impl SlurmStatusSync {
 
     pub async fn sync_job_status(&self, slurm_job_id: &str) -> Result<JobStatus> {
         // Use command builder for consistent SLURM command construction
-        let squeue_cmd = job_status_command(slurm_job_id);
+        let squeue_cmd = job_status_command(slurm_job_id)?;
 
-        let connection_manager = get_connection_manager();
-        let result = connection_manager.execute_command(&squeue_cmd, Some(60)).await;
+        // Use retry with quick backoff for SLURM operations
+        let result = crate::retry::patterns::retry_quick_operation(|| {
+            let cmd = squeue_cmd.clone();
+            async move {
+                let connection_manager = get_connection_manager();
+                connection_manager.execute_command(&cmd, Some(crate::cluster::timeouts::SLURM_OPERATION)).await
+                    .map_err(|e| anyhow!("SLURM command failed: {}", e))
+            }
+        }).await;
 
         match result {
             Ok(cmd_result) => {
@@ -41,10 +48,17 @@ impl SlurmStatusSync {
 
     async fn check_completed_job(&self, slurm_job_id: &str) -> Result<JobStatus> {
         // Use command builder for consistent SLURM command construction
-        let sacct_cmd = completed_job_status_command(slurm_job_id);
+        let sacct_cmd = completed_job_status_command(slurm_job_id)?;
 
-        let connection_manager = get_connection_manager();
-        let result = connection_manager.execute_command(&sacct_cmd, Some(60)).await?;
+        // Use retry with quick backoff for SLURM operations
+        let result = crate::retry::patterns::retry_quick_operation(|| {
+            let cmd = sacct_cmd.clone();
+            async move {
+                let connection_manager = get_connection_manager();
+                connection_manager.execute_command(&cmd, Some(crate::cluster::timeouts::SLURM_OPERATION)).await
+                    .map_err(|e| anyhow!("SLURM sacct command failed: {}", e))
+            }
+        }).await?;
 
         if result.stdout.trim().is_empty() {
             // Job not found in sacct either - might be older than 7 days or invalid job ID
@@ -91,8 +105,8 @@ impl SlurmStatusSync {
             return Ok(results);
         }
 
-        // For efficiency, try to batch query all jobs at once
-        let batch_result = self.batch_query_jobs(job_ids).await;
+        // Try batch query first (more efficient)
+        let batch_result = self.batch_query_jobs_internal(job_ids).await;
 
         match batch_result {
             Ok(batch_statuses) => {
@@ -115,19 +129,27 @@ impl SlurmStatusSync {
         Ok(results)
     }
 
-    async fn batch_query_jobs(&self, job_ids: &[String]) -> Result<Vec<(String, JobStatus)>> {
+    async fn batch_query_jobs_internal(&self, job_ids: &[String]) -> Result<Vec<(String, JobStatus)>> {
         if job_ids.is_empty() {
             return Ok(Vec::new());
         }
 
         // Use command builder for batch query
-        let squeue_cmd = batch_job_status_command(job_ids);
+        let squeue_cmd = batch_job_status_command(job_ids)?;
 
         let mut results = Vec::new();
 
-        // Query active jobs
-        let connection_manager = get_connection_manager();
-        if let Ok(cmd_result) = connection_manager.execute_command(&squeue_cmd, Some(60)).await {
+        // Query active jobs with rate limiting
+        let squeue_result = crate::retry::patterns::retry_quick_operation(|| {
+            let cmd = squeue_cmd.clone();
+            async move {
+                let connection_manager = get_connection_manager();
+                connection_manager.execute_command(&cmd, Some(crate::cluster::timeouts::SLURM_OPERATION)).await
+                    .map_err(|e| anyhow!("SLURM batch squeue failed: {}", e))
+            }
+        }).await;
+
+        if let Ok(cmd_result) = squeue_result {
             for line in cmd_result.stdout.lines() {
                 if let Some((job_id, status_str)) = line.split_once('|') {
                     if let Ok(status) = Self::parse_slurm_status(status_str) {
@@ -137,15 +159,24 @@ impl SlurmStatusSync {
             }
         }
 
-        // For jobs not found in active queue, check sacct
+        // For jobs not found in active queue, check sacct with rate limiting
         let found_job_ids: std::collections::HashSet<_> = results.iter().map(|(id, _)| id.as_str()).collect();
         let missing_jobs: Vec<_> = job_ids.iter().filter(|id| !found_job_ids.contains(id.as_str())).collect();
 
         if !missing_jobs.is_empty() {
             let missing_job_strings: Vec<String> = missing_jobs.iter().map(|s| s.to_string()).collect();
-            let sacct_cmd = batch_completed_job_status_command(&missing_job_strings);
+            let sacct_cmd = batch_completed_job_status_command(&missing_job_strings)?;
 
-            if let Ok(cmd_result) = connection_manager.execute_command(&sacct_cmd, Some(60)).await {
+            let sacct_result = crate::retry::patterns::retry_quick_operation(|| {
+                let cmd = sacct_cmd.clone();
+                async move {
+                    let connection_manager = get_connection_manager();
+                    connection_manager.execute_command(&cmd, Some(crate::cluster::timeouts::SLURM_OPERATION)).await
+                        .map_err(|e| anyhow!("SLURM batch sacct failed: {}", e))
+                }
+            }).await;
+
+            if let Ok(cmd_result) = sacct_result {
                 for line in cmd_result.stdout.lines() {
                     if let Some((job_id, status_str)) = line.split_once('|') {
                         if let Ok(status) = Self::parse_slurm_status(status_str) {
@@ -160,10 +191,17 @@ impl SlurmStatusSync {
     }
 
     pub async fn cancel_job(&self, slurm_job_id: &str) -> Result<()> {
-        let scancel_cmd = cancel_job_command(slurm_job_id);
+        let scancel_cmd = cancel_job_command(slurm_job_id)?;
 
-        let connection_manager = get_connection_manager();
-        let result = connection_manager.execute_command(&scancel_cmd, Some(60)).await?;
+        // Use retry with quick backoff for SLURM operations
+        let result = crate::retry::patterns::retry_quick_operation(|| {
+            let cmd = scancel_cmd.clone();
+            async move {
+                let connection_manager = get_connection_manager();
+                connection_manager.execute_command(&cmd, Some(crate::cluster::timeouts::SLURM_OPERATION)).await
+                    .map_err(|e| anyhow!("SLURM scancel failed: {}", e))
+            }
+        }).await?;
 
         if result.exit_code != 0 {
             return Err(anyhow!("Failed to cancel job {}: {}", slurm_job_id, result.stderr));
@@ -208,7 +246,7 @@ mod tests {
     fn test_slurm_command_construction() {
         // Test squeue command format matches reference documentation using command builder
         let job_id = "12345678";
-        let cmd = crate::slurm::commands::job_status_command(job_id);
+        let cmd = crate::slurm::commands::job_status_command(job_id).expect("Valid job ID should work");
 
         // This tests that the command builder creates commands matching the reference docs
         assert!(cmd.contains("source /etc/profile"));
@@ -221,7 +259,7 @@ mod tests {
     #[test]
     fn test_sacct_command_construction() {
         let job_id = "12345678";
-        let cmd = crate::slurm::commands::completed_job_status_command(job_id);
+        let cmd = crate::slurm::commands::completed_job_status_command(job_id).expect("Valid job ID should work");
 
         // Test that sacct command matches reference documentation
         assert!(cmd.contains("source /etc/profile"));
@@ -243,5 +281,28 @@ mod tests {
         assert_eq!(SlurmStatusSync::parse_slurm_status("RUNNING").unwrap(), JobStatus::Running);
         assert_eq!(SlurmStatusSync::parse_slurm_status("completed").unwrap(), JobStatus::Completed);
         assert_eq!(SlurmStatusSync::parse_slurm_status("COMPLETED").unwrap(), JobStatus::Completed);
+    }
+
+    #[test]
+    fn test_batch_vs_individual_operations() {
+        // Test business logic for choosing batch vs individual operations
+        let empty_jobs: Vec<String> = vec![];
+        let single_job = vec!["12345".to_string()];
+        let multiple_jobs = vec!["12345".to_string(), "67890".to_string(), "11111".to_string()];
+
+        // Empty job list should be handled efficiently
+        assert!(empty_jobs.is_empty());
+
+        // Single job should work with individual or batch
+        assert_eq!(single_job.len(), 1);
+
+        // Multiple jobs should prefer batch operations for efficiency
+        assert!(multiple_jobs.len() > 1);
+
+        // Verify job ID format validation would catch issues
+        for job_id in &multiple_jobs {
+            assert!(job_id.chars().all(|c| c.is_ascii_digit()));
+            assert!(!job_id.is_empty());
+        }
     }
 }

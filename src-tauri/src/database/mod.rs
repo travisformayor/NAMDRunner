@@ -1,12 +1,71 @@
-use rusqlite::{Connection, Result as SqliteResult, Row};
+use rusqlite::{Connection, Result as SqliteResult, Row, Transaction};
 use crate::types::{JobInfo, JobStatus, NAMDConfig, SlurmConfig};
 use anyhow::{Result, anyhow};
 use std::path::Path;
-
-pub mod helpers;
+use std::ops::{Deref, DerefMut};
 
 pub struct JobDatabase {
     conn: Connection,
+}
+
+/// Transaction guard that automatically rolls back on drop if not committed
+#[allow(dead_code)]
+pub struct TransactionGuard<'a> {
+    transaction: Option<Transaction<'a>>,
+    committed: bool,
+}
+
+#[allow(dead_code)]
+impl<'a> TransactionGuard<'a> {
+    fn new(transaction: Transaction<'a>) -> Self {
+        TransactionGuard {
+            transaction: Some(transaction),
+            committed: false,
+        }
+    }
+
+    /// Commit the transaction
+    pub fn commit(mut self) -> Result<()> {
+        if let Some(tx) = self.transaction.take() {
+            tx.commit()?;
+            self.committed = true;
+        }
+        Ok(())
+    }
+
+    /// Rollback the transaction explicitly
+    pub fn rollback(mut self) -> Result<()> {
+        if let Some(tx) = self.transaction.take() {
+            tx.rollback()?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> Drop for TransactionGuard<'a> {
+    fn drop(&mut self) {
+        // If not committed, automatically rollback
+        if !self.committed {
+            if let Some(tx) = self.transaction.take() {
+                // Ignore rollback errors in drop
+                let _ = tx.rollback();
+            }
+        }
+    }
+}
+
+impl<'a> Deref for TransactionGuard<'a> {
+    type Target = Transaction<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        self.transaction.as_ref().unwrap()
+    }
+}
+
+impl<'a> DerefMut for TransactionGuard<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.transaction.as_mut().unwrap()
+    }
 }
 
 impl JobDatabase {
@@ -35,7 +94,11 @@ impl JobDatabase {
                 completed_at TEXT,
                 project_dir TEXT,
                 scratch_dir TEXT,
-                error_info TEXT
+                error_info TEXT,
+                namd_config TEXT,
+                slurm_config TEXT,
+                input_files TEXT,
+                remote_directory TEXT
             );
 
             -- Indexes for performance
@@ -67,7 +130,14 @@ impl JobDatabase {
         Ok(())
     }
 
-    pub fn save_job(&self, job_info: &JobInfo) -> Result<()> {
+    /// Begin a new database transaction
+    pub fn begin_transaction(&mut self) -> Result<TransactionGuard<'_>> {
+        let tx = self.conn.transaction()?;
+        Ok(TransactionGuard::new(tx))
+    }
+
+    /// Save a job within a transaction (for atomic operations)
+    pub fn save_job_in_transaction(tx: &Transaction, job_info: &JobInfo) -> Result<()> {
         let status_str = match &job_info.status {
             JobStatus::Created => "CREATED",
             JobStatus::Pending => "PENDING",
@@ -77,10 +147,15 @@ impl JobDatabase {
             JobStatus::Cancelled => "CANCELLED",
         };
 
-        self.conn.execute(
+        // Serialize complex fields to JSON
+        let namd_config_json = serde_json::to_string(&job_info.namd_config)?;
+        let slurm_config_json = serde_json::to_string(&job_info.slurm_config)?;
+        let input_files_json = serde_json::to_string(&job_info.input_files)?;
+
+        tx.execute(
             "INSERT OR REPLACE INTO jobs
-             (job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+             (job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, namd_config, slurm_config, input_files, remote_directory)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             (
                 &job_info.job_id,
                 &job_info.job_name,
@@ -93,6 +168,54 @@ impl JobDatabase {
                 &job_info.project_dir,
                 &job_info.scratch_dir,
                 &job_info.error_info,
+                &namd_config_json,
+                &slurm_config_json,
+                &input_files_json,
+                &job_info.remote_directory,
+            ),
+        )?;
+
+        // Add status history entry within transaction
+        Self::add_status_history_in_transaction(tx, &job_info.job_id, status_str, "local")?;
+
+        Ok(())
+    }
+
+    pub fn save_job(&self, job_info: &JobInfo) -> Result<()> {
+        let status_str = match &job_info.status {
+            JobStatus::Created => "CREATED",
+            JobStatus::Pending => "PENDING",
+            JobStatus::Running => "RUNNING",
+            JobStatus::Completed => "COMPLETED",
+            JobStatus::Failed => "FAILED",
+            JobStatus::Cancelled => "CANCELLED",
+        };
+
+        // Serialize complex fields to JSON
+        let namd_config_json = serde_json::to_string(&job_info.namd_config)?;
+        let slurm_config_json = serde_json::to_string(&job_info.slurm_config)?;
+        let input_files_json = serde_json::to_string(&job_info.input_files)?;
+
+        self.conn.execute(
+            "INSERT OR REPLACE INTO jobs
+             (job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, namd_config, slurm_config, input_files, remote_directory)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            (
+                &job_info.job_id,
+                &job_info.job_name,
+                status_str,
+                &job_info.slurm_job_id,
+                &job_info.created_at,
+                &job_info.updated_at,
+                &job_info.submitted_at,
+                &job_info.completed_at,
+                &job_info.project_dir,
+                &job_info.scratch_dir,
+                &job_info.error_info,
+                &namd_config_json,
+                &slurm_config_json,
+                &input_files_json,
+                &job_info.remote_directory,
             ),
         )?;
 
@@ -104,7 +227,7 @@ impl JobDatabase {
 
     pub fn load_job(&self, job_id: &str) -> Result<Option<JobInfo>> {
         let mut stmt = self.conn.prepare(
-            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info
+            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, namd_config, slurm_config, input_files, remote_directory
              FROM jobs WHERE job_id = ?1"
         )?;
 
@@ -121,7 +244,7 @@ impl JobDatabase {
 
     pub fn load_all_jobs(&self) -> Result<Vec<JobInfo>> {
         let mut stmt = self.conn.prepare(
-            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info
+            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, namd_config, slurm_config, input_files, remote_directory
              FROM jobs ORDER BY created_at DESC"
         )?;
 
@@ -171,6 +294,23 @@ impl JobDatabase {
         Ok(())
     }
 
+    /// Delete a job within a transaction (for atomic operations)
+    pub fn delete_job_in_transaction(tx: &Transaction, job_id: &str) -> Result<bool> {
+        // Delete status history first (foreign key constraint)
+        tx.execute(
+            "DELETE FROM job_status_history WHERE job_id = ?1",
+            [job_id],
+        )?;
+
+        // Delete the job
+        let rows_affected = tx.execute(
+            "DELETE FROM jobs WHERE job_id = ?1",
+            [job_id],
+        )?;
+
+        Ok(rows_affected > 0)
+    }
+
     pub fn delete_job(&self, job_id: &str) -> Result<bool> {
         // Delete status history first (foreign key constraint)
         self.conn.execute(
@@ -198,7 +338,7 @@ impl JobDatabase {
         };
 
         let mut stmt = self.conn.prepare(
-            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info
+            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, namd_config, slurm_config, input_files, remote_directory
              FROM jobs WHERE status = ?1 ORDER BY created_at DESC"
         )?;
 
@@ -212,6 +352,17 @@ impl JobDatabase {
         }
 
         Ok(jobs)
+    }
+
+    fn add_status_history_in_transaction(tx: &Transaction, job_id: &str, status: &str, source: &str) -> Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        tx.execute(
+            "INSERT INTO job_status_history (job_id, status, timestamp, source) VALUES (?1, ?2, ?3, ?4)",
+            (job_id, status, &now, source),
+        )?;
+
+        Ok(())
     }
 
     fn add_status_history(&self, job_id: &str, status: &str, source: &str) -> Result<()> {
@@ -237,6 +388,19 @@ impl JobDatabase {
             _ => JobStatus::Created, // Default fallback
         };
 
+        // Deserialize JSON fields, fallback to defaults if missing or invalid
+        let namd_config: NAMDConfig = row.get::<_, Option<String>>(11)?
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+
+        let slurm_config: SlurmConfig = row.get::<_, Option<String>>(12)?
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+
+        let input_files: Vec<crate::types::InputFile> = row.get::<_, Option<String>>(13)?
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
+
         Ok(JobInfo {
             job_id: row.get(0)?,
             job_name: row.get(1)?,
@@ -249,11 +413,10 @@ impl JobDatabase {
             project_dir: row.get(8)?,
             scratch_dir: row.get(9)?,
             error_info: row.get(10)?,
-            // Provide default values for new fields
-            namd_config: NAMDConfig::default(),
-            slurm_config: SlurmConfig::default(),
-            input_files: Vec::new(),
-            remote_directory: row.get::<_, Option<String>>(8)?.unwrap_or_else(|| "/tmp".to_string()),
+            namd_config,
+            slurm_config,
+            input_files,
+            remote_directory: row.get::<_, Option<String>>(14)?.unwrap_or_else(|| row.get::<_, Option<String>>(8).unwrap_or(Some("/tmp".to_string())).unwrap_or_else(|| "/tmp".to_string())),
         })
     }
 }
@@ -648,5 +811,138 @@ mod tests {
             let mut db_lock = DATABASE.lock().unwrap();
             *db_lock = original_db;
         }
+    }
+
+    #[test]
+    fn test_transaction_rollback_on_error() {
+        let mut db = create_test_database();
+        let job = create_test_job_info();
+
+        // Save the job first
+        db.save_job(&job).unwrap();
+
+        // Begin a transaction
+        {
+            let tx = db.begin_transaction().unwrap();
+
+            // Modify job in transaction
+            let mut modified_job = job.clone();
+            modified_job.status = JobStatus::Running;
+            modified_job.slurm_job_id = Some("12345".to_string());
+
+            // Save the modified job in transaction
+            JobDatabase::save_job_in_transaction(&tx, &modified_job).unwrap();
+
+            // Verify job is modified within transaction
+            {
+                let mut stmt = tx.prepare("SELECT status, slurm_job_id FROM jobs WHERE job_id = ?1").unwrap();
+                let (status, slurm_id): (String, Option<String>) = stmt.query_row([&job.job_id], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                }).unwrap();
+                assert_eq!(status, "RUNNING");
+                assert_eq!(slurm_id, Some("12345".to_string()));
+            }
+
+            // Don't commit - let transaction drop and rollback
+        }
+
+        // Verify job is back to original state
+        let loaded_job = db.load_job(&job.job_id).unwrap().unwrap();
+        assert_eq!(loaded_job.status, JobStatus::Created);
+        assert_eq!(loaded_job.slurm_job_id, None);
+    }
+
+    #[test]
+    fn test_transaction_commit() {
+        let mut db = create_test_database();
+        let job = create_test_job_info();
+
+        // Save the job first
+        db.save_job(&job).unwrap();
+
+        // Begin a transaction
+        let tx = db.begin_transaction().unwrap();
+
+        // Modify job in transaction
+        let mut modified_job = job.clone();
+        modified_job.status = JobStatus::Running;
+        modified_job.slurm_job_id = Some("12345".to_string());
+
+        // Save the modified job in transaction
+        JobDatabase::save_job_in_transaction(&tx, &modified_job).unwrap();
+
+        // Commit the transaction
+        tx.commit().unwrap();
+
+        // Verify job is modified permanently
+        let loaded_job = db.load_job(&job.job_id).unwrap().unwrap();
+        assert_eq!(loaded_job.status, JobStatus::Running);
+        assert_eq!(loaded_job.slurm_job_id, Some("12345".to_string()));
+    }
+
+    #[test]
+    fn test_transaction_delete_rollback() {
+        let mut db = create_test_database();
+        let job = create_test_job_info();
+
+        // Save the job first
+        db.save_job(&job).unwrap();
+        assert!(db.load_job(&job.job_id).unwrap().is_some());
+
+        // Begin a transaction and delete the job
+        {
+            let tx = db.begin_transaction().unwrap();
+            JobDatabase::delete_job_in_transaction(&tx, &job.job_id).unwrap();
+
+            // Verify job is deleted within transaction
+            {
+                let mut stmt = tx.prepare("SELECT COUNT(*) FROM jobs WHERE job_id = ?1").unwrap();
+                let count: i64 = stmt.query_row([&job.job_id], |row| row.get(0)).unwrap();
+                assert_eq!(count, 0);
+            }
+
+            // Drop transaction without committing (rollback)
+        }
+
+        // Verify job is still there
+        assert!(db.load_job(&job.job_id).unwrap().is_some());
+    }
+
+    #[test]
+    fn test_transaction_status_history() {
+        let mut db = create_test_database();
+        let job = create_test_job_info();
+
+        // Save the job first
+        db.save_job(&job).unwrap();
+
+        // Get initial history count
+        let initial_count: i64 = db.conn.prepare("SELECT COUNT(*) FROM job_status_history WHERE job_id = ?1")
+            .unwrap()
+            .query_row([&job.job_id], |row| row.get(0))
+            .unwrap();
+
+        // Begin transaction and update status
+        let tx = db.begin_transaction().unwrap();
+        let mut modified_job = job.clone();
+        modified_job.status = JobStatus::Running;
+        JobDatabase::save_job_in_transaction(&tx, &modified_job).unwrap();
+
+        // Verify history was added in transaction
+        let tx_count: i64 = tx.prepare("SELECT COUNT(*) FROM job_status_history WHERE job_id = ?1")
+            .unwrap()
+            .query_row([&job.job_id], |row| row.get(0))
+            .unwrap();
+        assert_eq!(tx_count, initial_count + 1);
+
+        // Rollback by dropping
+        drop(tx);
+
+        // Verify history is back to original count
+        let final_count: i64 = db.conn.prepare("SELECT COUNT(*) FROM job_status_history WHERE job_id = ?1")
+            .unwrap()
+            .query_row([&job.job_id], |row| row.get(0))
+            .unwrap();
+        assert_eq!(final_count, initial_count);
     }
 }

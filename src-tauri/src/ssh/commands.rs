@@ -172,61 +172,6 @@ impl<'a> CommandExecutor<'a> {
     }
 }
 
-/// Helper functions for common SLURM commands
-pub struct SLURMCommands;
-
-impl SLURMCommands {
-    /// Build sbatch command
-    pub fn sbatch(script_path: &str) -> String {
-        format!("sbatch {}", script_path)
-    }
-
-    /// Build squeue command for a specific job
-    pub fn squeue_job(job_id: &str) -> String {
-        format!("squeue -j {} --format='%i|%T|%M|%l|%S|%e' --noheader", job_id)
-    }
-
-    /// Build squeue command for all user jobs
-    pub fn squeue_user(username: &str) -> String {
-        format!("squeue -u {} --format='%i|%T|%M|%l|%S|%e' --noheader", username)
-    }
-
-    /// Build sacct command for job history
-    pub fn sacct_job(job_id: &str) -> String {
-        format!(
-            "sacct -j {} --format=JobID,JobName,State,ExitCode,Elapsed,Start,End --parsable2 --noheader",
-            job_id
-        )
-    }
-
-    /// Build scancel command
-    pub fn scancel(job_id: &str) -> String {
-        format!("scancel {}", job_id)
-    }
-
-    /// Parse sbatch output to get job ID
-    pub fn parse_sbatch_output(output: &str) -> Option<String> {
-        // Expected format: "Submitted batch job 12345678"
-        // Handle multiline output by processing first line
-        for line in output.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with("Submitted batch job") {
-                return trimmed.split_whitespace()
-                    .last()
-                    .and_then(|s| {
-                        // Verify it's a valid job ID (numeric)
-                        if s.chars().all(|c| c.is_ascii_digit()) {
-                            Some(s.to_string())
-                        } else {
-                            None
-                        }
-                    });
-            }
-        }
-        None
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,81 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn test_slurm_commands() {
-        assert_eq!(SLURMCommands::sbatch("/path/to/script.sh"), "sbatch /path/to/script.sh");
-        assert_eq!(
-            SLURMCommands::squeue_job("12345"),
-            "squeue -j 12345 --format='%i|%T|%M|%l|%S|%e' --noheader"
-        );
-        assert_eq!(SLURMCommands::scancel("12345"), "scancel 12345");
-    }
-
-    #[test]
-    fn test_parse_sbatch_output() {
-        let output = "Submitted batch job 12345678";
-        assert_eq!(SLURMCommands::parse_sbatch_output(output), Some("12345678".to_string()));
-
-        let invalid_output = "Error: Invalid script";
-        assert_eq!(SLURMCommands::parse_sbatch_output(invalid_output), None);
-    }
-
-
-    #[test]
-    fn test_squeue_command_format_validation() {
-        let job_id = "12345";
-        let command = SLURMCommands::squeue_job(job_id);
-
-        // Verify format contains required fields
-        assert!(command.contains("--format='%i|%T|%M|%l|%S|%e'"));
-        assert!(command.contains("--noheader"));
-        assert!(command.contains(&format!("-j {}", job_id)));
-
-        // Test user queue command
-        let username = "testuser";
-        let user_command = SLURMCommands::squeue_user(username);
-        assert!(user_command.contains(&format!("-u {}", username)));
-        assert!(user_command.contains("--format='%i|%T|%M|%l|%S|%e'"));
-    }
-
-    #[test]
-    fn test_sacct_command_format_validation() {
-        let job_id = "98765";
-        let command = SLURMCommands::sacct_job(job_id);
-
-        // Verify required fields are present
-        assert!(command.contains("JobID,JobName,State,ExitCode,Elapsed,Start,End"));
-        assert!(command.contains("--parsable2"));
-        assert!(command.contains("--noheader"));
-        assert!(command.contains(&format!("-j {}", job_id)));
-    }
-
-    #[test]
-    fn test_sbatch_output_parsing_edge_cases() {
-        // Standard success case
-        let standard = "Submitted batch job 12345678";
-        assert_eq!(SLURMCommands::parse_sbatch_output(standard), Some("12345678".to_string()));
-
-        // With extra whitespace
-        let whitespace = "  Submitted batch job   98765  \n";
-        assert_eq!(SLURMCommands::parse_sbatch_output(whitespace), Some("98765".to_string()));
-
-        // Error cases
-        assert_eq!(SLURMCommands::parse_sbatch_output(""), None);
-        assert_eq!(SLURMCommands::parse_sbatch_output("Error: Permission denied"), None);
-        assert_eq!(SLURMCommands::parse_sbatch_output("sbatch: command not found"), None);
-
-        // Invalid job ID format
-        assert_eq!(SLURMCommands::parse_sbatch_output("Submitted batch job abc"), None);
-        assert_eq!(SLURMCommands::parse_sbatch_output("Submitted batch job "), None);
-
-        // Multiple lines (should take first valid one)
-        let multiline = "Submitted batch job 11111\nSubmitted batch job 22222";
-        assert_eq!(SLURMCommands::parse_sbatch_output(multiline), Some("11111".to_string()));
-    }
-
-    #[test]
     fn test_command_result_timeout_detection() {
-
         // Test timeout scenarios
         let timeout_result = CommandResult {
             stdout: "".to_string(),
@@ -348,50 +219,5 @@ mod tests {
         assert_eq!(quick_result.exit_code, 0);
         assert!(quick_result.duration_ms < 1000);
         assert!(!quick_result.timed_out);
-    }
-
-
-    #[test]
-    fn test_slurm_format_string_consistency() {
-        // Ensure SLURM format strings are consistent across commands
-        let job_format = "%i|%T|%M|%l|%S|%e";
-
-        let job_cmd = SLURMCommands::squeue_job("123");
-        let user_cmd = SLURMCommands::squeue_user("testuser");
-
-        assert!(job_cmd.contains(job_format));
-        assert!(user_cmd.contains(job_format));
-
-        // Both should use the same formatting options
-        assert!(job_cmd.contains("--noheader"));
-        assert!(user_cmd.contains("--noheader"));
-    }
-
-    #[test]
-    fn test_error_result_parsing() {
-        // Test parsing various error scenarios
-        let error_cases = vec![
-            ("sbatch: error: Batch job submission failed: Invalid account specified", "Invalid account"),
-            ("squeue: error: Invalid user specified", "Invalid user"),
-            ("scancel: error: Kill job error on job id 12345: Invalid job id specified", "Invalid job id"),
-            ("module: command not found", "command not found"),
-        ];
-
-        for (error_output, expected_content) in error_cases {
-            // Test that our error handling can extract meaningful information
-            assert!(error_output.contains(expected_content));
-
-            // Simulate error result
-            let error_result = CommandResult {
-                stdout: "".to_string(),
-                stderr: error_output.to_string(),
-                exit_code: 1,
-                duration_ms: 50,
-                timed_out: false,
-            };
-
-            assert_ne!(error_result.exit_code, 0);
-            assert!(!error_result.stderr.is_empty());
-        }
     }
 }

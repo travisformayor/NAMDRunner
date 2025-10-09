@@ -1,83 +1,65 @@
 use crate::types::*;
-use crate::mock_state::{with_mock_state, get_mock_state, advance_job_progression};
-use crate::validation::{input, paths};
-use crate::mode_switching::{is_mock_mode, execute_with_mode};
-use crate::database::{with_database, helpers};
+use crate::demo::{with_demo_state, get_demo_state, advance_demo_progression, execute_with_mode, is_demo_mode};
+use crate::validation::input;
+use crate::database::with_database;
+use crate::automations;
+use crate::{info_log, debug_log, error_log};
 use chrono::Utc;
-use std::env;
+use tauri::Emitter;
+use serde::Serialize;
 
-/// Get the username for cluster operations from SSH session or environment
-/// Returns an error if no valid username can be determined
-async fn get_cluster_username() -> Result<String, String> {
-    // In mock mode, return a consistent mock username
-    if is_mock_mode() {
-        return Ok("mockuser".to_string());
-    }
-
-    // First try to get username from active SSH connection (most reliable)
-    let connection_manager = crate::ssh::get_connection_manager();
-    if let Some(conn_info) = connection_manager.get_connection_info().await {
-        return Ok(conn_info.username);
-    }
-
-    // Try environment variable for development/testing
-    if let Ok(username) = env::var("NAMDRUNNER_USERNAME") {
-        if !username.trim().is_empty() {
-            return Ok(username);
+#[tauri::command(rename_all = "snake_case")]
+pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -> CreateJobResult {
+    // Early validation at command boundary - sanitize job name immediately
+    let clean_job_name = match input::sanitize_job_id(&params.job_name) {
+        Ok(name) => name,
+        Err(e) => {
+            return CreateJobResult {
+                success: false,
+                job_id: None,
+                job: None,
+                error: Some(format!("Invalid job name: {}", e)),
+            };
         }
-    }
+    };
 
-    // Try system username as last resort
-    if let Ok(username) = env::var("USER") {
-        if !username.trim().is_empty() {
-            return Ok(username);
-        }
-    }
-
-    // No fallback - return proper error
-    Err("No username available. Please establish SSH connection or set NAMDRUNNER_USERNAME environment variable.".to_string())
-}
-
-
-#[tauri::command]
-pub async fn create_job(params: CreateJobParams) -> CreateJobResult {
-    // Simple validation - check job name is not empty
-    if params.job_name.trim().is_empty() {
-        return CreateJobResult {
-            success: false,
-            job_id: None,
-            error: Some("Job name is required".to_string()),
-        };
-    }
+    // Create params with validated job name
+    let validated_params = CreateJobParams {
+        job_name: clean_job_name,
+        namd_config: params.namd_config,
+        slurm_config: params.slurm_config,
+        input_files: params.input_files,
+    };
 
     execute_with_mode(
-        create_job_mock(params.clone()),
-        create_job_real(params)
+        create_job_demo(validated_params.clone()),
+        create_job_real(app_handle, validated_params)
     ).await
 }
 
-async fn create_job_mock(params: CreateJobParams) -> CreateJobResult {
+async fn create_job_demo(params: CreateJobParams) -> CreateJobResult {
     // Enhanced mock implementation - create job using mock state manager
 
     // Get realistic delay from mock state
-    let delay = get_mock_state(|state| state.get_delay("slurm") / 2).unwrap_or(200);
+    let delay = get_demo_state(|state| state.get_delay("slurm") / 2).unwrap_or(200);
     tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
 
     // Check for simulated errors
-    let should_fail = get_mock_state(|state| state.should_simulate_error()).unwrap_or(false);
+    let should_fail = get_demo_state(|state| state.should_simulate_error()).unwrap_or(false);
 
     if should_fail {
         return CreateJobResult {
             success: false,
             job_id: None,
+            job: None,
             error: Some("Failed to create job: Disk quota exceeded".to_string()),
         };
     }
 
-    with_mock_state(|state| {
+    with_demo_state(|state| {
         state.job_counter += 1;
         let job_id = format!("job_{:03}", state.job_counter);
-        let now = Utc::now().to_rfc3339();
+        let _now = Utc::now().to_rfc3339();
 
         let mut job_info = JobInfo::new(
             job_id.clone(),
@@ -99,138 +81,48 @@ async fn create_job_mock(params: CreateJobParams) -> CreateJobResult {
 
         CreateJobResult {
             success: true,
-            job_id: Some(job_id),
+            job_id: Some(job_id.clone()),
+            job: Some(job_info),
             error: None,
         }
     }).unwrap_or_else(|| CreateJobResult {
         success: false,
         job_id: None,
+        job: None,
         error: Some("Failed to access mock state".to_string()),
     })
 }
 
-async fn create_job_real(params: CreateJobParams) -> CreateJobResult {
-    // Real implementation with input validation and directory creation
+async fn create_job_real(app_handle: tauri::AppHandle, params: CreateJobParams) -> CreateJobResult {
+    // Use automation system with direct Tauri event emission for progress tracking
+    let handle_clone = app_handle.clone();
 
-    // First, validate and sanitize all inputs
-    let clean_job_name = match input::sanitize_job_id(&params.job_name) {
-        Ok(name) => name,
-        Err(e) => {
-            return CreateJobResult {
-                success: false,
-                job_id: None,
-                error: Some(format!("Invalid job name: {}", e)),
-            };
+    match automations::execute_job_creation_with_progress(
+        app_handle,
+        params,
+        move |msg| {
+            // Direct Tauri event emission - no abstraction layer
+            let _ = handle_clone.emit("job-creation-progress", msg);
         }
-    };
-
-    // Get username from environment/configuration - TODO Phase 2.3: Replace with session management
-    let username = match get_cluster_username().await {
-        Ok(username) => username,
-        Err(e) => {
-            return CreateJobResult {
-                success: false,
-                job_id: None,
-                error: Some(format!("Failed to get cluster username: {}", e)),
-            };
-        }
-    };
-
-    let clean_username = match input::sanitize_username(&username) {
-        Ok(name) => name,
-        Err(e) => {
-            return CreateJobResult {
-                success: false,
-                job_id: None,
-                error: Some(format!("Invalid username: {}", e)),
-            };
-        }
-    };
-
-    // Generate a unique job ID
-    let job_id = format!("job_{}", Utc::now().timestamp_micros());
-
-    // Generate safe directory paths
-    let project_dir = match paths::project_directory(&clean_username, &job_id) {
-        Ok(path) => path,
-        Err(e) => {
-            return CreateJobResult {
-                success: false,
-                job_id: None,
-                error: Some(format!("Failed to generate project directory path: {}", e)),
-            };
-        }
-    };
-
-    let scratch_dir = match paths::scratch_directory(&clean_username, &job_id) {
-        Ok(path) => path,
-        Err(e) => {
-            return CreateJobResult {
-                success: false,
-                job_id: None,
-                error: Some(format!("Failed to generate scratch directory path: {}", e)),
-            };
-        }
-    };
-
-    // Create the project directory structure with retry logic
-
-    // Create main project directory
-    let connection_manager = crate::ssh::get_connection_manager();
-    if let Err(e) = connection_manager.create_directory(&project_dir).await {
-        return CreateJobResult {
+    ).await {
+        Ok((job_id, job_info)) => CreateJobResult {
+            success: true,
+            job_id: Some(job_id),
+            job: Some(job_info),
+            error: None,
+        },
+        Err(e) => CreateJobResult {
             success: false,
             job_id: None,
-            error: Some(format!("Failed to create project directory: {}", e)),
-        };
-    }
-
-    // Create subdirectories
-    for subdir in paths::job_subdirectories() {
-        let subdir_path = format!("{}/{}", project_dir, subdir);
-        if let Err(e) = connection_manager.create_directory(&subdir_path).await {
-            return CreateJobResult {
-                success: false,
-                job_id: None,
-                error: Some(format!("Failed to create subdirectory '{}': {}", subdir, e)),
-            };
-        }
-    }
-
-    // Create JobInfo and save to database
-    let mut job_info = JobInfo::new(
-        job_id.clone(),
-        clean_job_name,
-        params.namd_config,
-        params.slurm_config,
-        params.input_files,
-        project_dir.clone(),
-    );
-
-    // Set the directory paths after creation
-    job_info.project_dir = Some(project_dir);
-    job_info.scratch_dir = Some(scratch_dir);
-
-    // Save to database using repository
-    
-    if let Err(e) = with_database(|db| db.save_job(&job_info)) {
-        return CreateJobResult {
-            success: false,
-            job_id: None,
-            error: Some(format!("Failed to save job to database: {}", e)),
-        };
-    }
-
-    CreateJobResult {
-        success: true,
-        job_id: Some(job_id),
-        error: None,
+            job: None,
+            error: Some(e.to_string()),
+        },
     }
 }
 
 
-#[tauri::command]
-pub async fn submit_job(job_id: String) -> SubmitJobResult {
+#[tauri::command(rename_all = "snake_case")]
+pub async fn submit_job(job_id: String, app_handle: tauri::AppHandle) -> SubmitJobResult {
     let clean_job_id = match input::sanitize_job_id(&job_id) {
         Ok(id) => id,
         Err(error) => {
@@ -244,20 +136,20 @@ pub async fn submit_job(job_id: String) -> SubmitJobResult {
     };
 
     execute_with_mode(
-        submit_job_mock(clean_job_id.clone()),
-        submit_job_real(clean_job_id)
+        submit_job_demo(clean_job_id.clone()),
+        submit_job_real(app_handle, clean_job_id)
     ).await
 }
 
-async fn submit_job_mock(job_id: String) -> SubmitJobResult {
+async fn submit_job_demo(job_id: String) -> SubmitJobResult {
     // Enhanced mock implementation - simulate realistic job submission
 
     // Get realistic delay from mock state
-    let delay = get_mock_state(|state| state.get_delay("slurm")).unwrap_or(500);
+    let delay = get_demo_state(|state| state.get_delay("slurm")).unwrap_or(500);
     tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
 
     // Check if connected to cluster
-    let is_connected = get_mock_state(|state| {
+    let is_connected = get_demo_state(|state| {
         matches!(state.connection_state, ConnectionState::Connected)
     }).unwrap_or(false);
 
@@ -271,7 +163,7 @@ async fn submit_job_mock(job_id: String) -> SubmitJobResult {
     }
 
     // Check for simulated errors
-    let should_fail = get_mock_state(|state| state.should_simulate_error()).unwrap_or(false);
+    let should_fail = get_demo_state(|state| state.should_simulate_error()).unwrap_or(false);
 
     if should_fail {
         return SubmitJobResult {
@@ -282,7 +174,7 @@ async fn submit_job_mock(job_id: String) -> SubmitJobResult {
         };
     }
 
-    with_mock_state(|state| {
+    with_demo_state(|state| {
         // Generate SLURM job ID first to avoid borrow issues
         let slurm_job_id = state.generate_slurm_job_id();
         let now = Utc::now().to_rfc3339();
@@ -319,189 +211,34 @@ async fn submit_job_mock(job_id: String) -> SubmitJobResult {
     })
 }
 
-async fn submit_job_real(job_id: String) -> SubmitJobResult {
-    // Real implementation with scratch directory creation
+async fn submit_job_real(app_handle: tauri::AppHandle, job_id: String) -> SubmitJobResult {
+    // Use automation system with direct Tauri event emission for progress tracking
+    let handle_clone = app_handle.clone();
 
-    // Get job information from database
-    
-    let mut job_info = match with_database(|db| db.load_job(&job_id)) {
-        Ok(Some(info)) => info,
-        Ok(None) => {
-            return SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some(format!("Job {} not found", job_id)),
-            };
+    match automations::execute_job_submission_with_progress(
+        app_handle,
+        job_id,
+        move |msg| {
+            // Direct Tauri event emission - no abstraction layer
+            let _ = handle_clone.emit("job-submission-progress", msg);
         }
-        Err(e) => {
-            return SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some(format!("Failed to load job {}: {}", job_id, e)),
-            };
-        }
-    };
-
-    // Get the scratch directory path from job info
-    let scratch_dir = match &job_info.scratch_dir {
-        Some(dir) => dir.clone(),
-        None => {
-            return SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some("Job does not have a scratch directory configured".to_string()),
-            };
-        }
-    };
-
-    // Create scratch directory structure with retry logic
-    let connection_manager = crate::ssh::get_connection_manager();
-    if let Err(e) = connection_manager.create_directory(&scratch_dir).await {
-        return SubmitJobResult {
-            success: false,
-            slurm_job_id: None,
-            submitted_at: None,
-            error: Some(format!("Failed to create scratch directory: {}", e)),
-        };
-    }
-
-    // Create scratch subdirectories for job execution
-    let scratch_subdirs = vec!["input", "output", "logs"];
-    for subdir in scratch_subdirs {
-        let subdir_path = format!("{}/{}", scratch_dir, subdir);
-        if let Err(e) = connection_manager.create_directory(&subdir_path).await {
-            return SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some(format!("Failed to create scratch subdirectory '{}': {}", subdir, e)),
-            };
-        }
-    }
-
-    // Copy input files from project to scratch directory
-    if let Err(e) = copy_input_files(&job_info, &connection_manager).await {
-        cleanup_scratch_directory(&connection_manager, &scratch_dir).await;
-        return SubmitJobResult {
-            success: false,
-            slurm_job_id: None,
-            submitted_at: None,
-            error: Some(format!("Failed to copy input files: {}", e)),
-        };
-    }
-
-    // Generate SLURM script and NAMD config
-    let slurm_script = match crate::slurm::SlurmScriptGenerator::generate_namd_script(&job_info) {
-        Ok(script) => script,
-        Err(e) => {
-            cleanup_scratch_directory(&connection_manager, &scratch_dir).await;
-            return SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some(format!("Failed to generate SLURM script: {}", e)),
-            };
-        }
-    };
-
-    let namd_config = match crate::slurm::SlurmScriptGenerator::generate_namd_config(&job_info) {
-        Ok(config) => config,
-        Err(e) => {
-            cleanup_scratch_directory(&connection_manager, &scratch_dir).await;
-            return SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some(format!("Failed to generate NAMD config: {}", e)),
-            };
-        }
-    };
-
-    // Upload SLURM script and NAMD config to scratch directory
-    let script_path = format!("{}/job.sbatch", scratch_dir);
-    let config_path = format!("{}/config.namd", scratch_dir);
-
-    // Upload SLURM script using printf command
-    if let Err(e) = upload_content(connection_manager, &slurm_script, &script_path).await {
-        cleanup_scratch_directory(&connection_manager, &scratch_dir).await;
-        return SubmitJobResult {
-            success: false,
-            slurm_job_id: None,
-            submitted_at: None,
-            error: Some(format!("Failed to upload SLURM script: {}", e)),
-        };
-    }
-
-    // Upload NAMD config using printf command
-    if let Err(e) = upload_content(connection_manager, &namd_config, &config_path).await {
-        cleanup_scratch_directory(&connection_manager, &scratch_dir).await;
-        return SubmitJobResult {
-            success: false,
-            slurm_job_id: None,
-            submitted_at: None,
-            error: Some(format!("Failed to upload NAMD config: {}", e)),
-        };
-    }
-
-    // Submit job to SLURM
-    let sbatch_cmd = format!("source /etc/profile && module load slurm/alpine && cd {} && sbatch job.sbatch", scratch_dir);
-    let result = match connection_manager.execute_command(&sbatch_cmd, Some(30)).await {
+    ).await {
         Ok(result) => result,
-        Err(e) => {
-            cleanup_scratch_directory(&connection_manager, &scratch_dir).await;
-            return SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some(format!("Failed to execute sbatch command: {}", e)),
-            };
-        }
-    };
-
-    // Parse SLURM job ID from sbatch output
-    let slurm_job_id = match parse_sbatch_output(&result.stdout) {
-        Some(id) => id,
-        None => {
-            cleanup_scratch_directory(&connection_manager, &scratch_dir).await;
-            return SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some(format!("Failed to parse SLURM job ID from output: {}", result.stdout)),
-            };
-        }
-    };
-
-    let now = Utc::now().to_rfc3339();
-
-    // Update job with SLURM job ID and save to database
-    
-    if let Err(e) = helpers::update_job_with_slurm_id(&mut job_info, slurm_job_id.clone()) {
-        return SubmitJobResult {
+        Err(e) => SubmitJobResult {
             success: false,
             slurm_job_id: None,
             submitted_at: None,
-            error: Some(format!("Failed to update job with SLURM ID: {}", e)),
-        };
-    }
-
-    SubmitJobResult {
-        success: true,
-        slurm_job_id: Some(slurm_job_id),
-        submitted_at: Some(now),
-        error: None,
+            error: Some(e.to_string()),
+        },
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_job_status(job_id: String) -> JobStatusResult {
     // NOTE: Using mock state for delay simulation in development
     // This provides realistic UI behavior during development
     // In production, this would be replaced with actual SLURM query latency
-    let delay = get_mock_state(|state| state.get_delay("slurm") / 5).unwrap_or(100);
+    let delay = get_demo_state(|state| state.get_delay("slurm") / 5).unwrap_or(100);
     tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
 
     // Retrieve job from database
@@ -525,12 +262,12 @@ pub async fn get_job_status(job_id: String) -> JobStatusResult {
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn get_all_jobs() -> GetAllJobsResult {
     // NOTE: Using mock state for delay simulation in development
     // This provides realistic UI behavior during development
     // In production, this would be replaced with actual database query latency
-    let delay = get_mock_state(|state| state.get_delay("slurm") / 5).unwrap_or(100);
+    let delay = get_demo_state(|state| state.get_delay("slurm") / 5).unwrap_or(100);
     tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
 
     // Retrieve all jobs from database
@@ -549,18 +286,25 @@ pub async fn get_all_jobs() -> GetAllJobsResult {
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn sync_jobs() -> SyncJobsResult {
-    // Enhanced mock implementation - simulate realistic job progression
-    
-    let delay = get_mock_state(|state| state.get_delay("slurm") * 4).unwrap_or(800);
+    execute_with_mode(
+        sync_jobs_demo(),
+        sync_jobs_real()
+    ).await
+}
+
+async fn sync_jobs_demo() -> SyncJobsResult {
+    // Mock implementation - simulate realistic job progression
+
+    let delay = get_demo_state(|state| state.get_delay("slurm") * 4).unwrap_or(800);
     tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-    
+
     // Check if connected to cluster
-    let is_connected = get_mock_state(|state| {
+    let is_connected = get_demo_state(|state| {
         matches!(state.connection_state, ConnectionState::Connected)
     }).unwrap_or(false);
-    
+
     if !is_connected {
         return SyncJobsResult {
             success: false,
@@ -568,10 +312,10 @@ pub async fn sync_jobs() -> SyncJobsResult {
             errors: vec!["Not connected to cluster".to_string()],
         };
     }
-    
+
     // Check for simulated errors
-    let should_fail = get_mock_state(|state| state.should_simulate_error()).unwrap_or(false);
-    
+    let should_fail = get_demo_state(|state| state.should_simulate_error()).unwrap_or(false);
+
     if should_fail {
         return SyncJobsResult {
             success: false,
@@ -579,17 +323,23 @@ pub async fn sync_jobs() -> SyncJobsResult {
             errors: vec!["Network error: Unable to contact SLURM controller".to_string()],
         };
     }
-    
-    // Advance job states using the enhanced mock state manager
-    advance_job_progression();
-    
-    let jobs_updated = get_mock_state(|state| {
-        // Count how many jobs were updated in the last sync
-        state.jobs.values().filter(|job| {
-            matches!(job.status, JobStatus::Running | JobStatus::Completed | JobStatus::Failed)
-        }).count() as u32
-    }).unwrap_or(0);
-    
+
+    // In demo mode, keep job states static - don't advance progression
+    let jobs_updated = if is_demo_mode() {
+        // Demo mode: return 0 updates to maintain static demo experience
+        0
+    } else {
+        // Real mode: advance job states using the enhanced mock state manager
+        advance_demo_progression();
+
+        get_demo_state(|state| {
+            // Count how many jobs were updated in the last sync
+            state.jobs.values().filter(|job| {
+                matches!(job.status, JobStatus::Running | JobStatus::Completed | JobStatus::Failed)
+            }).count() as u32
+        }).unwrap_or(0)
+    };
+
     SyncJobsResult {
         success: true,
         jobs_updated,
@@ -597,8 +347,34 @@ pub async fn sync_jobs() -> SyncJobsResult {
     }
 }
 
+async fn sync_jobs_real() -> SyncJobsResult {
+    // Real implementation using job_sync automation
+    info_log!("[Sync Jobs] Starting real job sync");
 
-#[tauri::command]
+    match automations::sync_all_jobs().await {
+        Ok(results) => {
+            let jobs_updated = results.iter().filter(|r| r.updated).count() as u32;
+            info_log!("[Sync Jobs] Successfully synced {} jobs", jobs_updated);
+
+            SyncJobsResult {
+                success: true,
+                jobs_updated,
+                errors: vec![],
+            }
+        }
+        Err(e) => {
+            error_log!("[Sync Jobs] Failed to sync jobs: {}", e);
+            SyncJobsResult {
+                success: false,
+                jobs_updated: 0,
+                errors: vec![e.to_string()],
+            }
+        }
+    }
+}
+
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn delete_job(job_id: String, delete_remote: bool) -> DeleteJobResult {
     let clean_job_id = match input::sanitize_job_id(&job_id) {
         Ok(id) => id,
@@ -611,20 +387,20 @@ pub async fn delete_job(job_id: String, delete_remote: bool) -> DeleteJobResult 
     };
 
     execute_with_mode(
-        delete_job_mock(clean_job_id.clone(), delete_remote),
+        delete_job_demo(clean_job_id.clone(), delete_remote),
         delete_job_real(clean_job_id, delete_remote)
     ).await
 }
 
-async fn delete_job_mock(job_id: String, delete_remote: bool) -> DeleteJobResult {
+async fn delete_job_demo(job_id: String, delete_remote: bool) -> DeleteJobResult {
     // Enhanced mock implementation - delete job with realistic behavior
 
-    let base_delay = get_mock_state(|state| state.get_delay("slurm") / 5).unwrap_or(100);
+    let base_delay = get_demo_state(|state| state.get_delay("slurm") / 5).unwrap_or(100);
     let delay = if delete_remote { base_delay * 5 } else { base_delay };
     tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
 
     // Check for simulated errors
-    let should_fail = get_mock_state(|state| state.should_simulate_error()).unwrap_or(false);
+    let should_fail = get_demo_state(|state| state.should_simulate_error()).unwrap_or(false);
 
     if should_fail && delete_remote {
         return DeleteJobResult {
@@ -633,7 +409,7 @@ async fn delete_job_mock(job_id: String, delete_remote: bool) -> DeleteJobResult
         };
     }
 
-    with_mock_state(|state| {
+    with_demo_state(|state| {
         if let Some(job_info) = state.jobs.remove(&job_id) {
             // Also delete from database for consistency with get_job_status
             
@@ -675,6 +451,42 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
             };
         }
     };
+
+    // Cancel SLURM job if it's still actively running or pending
+    if matches!(job_info.status, crate::types::JobStatus::Pending | crate::types::JobStatus::Running) {
+        if let Some(slurm_job_id) = &job_info.slurm_job_id {
+            // Check if connected to cluster
+            let connection_manager = crate::ssh::get_connection_manager();
+            if !connection_manager.is_connected().await {
+                return DeleteJobResult {
+                    success: false,
+                    error: Some("Cannot cancel SLURM job: Not connected to cluster".to_string()),
+                };
+            }
+
+            // Get username for SLURM operations
+            let username = match connection_manager.get_username().await {
+                Ok(user) => user,
+                Err(e) => {
+                    return DeleteJobResult {
+                        success: false,
+                        error: Some(format!("Failed to get cluster username: {}", e)),
+                    };
+                }
+            };
+
+            // Cancel the SLURM job to prevent orphaned cluster jobs
+            let slurm_sync = crate::slurm::status::SlurmStatusSync::new(&username);
+            if let Err(e) = slurm_sync.cancel_job(slurm_job_id).await {
+                return DeleteJobResult {
+                    success: false,
+                    error: Some(format!("Failed to cancel SLURM job {}: {}", slurm_job_id, e)),
+                };
+            }
+
+            info_log!("[Delete Job] Successfully cancelled SLURM job: {}", slurm_job_id);
+        }
+    }
 
     // If delete_remote is requested, clean up directories
     if delete_remote {
@@ -744,12 +556,16 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
     }
 }
 
-#[tauri::command]
-pub async fn sync_job_status(job_id: String) -> SyncJobStatusResult {
+
+
+// Job completion automation commands
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn complete_job(app_handle: tauri::AppHandle, job_id: String) -> CompleteJobResult {
     let clean_job_id = match input::sanitize_job_id(&job_id) {
         Ok(id) => id,
         Err(e) => {
-            return SyncJobStatusResult {
+            return CompleteJobResult {
                 success: false,
                 job_info: None,
                 error: Some(format!("Invalid job ID: {}", e)),
@@ -757,318 +573,200 @@ pub async fn sync_job_status(job_id: String) -> SyncJobStatusResult {
         }
     };
 
-    // Load job from database
-    
-    let mut job_info = match with_database(|db| db.load_job(&clean_job_id)) {
-        Ok(Some(job)) => job,
-        Ok(None) => {
-            return SyncJobStatusResult {
-                success: false,
-                job_info: None,
-                error: Some(format!("Job {} not found", clean_job_id)),
-            };
-        }
-        Err(e) => {
-            return SyncJobStatusResult {
-                success: false,
-                job_info: None,
-                error: Some(format!("Failed to load job {}: {}", clean_job_id, e)),
-            };
-        }
-    };
+    // Use automation system with direct Tauri event emission for progress tracking
+    let handle_clone = app_handle.clone();
 
-    // Only sync jobs that have a SLURM job ID
-    let slurm_job_id = match &job_info.slurm_job_id {
-        Some(id) => id.clone(),
-        None => {
-            return SyncJobStatusResult {
-                success: true, // Not an error - job hasn't been submitted yet
-                job_info: Some(job_info),
-                error: None,
-            };
+    match automations::execute_job_completion_with_progress(
+        app_handle,
+        clean_job_id,
+        move |msg| {
+            // Direct Tauri event emission - no abstraction layer
+            let _ = handle_clone.emit("job-completion-progress", msg);
         }
-    };
-
-    // Get username from environment for SLURM sync
-    let username = match get_cluster_username().await {
-        Ok(username) => username,
-        Err(e) => {
-            return SyncJobStatusResult {
-                success: false,
-                job_info: None,
-                error: Some(format!("Failed to get cluster username: {}", e)),
-            };
-        }
-    };
-
-    // Use SLURM status sync to get current status
-    let slurm_sync = crate::slurm::SlurmStatusSync::new(&username);
-
-    match slurm_sync.sync_job_status(&slurm_job_id).await {
-        Ok(new_status) => {
-            // Update job status if it changed
-            if job_info.status != new_status {
-                
-                if let Err(e) = helpers::update_job_status_with_timestamps(&mut job_info, new_status, "slurm") {
-                    return SyncJobStatusResult {
-                        success: false,
-                        job_info: Some(job_info),
-                        error: Some(format!("Failed to update job status: {}", e)),
-                    };
-                }
-            }
-
-            SyncJobStatusResult {
-                success: true,
-                job_info: Some(job_info),
-                error: None,
-            }
-        }
-        Err(e) => {
-            SyncJobStatusResult {
-                success: false,
-                job_info: Some(job_info),
-                error: Some(format!("Failed to sync status from SLURM: {}", e)),
-            }
-        }
+    ).await {
+        Ok(job_info) => CompleteJobResult {
+            success: true,
+            job_info: Some(job_info),
+            error: None,
+        },
+        Err(e) => CompleteJobResult {
+            success: false,
+            job_info: None,
+            error: Some(e.to_string()),
+        },
     }
 }
 
-#[tauri::command]
-pub async fn sync_all_jobs() -> SyncAllJobsResult {
-    // Load all jobs from database
-    
-    let jobs = match with_database(|db| db.load_all_jobs()) {
-        Ok(jobs) => jobs,
-        Err(e) => {
-            return SyncAllJobsResult {
-                success: false,
-                jobs_updated: 0,
-                errors: vec![format!("Failed to load jobs from database: {}", e)],
-            };
-        }
-    };
+/// Result type for job discovery operation
+#[derive(Debug, Serialize)]
+pub struct DiscoverJobsResult {
+    pub success: bool,
+    #[serde(rename = "jobsFound")]
+    pub jobs_found: u32,
+    #[serde(rename = "jobsImported")]
+    pub jobs_imported: u32,
+    pub error: Option<String>,
+}
 
-    // Filter jobs that have SLURM job IDs
-    let jobs_with_slurm_ids: Vec<_> = jobs
-        .into_iter()
-        .filter(|job| job.slurm_job_id.is_some())
-        .collect();
+/// Discover jobs from server by scanning the remote directory
+/// Only runs when local database is empty (0 jobs)
+#[tauri::command(rename_all = "snake_case")]
+pub async fn discover_jobs_from_server(app_handle: tauri::AppHandle) -> DiscoverJobsResult {
+    execute_with_mode(
+        discover_jobs_demo(),
+        discover_jobs_real(app_handle)
+    ).await
+}
 
-    if jobs_with_slurm_ids.is_empty() {
-        return SyncAllJobsResult {
-            success: true,
-            jobs_updated: 0,
-            errors: vec![],
+async fn discover_jobs_demo() -> DiscoverJobsResult {
+    // In mock mode, jobs are already in the database
+    // Simulate discovering a few jobs
+    let delay = get_demo_state(|state| state.get_delay("slurm") * 2).unwrap_or(400);
+    tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+
+    // Check if connected
+    let is_connected = get_demo_state(|state| {
+        matches!(state.connection_state, ConnectionState::Connected)
+    }).unwrap_or(false);
+
+    if !is_connected {
+        return DiscoverJobsResult {
+            success: false,
+            jobs_found: 0,
+            jobs_imported: 0,
+            error: Some("Not connected to cluster".to_string()),
         };
     }
 
-    // Extract SLURM job IDs for batch sync
-    let slurm_job_ids: Vec<String> = jobs_with_slurm_ids
-        .iter()
-        .filter_map(|job| job.slurm_job_id.clone())
-        .collect();
+    // Simulate finding some jobs that are already in the DB
+    DiscoverJobsResult {
+        success: true,
+        jobs_found: 3,
+        jobs_imported: 0,
+        error: None,
+    }
+}
 
-    // Get username from environment for SLURM sync
-    let username = match get_cluster_username().await {
-        Ok(username) => username,
+async fn discover_jobs_real(_app_handle: tauri::AppHandle) -> DiscoverJobsResult {
+    // Get SSH connection
+    let manager = crate::ssh::get_connection_manager();
+    
+    // Check if connected
+    if !manager.is_connected().await {
+        return DiscoverJobsResult {
+            success: false,
+            jobs_found: 0,
+            jobs_imported: 0,
+            error: Some("Not connected to cluster".to_string()),
+        };
+    }
+
+    // Get username for path construction
+    let username = match manager.get_username().await {
+        Ok(user) => user,
         Err(e) => {
-            log::error!("Failed to get cluster username for sync_all_jobs: {}", e);
-            return SyncAllJobsResult {
+            return DiscoverJobsResult {
                 success: false,
-                jobs_updated: 0,
-                errors: vec![format!("Failed to get cluster username: {}", e)],
+                jobs_found: 0,
+                jobs_imported: 0,
+                error: Some(format!("Failed to get username: {}", e)),
             };
         }
     };
-    let slurm_sync = crate::slurm::SlurmStatusSync::new(&username);
 
-    // Sync all jobs at once using batch operation
-    match slurm_sync.sync_all_jobs(&slurm_job_ids).await {
-        Ok(sync_results) => {
-            let mut jobs_updated = 0;
-            let mut errors = Vec::new();
+    // Construct remote jobs directory path
+    let remote_jobs_dir = format!("/projects/{}/namdrunner_jobs", username);
 
-            // Create a mapping from SLURM job ID to our job
-            let mut job_map: std::collections::HashMap<String, JobInfo> = jobs_with_slurm_ids
-                .into_iter()
-                .filter_map(|job| {
-                    job.slurm_job_id.clone().map(|slurm_id| (slurm_id, job))
-                })
-                .collect();
+    info_log!("[JOB DISCOVERY] Scanning remote directory: {}", remote_jobs_dir);
 
-            // Process sync results
-            for (slurm_job_id, status_result) in sync_results {
-                if let Some(mut job_info) = job_map.remove(&slurm_job_id) {
-                    match status_result {
-                        Ok(new_status) => {
-                            // Update job status if it changed
-                            if job_info.status != new_status {
-                                
-                                if let Err(e) = helpers::update_job_status_with_timestamps(&mut job_info, new_status, "slurm") {
-                                    errors.push(format!("Failed to update job {}: {}", job_info.job_id, e));
-                                } else {
-                                    jobs_updated += 1;
-                                }
-                            }
+    // List directories in the jobs folder
+    let job_dirs = match manager.list_files(&remote_jobs_dir).await {
+        Ok(files) => files.into_iter()
+            .filter(|f| f.is_directory)
+            .map(|f| f.name)
+            .collect::<Vec<_>>(),
+        Err(e) => {
+            error_log!("[JOB DISCOVERY] ERROR: Failed to list directories: {}", e);
+            return DiscoverJobsResult {
+                success: false,
+                jobs_found: 0,
+                jobs_imported: 0,
+                error: Some(format!("Failed to list job directories: {}", e)),
+            };
+        }
+    };
+
+    info_log!("[JOB DISCOVERY] Found {} directories", job_dirs.len());
+
+    let mut jobs_found = 0;
+    let mut jobs_imported = 0;
+
+    // Read job_info.json from each directory
+    for job_dir in job_dirs {
+        let job_info_path = format!("{}/{}/job_info.json", remote_jobs_dir, job_dir);
+        
+        debug_log!("[JOB DISCOVERY] Reading: {}", job_info_path);
+
+        // Try to read the job info file
+        let job_json = match manager.read_remote_file(&job_info_path).await {
+            Ok(content) => content,
+            Err(e) => {
+                debug_log!("[JOB DISCOVERY] WARNING: Could not read {}: {}", job_info_path, e);
+                continue;
+            }
+        };
+
+        // Parse the JSON
+        let job_info: JobInfo = match serde_json::from_str(&job_json) {
+            Ok(info) => info,
+            Err(e) => {
+                debug_log!("[JOB DISCOVERY] WARNING: Invalid JSON in {}: {}", job_info_path, e);
+                continue;
+            }
+        };
+
+        jobs_found += 1;
+
+        // Check if job already exists in database and import if not
+        let job_id = job_info.job_id.clone();
+        let result = with_database(|db| {
+            match db.load_job(&job_id) {
+                Ok(Some(_)) => {
+                    // Job already exists, skip
+                    debug_log!("[JOB DISCOVERY] Job {} already in database", job_id);
+                    Ok(false) // false means not imported
+                }
+                Ok(None) => {
+                    // Job doesn't exist, import it
+                    match db.save_job(&job_info) {
+                        Ok(_) => {
+                            info_log!("[JOB DISCOVERY] Imported job: {}", job_id);
+                            Ok(true) // true means imported
                         }
                         Err(e) => {
-                            errors.push(format!("Failed to sync job {} (SLURM ID {}): {}", job_info.job_id, slurm_job_id, e));
+                            error_log!("[JOB DISCOVERY] ERROR: Failed to save job {}: {}", job_id, e);
+                            Ok(false)
                         }
                     }
                 }
-            }
-
-            SyncAllJobsResult {
-                success: errors.is_empty(),
-                jobs_updated,
-                errors,
-            }
-        }
-        Err(e) => {
-            SyncAllJobsResult {
-                success: false,
-                jobs_updated: 0,
-                errors: vec![format!("Failed to sync jobs from SLURM: {}", e)],
-            }
-        }
-    }
-}
-
-/// Copy input files from project directory to scratch directory
-async fn copy_input_files(
-    job_info: &JobInfo,
-    connection_manager: &crate::ssh::ConnectionManager,
-) -> anyhow::Result<()> {
-    let project_dir = job_info.project_dir
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Project directory not configured"))?;
-
-    let scratch_dir = job_info.scratch_dir
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Scratch directory not configured"))?;
-
-    let input_files_dir = format!("{}/input_files", scratch_dir);
-    connection_manager.create_directory(&input_files_dir).await?;
-
-    // Copy each input file using cp command over SSH
-    for input_file in &job_info.input_files {
-        let source_path = format!("{}/{}", project_dir, input_file.name);
-        let dest_path = format!("{}/{}", input_files_dir, input_file.name);
-
-        let copy_cmd = format!("cp '{}' '{}'", source_path, dest_path);
-        connection_manager.execute_command(&copy_cmd, Some(30)).await?;
-    }
-
-    Ok(())
-}
-
-/// Upload text content to a remote file using SSH commands
-async fn upload_content(
-    connection_manager: &crate::ssh::ConnectionManager,
-    content: &str,
-    remote_path: &str,
-) -> anyhow::Result<()> {
-    // Escape content for shell safety
-    let escaped_content = content
-        .replace("\\", "\\\\")  // Escape backslashes first
-        .replace("'", "'\"'\"'"); // Escape single quotes
-
-    // Use printf for safe content upload (no injection possible)
-    let upload_cmd = format!(
-        "printf '%s' '{}' > '{}'",
-        escaped_content,
-        remote_path
-    );
-
-    connection_manager.execute_command(&upload_cmd, Some(30)).await?;
-    Ok(())
-}
-
-/// Clean up scratch directory on job submission failure (best effort)
-async fn cleanup_scratch_directory(
-    connection_manager: &crate::ssh::ConnectionManager,
-    scratch_dir: &str,
-) {
-    // Best effort cleanup - don't fail if cleanup fails
-    if let Err(e) = connection_manager.delete_directory(scratch_dir).await {
-        log::warn!("Failed to cleanup scratch directory {}: {}", scratch_dir, e);
-    }
-}
-
-/// Parse SLURM job ID from sbatch output
-fn parse_sbatch_output(output: &str) -> Option<String> {
-    // Look for "Submitted batch job XXXXXX" pattern - simple string parsing
-    for line in output.lines() {
-        let line = line.trim();
-        if line.starts_with("Submitted batch job ") {
-            if let Some(job_id_str) = line.strip_prefix("Submitted batch job ") {
-                let job_id_str = job_id_str.trim();
-                // Only accept if it's all digits (valid SLURM job ID)
-                if !job_id_str.is_empty() && job_id_str.chars().all(|c| c.is_ascii_digit()) {
-                    return Some(job_id_str.to_string());
+                Err(e) => {
+                    error_log!("[JOB DISCOVERY] ERROR: Database error checking job {}: {}", job_id, e);
+                    Ok(false)
                 }
             }
+        });
+
+        if matches!(result, Ok(true)) {
+            jobs_imported += 1;
         }
     }
-    None
-}
 
-#[cfg(test)]
-mod security_tests {
-    use super::*;
+    info_log!("[JOB DISCOVERY] Discovery complete: {} jobs found, {} imported", jobs_found, jobs_imported);
 
-    #[test]
-    fn test_parse_sbatch_output_security() {
-        // Valid SLURM job ID
-        assert_eq!(
-            parse_sbatch_output("Submitted batch job 12345"),
-            Some("12345".to_string())
-        );
-
-        // Invalid - non-numeric job ID should be rejected
-        assert_eq!(
-            parse_sbatch_output("Submitted batch job 12345; rm -rf /"),
-            None
-        );
-
-        // Invalid - empty job ID
-        assert_eq!(
-            parse_sbatch_output("Submitted batch job "),
-            None
-        );
-
-        // Invalid - job ID with letters
-        assert_eq!(
-            parse_sbatch_output("Submitted batch job abc123"),
-            None
-        );
-
-        // Valid - multiline output with valid job ID
-        assert_eq!(
-            parse_sbatch_output("Some other output\nSubmitted batch job 67890\nMore output"),
-            Some("67890".to_string())
-        );
-    }
-
-    #[test]
-    fn test_upload_content_escaping() {
-        // Test that dangerous content gets properly escaped
-        let dangerous_content = "echo 'harmless'; rm -rf /; echo 'EOF'\nEOF\n; echo 'dangerous'";
-
-        // The escaping should prevent any command injection
-        let escaped = dangerous_content
-            .replace("\\", "\\\\")
-            .replace("'", "'\"'\"'");
-
-        // Verify the escaping works for single quotes
-        assert!(escaped.contains("'\"'\"'"));
-
-        // Content with backslashes should be escaped
-        let backslash_content = "path\\to\\file";
-        let escaped_backslash = backslash_content
-            .replace("\\", "\\\\")
-            .replace("'", "'\"'\"'");
-        assert_eq!(escaped_backslash, "path\\\\to\\\\file");
+    DiscoverJobsResult {
+        success: true,
+        jobs_found,
+        jobs_imported,
+        error: None,
     }
 }

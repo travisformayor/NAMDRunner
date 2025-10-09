@@ -57,7 +57,48 @@ impl<'a> SFTPOperations<'a> {
             .map_err(|e| SSHError::SessionError(format!("Failed to create SFTP session: {}", e)).into())
     }
 
-    /// Upload a file to remote server
+    /// Upload bytes directly to remote file
+    pub fn upload_bytes(
+        &self,
+        remote_path: &str,
+        content: &[u8],
+    ) -> Result<FileTransferProgress> {
+        let sftp = self.get_sftp()?;
+
+        // Create remote file
+        let mut remote_file = sftp.create(Path::new(remote_path))
+            .map_err(|e| SSHError::FileTransferError(format!("Failed to create remote file: {}", e)))?;
+
+        let start_time = std::time::Instant::now();
+        let file_size = content.len() as u64;
+
+        // Write all content to remote file
+        remote_file.write_all(content)
+            .map_err(|e| SSHError::FileTransferError(format!("Failed to write to remote file: {}", e)))?;
+
+        // Sync to ensure data is written
+        remote_file.fsync()
+            .map_err(|e| SSHError::FileTransferError(format!("Failed to sync remote file: {}", e)))?;
+
+        let duration = start_time.elapsed().as_secs_f64();
+        let transfer_rate = if duration > 0.0 {
+            file_size as f64 / duration
+        } else {
+            0.0
+        };
+
+        Ok(FileTransferProgress {
+            bytes_transferred: file_size,
+            total_bytes: file_size,
+            percentage: 100.0,
+            transfer_rate,
+        })
+    }
+
+    /// Upload a file to remote server with chunked writes and progress tracking
+    ///
+    /// Uses 256KB chunks with per-chunk flush to avoid timeout accumulation.
+    /// Each chunk gets a fresh timeout window from the session timeout setting.
     pub fn upload_file(
         &self,
         local_path: &Path,
@@ -71,14 +112,19 @@ impl<'a> SFTPOperations<'a> {
             .map_err(|e| SSHError::FileTransferError(format!("Failed to open local file: {}", e)))?;
 
         let file_size = local_file.metadata()?.len();
-        let mut reader = BufReader::with_capacity(self.buffer_size, local_file);
+        let file_name = local_path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let mut reader = BufReader::with_capacity(CHUNK_SIZE, local_file);
 
         // Create remote file
         let mut remote_file = sftp.create(Path::new(remote_path))
             .map_err(|e| SSHError::FileTransferError(format!("Failed to create remote file: {}", e)))?;
 
-        // Transfer file with progress tracking
-        let mut buffer = vec![0u8; self.buffer_size];
+        // Transfer file with chunked writes and progress tracking
+        let mut buffer = vec![0u8; CHUNK_SIZE];
         let mut bytes_transferred = 0u64;
         let start_time = std::time::Instant::now();
 
@@ -88,8 +134,37 @@ impl<'a> SFTPOperations<'a> {
                 break;
             }
 
-            remote_file.write_all(&buffer[..bytes_read])
-                .map_err(|e| SSHError::FileTransferError(format!("Failed to write to remote file: {}", e)))?;
+            // Write chunk with error context
+            let chunk_start = std::time::Instant::now();
+
+            match remote_file.write_all(&buffer[..bytes_read]) {
+                Ok(_) => {
+                    // Flush chunk to ensure it's written before next chunk
+                    // This prevents timeout accumulation across multiple chunks
+                    if let Err(e) = remote_file.fsync() {
+                        let chunk_duration = chunk_start.elapsed();
+                        return Err(SSHError::FileTransferError(
+                            format!("Failed to flush chunk for file '{}' ({} bytes, {:.1}% complete) after {:?}: {}",
+                                   file_name,
+                                   bytes_transferred,
+                                   (bytes_transferred as f32 / file_size as f32) * 100.0,
+                                   chunk_duration,
+                                   e)
+                        ).into());
+                    }
+                },
+                Err(e) => {
+                    let chunk_duration = chunk_start.elapsed();
+                    return Err(SSHError::FileTransferError(
+                        format!("Failed to write chunk for file '{}' ({} bytes, {:.1}% complete) after {:?}: {}",
+                               file_name,
+                               bytes_transferred,
+                               (bytes_transferred as f32 / file_size as f32) * 100.0,
+                               chunk_duration,
+                               e)
+                    ).into());
+                }
+            }
 
             bytes_transferred += bytes_read as u64;
 
@@ -205,43 +280,12 @@ impl<'a> SFTPOperations<'a> {
         Ok(files)
     }
 
-    /// Create a directory
+    /// Create a directory (single level only - use SSH mkdir -p for recursive)
+    /// Note: Directory creation now uses SSH commands in manager.rs for better performance
     pub fn create_directory(&self, remote_path: &str, mode: i32) -> Result<()> {
         let sftp = self.get_sftp()?;
 
         sftp.mkdir(Path::new(remote_path), mode)
-            .map_err(|e| SSHError::FileTransferError(format!("Failed to create directory: {}", e)))?;
-
-        Ok(())
-    }
-
-    /// Create directory recursively (like mkdir -p)
-    pub fn create_directory_recursive(&self, remote_path: &str, mode: i32) -> Result<()> {
-        let sftp = self.get_sftp()?;
-        let path = Path::new(remote_path);
-
-        // Check if directory already exists
-        if sftp.stat(path).is_ok() {
-            return Ok(());
-        }
-
-        // Create parent directories if needed
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                self.create_directory_recursive(parent.to_str().unwrap(), mode)?;
-            }
-        }
-
-        // Create the directory
-        sftp.mkdir(path, mode)
-            .or_else(|e| {
-                // Ignore error if directory already exists
-                if sftp.stat(path).is_ok() {
-                    Ok(())
-                } else {
-                    Err(e)
-                }
-            })
             .map_err(|e| SSHError::FileTransferError(format!("Failed to create directory: {}", e)))?;
 
         Ok(())
@@ -306,6 +350,10 @@ impl<'a> SFTPOperations<'a> {
         Ok(())
     }
 }
+
+/// Chunk size for file uploads (256KB)
+/// Matches SFTP best practices and OpenSSH behavior for large file transfers
+const CHUNK_SIZE: usize = 256 * 1024;
 
 #[cfg(test)]
 mod tests {

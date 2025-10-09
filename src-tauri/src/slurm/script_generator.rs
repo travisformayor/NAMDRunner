@@ -14,7 +14,7 @@ impl SlurmScriptGenerator {
         // Extract configuration details
         let job_name = input::sanitize_job_id(&job_info.job_name)?;
         let slurm_config = &job_info.slurm_config;
-        let namd_config = &job_info.namd_config;
+        let _namd_config = &job_info.namd_config;
 
         // Get scratch directory for working directory
         let working_dir = job_info.scratch_dir
@@ -181,9 +181,10 @@ run {}
 
         // Validate SLURM configuration
         let slurm_config = &job_info.slurm_config;
-        if slurm_config.cores < 1 || slurm_config.cores > 128 {
-            return Err(anyhow!("Invalid core count: {} (must be 1-128)", slurm_config.cores));
+        if slurm_config.cores < 1 {
+            return Err(anyhow!("Core count must be at least 1"));
         }
+        // Note: Upper limit is enforced by cluster-specific validation in validation::job_validation
 
         if slurm_config.walltime.is_empty() {
             return Err(anyhow!("Walltime cannot be empty"));
