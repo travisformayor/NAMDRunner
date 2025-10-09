@@ -1,0 +1,39 @@
+{
+  "demo_mode_status": {
+    "connection_button_text": " Connected ",
+    "is_connected": true,
+    "appears_demo": false
+  },
+  "navigation_elements": [
+    {
+      "text": "Jobs 3",
+      "visible": true
+    },
+    {
+      "text": "Create Job",
+      "visible": true
+    }
+  ],
+  "job_interface": {
+    "jobs_page_loaded": true,
+    "job_rows": 2,
+    "job_cards": 0,
+    "total_jobs": 1,
+    "has_mock_data": true,
+    "details_open": false
+  },
+  "connection_workflow": {
+    "dropdown_opens": true,
+    "demo_option_available": false,
+    "appears_already_connected": true
+  },
+  "form_fields": {
+    "create_page_loaded": true,
+    "name_field": false,
+    "temperature_field": false,
+    "partition_field": false,
+    "total_inputs": 5,
+    "total_selects": 0
+  },
+  "errors_and_issues": []
+}
