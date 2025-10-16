@@ -558,43 +558,6 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
 
 // Job completion automation commands
 
-#[tauri::command(rename_all = "snake_case")]
-pub async fn complete_job(app_handle: tauri::AppHandle, job_id: String) -> CompleteJobResult {
-    let clean_job_id = match input::sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(e) => {
-            return CompleteJobResult {
-                success: false,
-                job_info: None,
-                error: Some(format!("Invalid job ID: {}", e)),
-            };
-        }
-    };
-
-    // Use automation system with direct Tauri event emission for progress tracking
-    let handle_clone = app_handle.clone();
-
-    match automations::execute_job_completion_with_progress(
-        app_handle,
-        clean_job_id,
-        move |msg| {
-            // Direct Tauri event emission - no abstraction layer
-            let _ = handle_clone.emit("job-completion-progress", msg);
-        }
-    ).await {
-        Ok(job_info) => CompleteJobResult {
-            success: true,
-            job_info: Some(job_info),
-            error: None,
-        },
-        Err(e) => CompleteJobResult {
-            success: false,
-            job_info: None,
-            error: Some(e.to_string()),
-        },
-    }
-}
-
 /// Result type for job discovery operation
 #[derive(Debug, Serialize)]
 pub struct DiscoverJobsResult {

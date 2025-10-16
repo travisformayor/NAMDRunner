@@ -68,7 +68,7 @@ pub fn submit_job_command(scratch_dir: &str, script_name: &str) -> Result<String
 /// Returns None if output doesn't match expected format
 pub fn parse_sbatch_output(output: &str) -> Option<String> {
     output.lines()
-        .find(|line| line.starts_with("Submitted batch job"))
+        .find(|line| line.trim().starts_with("Submitted batch job"))
         .and_then(|line| line.split_whitespace().last())
         .filter(|id| id.chars().all(|c| c.is_ascii_digit()))
         .map(String::from)

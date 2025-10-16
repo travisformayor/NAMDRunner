@@ -67,7 +67,6 @@ pub fn run() {
             commands::jobs::get_all_jobs,
             commands::jobs::sync_jobs,
             commands::jobs::delete_job,
-            commands::jobs::complete_job,
             commands::jobs::discover_jobs_from_server,
             // File management
             commands::files::select_input_files,

@@ -125,14 +125,6 @@ pub struct ListFilesResult {
     pub error: Option<String>,
 }
 
-// Job completion automation result types
-#[derive(Debug, Serialize)]
-pub struct CompleteJobResult {
-    pub success: bool,
-    pub job_info: Option<JobInfo>,
-    pub error: Option<String>,
-}
-
 #[derive(Debug, Serialize)]
 pub struct AutoCompleteJobsResult {
     pub success: bool,

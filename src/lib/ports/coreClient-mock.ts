@@ -432,29 +432,6 @@ export class MockCoreClient implements ICoreClient {
     };
   }
 
-  async completeJob(job_id: JobId): Promise<CompleteJobResult> {
-    const job = this.jobs.get(job_id);
-    if (!job) {
-      return {
-        success: false,
-        error: `Job ${job_id} not found`,
-      };
-    }
-
-    if (job.status !== 'COMPLETED') {
-      return {
-        success: false,
-        error: `Job ${job_id} is not completed (status: ${job.status})`,
-      };
-    }
-
-    // Mock: Return success with updated job info
-    return {
-      success: true,
-      job_info: job,
-    };
-  }
-
   // File management
   async uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult> {
 

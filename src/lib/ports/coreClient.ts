@@ -46,7 +46,6 @@ export interface ICoreClient {
   syncJobs(): Promise<SyncJobsResult>;
   deleteJob(job_id: JobId, delete_remote: boolean): Promise<DeleteJobResult>;
   discoverJobsFromServer(): Promise<DiscoverJobsResult>;
-  completeJob(job_id: JobId): Promise<CompleteJobResult>;
 
   // File management
   uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult>;

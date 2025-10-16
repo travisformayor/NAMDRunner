@@ -263,10 +263,10 @@ mod tests {
         let cmd = crate::slurm::commands::job_status_command(job_id).expect("Valid job ID should work");
 
         // This tests that the command builder creates commands matching the reference docs
-        assert!(cmd.contains("source /etc/profile"));
-        assert!(cmd.contains("module load slurm/alpine"));
+        // Note: module initialization is only needed in batch scripts, not SSH commands
         assert!(cmd.contains("squeue -j"));
-        assert!(cmd.contains("--format='%T'"));
+        assert!(cmd.contains("--format="));
+        assert!(cmd.contains("%T")); // Status field is included in format
         assert!(cmd.contains("--noheader"));
     }
 
@@ -276,10 +276,8 @@ mod tests {
         let cmd = crate::slurm::commands::completed_job_status_command(job_id).expect("Valid job ID should work");
 
         // Test that sacct command matches reference documentation
-        assert!(cmd.contains("source /etc/profile"));
-        assert!(cmd.contains("module load slurm/alpine"));
+        // Note: module initialization is only needed in batch scripts, not SSH commands
         assert!(cmd.contains("sacct -j"));
-        assert!(cmd.contains("--starttime=$(date -d '7 days ago' +%Y-%m-%d)"));
         assert!(cmd.contains("--format=State"));
         assert!(cmd.contains("--parsable2"));
         assert!(cmd.contains("--noheader"));

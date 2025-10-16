@@ -502,29 +502,6 @@ function createJobsStore() {
       }
     },
 
-    // Sync results from scratch directory to project directory for completed jobs
-    syncResultsFromScratch: async (job_id: string) => {
-      try {
-        const result = await CoreClientFactory.getClient().completeJob(job_id);
-
-        if (result.success && result.job_info) {
-          // Update the specific job in local state with updated info
-          update(state => ({
-            ...state,
-            jobs: state.jobs.map(job => job.job_id === job_id ? result.job_info! : job)
-          }));
-        }
-
-        return result;
-      } catch (error) {
-        // Job completion error - handled by UI state
-        if (typeof window !== 'undefined' && window.sshConsole) {
-          window.sshConsole.addDebug(`[JOBS] Job completion error: ${error}`);
-        }
-        return { success: false, error: 'Job completion failed' };
-      }
-    },
-
     // Reset to initial mock data
     reset: () => set(initialJobsState),
 

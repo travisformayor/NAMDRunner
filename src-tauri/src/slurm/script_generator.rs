@@ -12,7 +12,8 @@ impl SlurmScriptGenerator {
         Self::validate_job_info(job_info)?;
 
         // Extract configuration details
-        let job_name = input::sanitize_job_id(&job_info.job_name)?;
+        // Sanitize job name for SLURM (replace spaces/special chars with underscores)
+        let job_name = Self::sanitize_slurm_job_name(&job_info.job_name);
         let slurm_config = &job_info.slurm_config;
         let _namd_config = &job_info.namd_config;
 
@@ -175,6 +176,20 @@ run {}
         Ok(config)
     }
 
+    /// Sanitize job name for use in SLURM job-name directive
+    /// Replaces spaces and special characters with underscores, keeps alphanumeric and hyphens
+    fn sanitize_slurm_job_name(name: &str) -> String {
+        name.chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect()
+    }
+
     /// Validate job information before script generation
     fn validate_job_info(job_info: &JobInfo) -> Result<()> {
         // Validate job name
@@ -318,15 +333,9 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("Job name cannot be empty"));
     }
 
-    #[test]
-    fn test_validation_invalid_cores() {
-        let mut job = create_test_job();
-        job.slurm_config.cores = 200; // Too many cores
-
-        let result = SlurmScriptGenerator::generate_namd_script(&job);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid core count"));
-    }
+    // Note: Cluster-specific validation (e.g., max cores, memory limits) is performed
+    // by validation::job_validation before job creation, not in the script generator.
+    // The script generator only validates that required fields are present and non-empty.
 
     #[test]
     fn test_validation_invalid_temperature() {

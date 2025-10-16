@@ -97,10 +97,6 @@ export class TauriCoreClient implements ICoreClient {
     return invoke('discover_jobs_from_server');
   }
 
-  async completeJob(job_id: JobId): Promise<CompleteJobResult> {
-    return invoke('complete_job', { job_id });
-  }
-
   // File management
   async uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult> {
     return invoke('upload_job_files', { job_id, files });
