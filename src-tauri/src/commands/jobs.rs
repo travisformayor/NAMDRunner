@@ -729,7 +729,12 @@ async fn discover_jobs_real(_app_handle: tauri::AppHandle) -> DiscoverJobsResult
 
         // Check if job already exists in database and import if not
         let job_id = job_info.job_id.clone();
-        let result = with_database(|db| {
+        let job_id_for_logs = job_id.clone();
+        let job_status = job_info.status.clone();
+        let job_info_clone = job_info.clone();
+
+        // First, save the job to database
+        let result = with_database(move |db| {
             match db.load_job(&job_id) {
                 Ok(Some(_)) => {
                     // Job already exists, skip
@@ -738,7 +743,7 @@ async fn discover_jobs_real(_app_handle: tauri::AppHandle) -> DiscoverJobsResult
                 }
                 Ok(None) => {
                     // Job doesn't exist, import it
-                    match db.save_job(&job_info) {
+                    match db.save_job(&job_info_clone) {
                         Ok(_) => {
                             info_log!("[JOB DISCOVERY] Imported job: {}", job_id);
                             Ok(true) // true means imported

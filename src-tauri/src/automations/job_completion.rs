@@ -40,10 +40,10 @@ pub async fn execute_job_completion_with_progress(
         })?;
     debug_log!("[Job Completion] Loaded job: {} (status: {:?})", clean_job_id, job_info.status);
 
-    // Validate job is in completed state
-    if !matches!(job_info.status, JobStatus::Completed) {
-        error_log!("[Job Completion] Job {} not completed, status: {:?}", clean_job_id, job_info.status);
-        return Err(anyhow!("Job is not completed (status: {:?})", job_info.status));
+    // Validate job is in finished state
+    if !matches!(job_info.status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
+        error_log!("[Job Completion] Job {} not finished, status: {:?}", clean_job_id, job_info.status);
+        return Err(anyhow!("Job has not finished running (status: {:?}). Only Completed, Failed, or Cancelled jobs can have results synced.", job_info.status));
     }
 
     progress_callback("Validating connection...");
@@ -86,6 +86,14 @@ pub async fn execute_job_completion_with_progress(
         })?;
 
     info_log!("[Job Completion] Successfully mirrored scratch directory back to project");
+
+    progress_callback("Caching SLURM logs...");
+
+    // Fetch and cache SLURM logs if not already cached
+    if let Err(e) = crate::automations::fetch_slurm_logs_if_needed(&mut job_info).await {
+        error_log!("[Job Completion] Failed to fetch logs: {}", e);
+        // Don't fail completion if log fetch fails
+    }
 
     progress_callback("Updating job status...");
     debug_log!("[Job Completion] Updating job status in database");
@@ -205,6 +213,8 @@ mod tests {
             },
             input_files: Vec::new(),
             remote_directory: "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),
+            slurm_stdout: None,
+            slurm_stderr: None,
         }
     }
 

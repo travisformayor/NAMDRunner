@@ -95,6 +95,8 @@ impl JobDatabase {
                 project_dir TEXT,
                 scratch_dir TEXT,
                 error_info TEXT,
+                slurm_stdout TEXT,
+                slurm_stderr TEXT,
                 namd_config TEXT,
                 slurm_config TEXT,
                 input_files TEXT,
@@ -196,38 +198,38 @@ impl JobDatabase {
         let slurm_config_json = serde_json::to_string(&job_info.slurm_config)?;
         let input_files_json = serde_json::to_string(&job_info.input_files)?;
 
-        self.conn.execute(
+        conn.execute(
             "INSERT OR REPLACE INTO jobs
-             (job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, namd_config, slurm_config, input_files, remote_directory)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-            (
-                &job_info.job_id,
-                &job_info.job_name,
-                status_str,
-                &job_info.slurm_job_id,
-                &job_info.created_at,
-                &job_info.updated_at,
-                &job_info.submitted_at,
-                &job_info.completed_at,
-                &job_info.project_dir,
-                &job_info.scratch_dir,
-                &job_info.error_info,
-                &namd_config_json,
-                &slurm_config_json,
-                &input_files_json,
-                &job_info.remote_directory,
-            ),
+             (job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, slurm_stdout, slurm_stderr, namd_config, slurm_config, input_files, remote_directory)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+            &[
+                &job_info.job_id as &dyn rusqlite::ToSql,
+                &job_info.job_name as &dyn rusqlite::ToSql,
+                &status_str as &dyn rusqlite::ToSql,
+                &job_info.slurm_job_id as &dyn rusqlite::ToSql,
+                &job_info.created_at as &dyn rusqlite::ToSql,
+                &job_info.updated_at as &dyn rusqlite::ToSql,
+                &job_info.submitted_at as &dyn rusqlite::ToSql,
+                &job_info.completed_at as &dyn rusqlite::ToSql,
+                &job_info.project_dir as &dyn rusqlite::ToSql,
+                &job_info.scratch_dir as &dyn rusqlite::ToSql,
+                &job_info.error_info as &dyn rusqlite::ToSql,
+                &job_info.slurm_stdout as &dyn rusqlite::ToSql,
+                &job_info.slurm_stderr as &dyn rusqlite::ToSql,
+                &namd_config_json as &dyn rusqlite::ToSql,
+                &slurm_config_json as &dyn rusqlite::ToSql,
+                &input_files_json as &dyn rusqlite::ToSql,
+                &job_info.remote_directory as &dyn rusqlite::ToSql,
+            ] as &[&dyn rusqlite::ToSql],
         )?;
-
-        // Add status history entry
-        self.add_status_history(&job_info.job_id, status_str, "local")?;
 
         Ok(())
     }
 
     pub fn load_job(&self, job_id: &str) -> Result<Option<JobInfo>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, namd_config, slurm_config, input_files, remote_directory
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, slurm_stdout, slurm_stderr, namd_config, slurm_config, input_files, remote_directory
              FROM jobs WHERE job_id = ?1"
         )?;
 
@@ -243,8 +245,9 @@ impl JobDatabase {
     }
 
     pub fn load_all_jobs(&self) -> Result<Vec<JobInfo>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, namd_config, slurm_config, input_files, remote_directory
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT job_id, job_name, status, slurm_job_id, created_at, updated_at, submitted_at, completed_at, project_dir, scratch_dir, error_info, slurm_stdout, slurm_stderr, namd_config, slurm_config, input_files, remote_directory
              FROM jobs ORDER BY created_at DESC"
         )?;
 
@@ -260,66 +263,11 @@ impl JobDatabase {
         Ok(jobs)
     }
 
-    pub fn update_job_status(&self, job_id: &str, new_status: JobStatus, source: &str) -> Result<()> {
-        let status_str = match new_status {
-            JobStatus::Created => "CREATED",
-            JobStatus::Pending => "PENDING",
-            JobStatus::Running => "RUNNING",
-            JobStatus::Completed => "COMPLETED",
-            JobStatus::Failed => "FAILED",
-            JobStatus::Cancelled => "CANCELLED",
-        };
-
-        let now = chrono::Utc::now().to_rfc3339();
-
-        self.conn.execute(
-            "UPDATE jobs SET status = ?1, updated_at = ?2 WHERE job_id = ?3",
-            (status_str, &now, job_id),
-        )?;
-
-        // Add status history entry
-        self.add_status_history(job_id, status_str, source)?;
-
-        Ok(())
-    }
-
-    pub fn update_slurm_job_id(&self, job_id: &str, slurm_job_id: &str) -> Result<()> {
-        let now = chrono::Utc::now().to_rfc3339();
-
-        self.conn.execute(
-            "UPDATE jobs SET slurm_job_id = ?1, updated_at = ?2 WHERE job_id = ?3",
-            (slurm_job_id, &now, job_id),
-        )?;
-
-        Ok(())
-    }
-
-    /// Delete a job within a transaction (for atomic operations)
-    pub fn delete_job_in_transaction(tx: &Transaction, job_id: &str) -> Result<bool> {
-        // Delete status history first (foreign key constraint)
-        tx.execute(
-            "DELETE FROM job_status_history WHERE job_id = ?1",
-            [job_id],
-        )?;
-
-        // Delete the job
-        let rows_affected = tx.execute(
-            "DELETE FROM jobs WHERE job_id = ?1",
-            [job_id],
-        )?;
-
-        Ok(rows_affected > 0)
-    }
-
     pub fn delete_job(&self, job_id: &str) -> Result<bool> {
-        // Delete status history first (foreign key constraint)
-        self.conn.execute(
-            "DELETE FROM job_status_history WHERE job_id = ?1",
-            [job_id],
-        )?;
+        let conn = self.conn.lock().unwrap();
 
         // Delete the job
-        let rows_affected = self.conn.execute(
+        let rows_affected = conn.execute(
             "DELETE FROM jobs WHERE job_id = ?1",
             [job_id],
         )?;
@@ -413,16 +361,17 @@ impl JobDatabase {
             project_dir: row.get(8)?,
             scratch_dir: row.get(9)?,
             error_info: row.get(10)?,
+            slurm_stdout: row.get(11)?,
+            slurm_stderr: row.get(12)?,
             namd_config,
             slurm_config,
             input_files,
-            remote_directory: row.get::<_, Option<String>>(14)?.unwrap_or_else(|| row.get::<_, Option<String>>(8).unwrap_or(Some("/tmp".to_string())).unwrap_or_else(|| "/tmp".to_string())),
+            remote_directory: row.get::<_, Option<String>>(16)?.unwrap_or_else(|| row.get::<_, Option<String>>(8).unwrap_or(Some("/tmp".to_string())).unwrap_or_else(|| "/tmp".to_string())),
         })
     }
 }
 
 // Thread-safe global database instance
-use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 
 lazy_static! {

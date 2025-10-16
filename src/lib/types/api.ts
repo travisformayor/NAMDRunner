@@ -24,6 +24,8 @@ export interface JobInfo {
   project_dir?: string;
   scratch_dir?: string;
   error_info?: string;
+  slurm_stdout?: string;
+  slurm_stderr?: string;
   namd_config: NAMDConfig;
   slurm_config: SlurmConfig;
   input_files: InputFile[];

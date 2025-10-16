@@ -187,6 +187,7 @@ interface JobProgress {
 interface JobsState {
   jobs: JobInfo[];
   lastSyncTime: Date;
+  hasEverSynced: boolean;
   isSyncing: boolean;
   creationProgress: JobProgress;
   submissionProgress: JobProgress;
@@ -196,6 +197,7 @@ interface JobsState {
 const initialJobsState: JobsState = {
   jobs: [],
   lastSyncTime: new Date(0), // No sync yet
+  hasEverSynced: false,
   isSyncing: false,
   creationProgress: { message: '', isActive: false },
   submissionProgress: { message: '', isActive: false }
@@ -209,6 +211,11 @@ function createJobsStore() {
     subscribe,
     // Sync with backend
     sync: async () => {
+      // Log user action to SSH console
+      if (typeof window !== 'undefined' && window.sshConsole) {
+        window.sshConsole.addDebug('[SYNC] User clicked Sync Now button');
+      }
+
       // Set syncing state
       update(state => ({ ...state, isSyncing: true }));
 
@@ -224,11 +231,37 @@ function createJobsStore() {
             ...state,
             jobs: mockJobs, // Always use the same mockJobs in demo mode
             lastSyncTime: new Date(),
+            hasEverSynced: true,
             isSyncing: false
           }));
           // Demo mode: simulated sync completed
         } else {
-          // Real mode: actual sync with backend
+          // Real mode: Call syncJobs to update job statuses from SLURM, then fetch updated jobs
+          if (typeof window !== 'undefined' && window.sshConsole) {
+            window.sshConsole.addDebug('[SYNC] Starting job status sync with SLURM cluster');
+          }
+
+          const syncResult = await CoreClientFactory.getClient().syncJobs();
+
+          if (!syncResult.success) {
+            // Sync failed - log error and keep existing jobs
+            if (typeof window !== 'undefined' && window.sshConsole) {
+              window.sshConsole.addDebug(`[SYNC] Job sync failed: ${syncResult.errors.join(', ')}`);
+            }
+            update(state => ({
+              ...state,
+              lastSyncTime: new Date(),
+              hasEverSynced: true,
+              isSyncing: false
+            }));
+            return;
+          }
+
+          if (typeof window !== 'undefined' && window.sshConsole) {
+            window.sshConsole.addDebug(`[SYNC] Sync completed - ${syncResult.jobs_updated} job(s) updated`);
+          }
+
+          // After sync completes, fetch updated jobs from database
           const result = await CoreClientFactory.getClient().getAllJobs();
 
           if (result.success && result.jobs) {
@@ -252,6 +285,7 @@ function createJobsStore() {
                   ...state,
                   jobs: updatedResult.jobs || [],
                   lastSyncTime: new Date(),
+                  hasEverSynced: true,
                   isSyncing: false
                 }));
                 return;
@@ -267,6 +301,7 @@ function createJobsStore() {
               ...state,
               jobs: result.jobs || [],
               lastSyncTime: new Date(),
+              hasEverSynced: true,
               isSyncing: false
             }));
             // Jobs synced successfully from backend
@@ -275,6 +310,7 @@ function createJobsStore() {
             update(state => ({
               ...state,
               lastSyncTime: new Date(),
+              hasEverSynced: true,
               isSyncing: false
             }));
             // Sync failed - maintaining existing jobs
@@ -496,7 +532,8 @@ function createJobsStore() {
     loadDemoJobs: () => update(state => ({
       ...state,
       jobs: mockJobs,
-      lastSyncTime: new Date(Date.now() - 15 * 60 * 1000), // 15 minutes ago for offline feel
+      lastSyncTime: new Date(0), // Never synced - demo data
+      hasEverSynced: false,
     })),
 
     // Clear all jobs
@@ -504,6 +541,7 @@ function createJobsStore() {
       ...state,
       jobs: [],
       lastSyncTime: new Date(0),
+      hasEverSynced: false,
     }))
   };
 }
@@ -513,6 +551,7 @@ export const jobsStore = createJobsStore();
 // Derived stores for convenience
 export const jobs = derived(jobsStore, $store => $store.jobs);
 export const lastSyncTime = derived(jobsStore, $store => $store.lastSyncTime);
+export const hasEverSynced = derived(jobsStore, $store => $store.hasEverSynced);
 export const isSyncing = derived(jobsStore, $store => $store.isSyncing);
 
 // Progress tracking stores

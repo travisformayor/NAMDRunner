@@ -41,7 +41,7 @@ pub async fn sync_all_jobs() -> Result<Vec<JobSyncResult>> {
     debug_log!("[Job Sync] Syncing jobs for user: {}", username);
 
     // Load all jobs from database
-    let all_jobs = with_database(|db| db.load_all_jobs())
+    let all_jobs = with_database(move |db| db.load_all_jobs())
         .map_err(|e| {
             error_log!("[Job Sync] Failed to load jobs from database: {}", e);
             anyhow!("Failed to load jobs: {}", e)
@@ -159,10 +159,17 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
     if matches!(new_status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
         job.completed_at = Some(Utc::now().to_rfc3339());
         info_log!("[Job Sync] Job {} finished with status: {:?}", job_id, new_status);
+
+        // Fetch SLURM logs for finished jobs
+        if let Err(e) = fetch_slurm_logs_if_needed(&mut job).await {
+            error_log!("[Job Sync] Failed to fetch logs for {}: {}", job_id, e);
+            // Don't fail sync if log fetch fails - logs are nice-to-have
+        }
     }
 
     // Update database
-    with_database(|db| db.save_job(&job))
+    let job_clone = job.clone();
+    with_database(move |db| db.save_job(&job_clone))
         .map_err(|e| {
             error_log!("[Job Sync] Failed to save job {} to database: {}", job_id, e);
             anyhow!("Failed to update database: {}", e)
@@ -204,4 +211,75 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
 async fn update_server_metadata(job: &JobInfo, project_dir: &str) -> Result<()> {
     let connection_manager = get_connection_manager();
     crate::ssh::metadata::upload_job_metadata(&connection_manager, job, project_dir, "Job Sync").await
+}
+
+/// Fetch and cache SLURM logs (.out/.err) if not already cached
+/// Only fetches when logs are None - implements "fetch once, cache forever" pattern
+/// This function is public to allow other automations (job_completion, job_discovery) to use it
+pub async fn fetch_slurm_logs_if_needed(job: &mut JobInfo) -> Result<()> {
+    debug_log!("[Log Fetch] ENTRY: job_id={}, status={:?}, scratch_dir={:?}, slurm_job_id={:?}",
+        job.job_id, job.status, job.scratch_dir, job.slurm_job_id);
+
+    // Need both scratch_dir and slurm_job_id to construct paths
+    let scratch_dir = match &job.scratch_dir {
+        Some(dir) => dir,
+        None => {
+            debug_log!("[Log Fetch] No scratch directory for job {}, skipping", job.job_id);
+            return Ok(());
+        }
+    };
+
+    let slurm_job_id = match &job.slurm_job_id {
+        Some(id) => id,
+        None => {
+            debug_log!("[Log Fetch] No SLURM job ID for job {}, skipping", job.job_id);
+            return Ok(());
+        }
+    };
+
+    let connection_manager = get_connection_manager();
+
+    // Fetch stdout if not cached
+    if job.slurm_stdout.is_none() {
+        let stdout_path = format!("{}/{}_{}.out", scratch_dir, job.job_name, slurm_job_id);
+        debug_log!("[Log Fetch] Stdout not cached, constructing path: {}", stdout_path);
+        debug_log!("[Log Fetch] Attempting to read stdout file from remote...");
+
+        match connection_manager.read_remote_file(&stdout_path).await {
+            Ok(content) => {
+                let content_len = content.len();
+                job.slurm_stdout = Some(content);
+                info_log!("[Log Fetch] Cached stdout for job {} ({} bytes)", job.job_id, content_len);
+            }
+            Err(e) => {
+                debug_log!("[Log Fetch] Could not read stdout for {}: {} (file may not exist yet)", job.job_id, e);
+                // Gracefully handle - log file might not exist yet or job produced no output
+            }
+        }
+    } else {
+        debug_log!("[Log Fetch] Stdout already cached for job {}, skipping", job.job_id);
+    }
+
+    // Fetch stderr if not cached
+    if job.slurm_stderr.is_none() {
+        let stderr_path = format!("{}/{}_{}.err", scratch_dir, job.job_name, slurm_job_id);
+        debug_log!("[Log Fetch] Stderr not cached, constructing path: {}", stderr_path);
+        debug_log!("[Log Fetch] Attempting to read stderr file from remote...");
+
+        match connection_manager.read_remote_file(&stderr_path).await {
+            Ok(content) => {
+                let content_len = content.len();
+                job.slurm_stderr = Some(content);
+                info_log!("[Log Fetch] Cached stderr for job {} ({} bytes)", job.job_id, content_len);
+            }
+            Err(e) => {
+                debug_log!("[Log Fetch] Could not read stderr for {}: {} (file may not exist yet)", job.job_id, e);
+            }
+        }
+    } else {
+        debug_log!("[Log Fetch] Stderr already cached for job {}, skipping", job.job_id);
+    }
+
+    debug_log!("[Log Fetch] EXIT: Successfully completed for job {}", job.job_id);
+    Ok(())
 }

@@ -155,19 +155,19 @@
         </button>
       {/if}
 
-      {#if $selectedJob.status === 'COMPLETED'}
+      {#if $selectedJob.status === 'COMPLETED' || $selectedJob.status === 'FAILED' || $selectedJob.status === 'CANCELLED'}
         <button
           class="namd-button namd-button--primary sync-button"
           on:click={handleSyncResults}
           disabled={!$isConnected || isSyncingResults}
-          title={!$isConnected ? "Connect to server to sync results" : "Sync results from scratch directory"}
+          title={!$isConnected ? "Connect to server to get results" : "Get SLURM logs and copy outputs from scratch"}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7,10 12,15 17,10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          {isSyncingResults ? 'Syncing...' : 'Sync Results from Scratch'}
+          {isSyncingResults ? 'Getting Results...' : 'Get Job Logs & Outputs'}
         </button>
       {/if}
 

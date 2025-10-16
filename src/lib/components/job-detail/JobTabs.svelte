@@ -221,22 +221,58 @@ Info: Load balancing completed, performance improved by 3.2%`;
     gpuType: "v100"
   };
 
+  // Get configuration based on mode - using explicit types to satisfy TypeScript
+  let namdConfig: DisplayNAMDConfig;
+  $: namdConfig = isDemoMode ? demoNamdConfig : {
+    simulationSteps: job.namd_config.steps,
+    temperature: job.namd_config.temperature,
+    timestep: job.namd_config.timestep,
+    outputName: job.namd_config.outputname,
+    dcdFreq: job.namd_config.dcd_freq || 0,
+    restartFreq: job.namd_config.restart_freq || 0,
+  };
+
+  let slurmConfig: DisplaySlurmConfig;
+  $: slurmConfig = isDemoMode ? demoSlurmConfig : {
+    cores: job.slurm_config.cores,
+    memory: job.slurm_config.memory,
+    wallTime: job.slurm_config.walltime,
+    partition: job.slurm_config.partition || 'N/A',
+    qos: job.slurm_config.qos || 'N/A',
+  };
+
   function getStdoutContent(): string {
-    if (job.status === 'CREATED') return '';
+    if (job.status === 'CREATED' || job.status === 'PENDING') {
+      return 'Logs will be available once the job starts running.';
+    }
+
     if (isDemoMode) {
       return mockStdout;
     }
-    // Real mode: would fetch from backend via get_job_logs
-    return "SLURM stdout logs will be fetched from server when job log retrieval is implemented.";
+
+    // Real mode: use cached logs from database
+    if (job.slurm_stdout !== undefined && job.slurm_stdout !== null) {
+      return job.slurm_stdout || '(No output)';
+    }
+
+    return 'Logs are being fetched from the server. If this message persists, click "Get Job Logs & Outputs" button.';
   }
 
   function getStderrContent(): string {
-    if (job.status === 'CREATED') return '';
+    if (job.status === 'CREATED' || job.status === 'PENDING') {
+      return 'Logs will be available once the job starts running.';
+    }
+
     if (isDemoMode) {
       return mockStderr;
     }
-    // Real mode: would fetch from backend via get_job_logs
-    return "SLURM stderr logs will be fetched from server when job log retrieval is implemented.";
+
+    // Real mode: use cached logs from database
+    if (job.slurm_stderr !== undefined && job.slurm_stderr !== null) {
+      return job.slurm_stderr || '(No errors)';
+    }
+
+    return 'Logs are being fetched from the server. If this message persists, click "Get Job Logs & Outputs" button.';
   }
 
   function getInputFiles() {
@@ -530,14 +566,14 @@ Info: Load balancing completed, performance improved by 3.2%`;
                   class:active={activeLogTab === 'stdout'}
                   on:click={() => activeLogTab = 'stdout'}
                 >
-                  Standard Output
+                  Output
                 </button>
                 <button
                   class="namd-tab-button"
                   class:active={activeLogTab === 'stderr'}
                   on:click={() => activeLogTab = 'stderr'}
                 >
-                  Standard Error
+                  Error
                 </button>
               </div>
 
