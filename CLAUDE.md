@@ -32,12 +32,14 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters. **Tauri v
 - [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - Proven job workflow patterns
 
 ### ⚡ Working on SLURM Integration?
-- [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - SLURM command patterns and job management
-- [`docs/reference/alpine-cluster-reference.md`](docs/reference/alpine-cluster-reference.md) - Cluster-specific configurations and limits
+- [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - Complete job script template combining SLURM + Alpine + MPI + NAMD
+- [`docs/reference/alpine-cluster-reference.md`](docs/reference/alpine-cluster-reference.md) - Alpine-specific requirements (MPI, memory units, node calculation)
+- [`docs/reference/namd-commands-reference.md`](docs/reference/namd-commands-reference.md) - NAMD config templates and file naming requirements
 - [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - Proven SLURM integration patterns
 
 ### 🧬 Working on NAMD?
-- [`docs/reference/namd-commands-reference.md`](docs/reference/namd-commands-reference.md) - NAMD configuration templates and execution
+- [`docs/reference/namd-commands-reference.md`](docs/reference/namd-commands-reference.md) - NAMD config file templates (.namd) and file naming (use actual uploaded names!)
+- [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - For complete job script with NAMD execution
 - [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - NAMD workflow patterns
 
 ### 🔐 Working on SSH/SFTP?

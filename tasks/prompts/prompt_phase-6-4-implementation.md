@@ -23,7 +23,7 @@ Implement **comprehensive frontend-backend integration fixes** with core capabil
 
 ### 2. Current Phase/Implementation Details
 - `tasks/roadmap.md` - **Phase 6.4 scope and milestones** (your roadmap)
-- `tasks/active/phase-6-4-frontend-backend-integration.md` - **COMPLETE IMPLEMENTATION REQUIREMENTS** (read this thoroughly!)
+
 - `docs/AUTOMATIONS.md` - Job lifecycle automation chains and progress tracking patterns
 
 ### 3. Reference Implementation Knowledge

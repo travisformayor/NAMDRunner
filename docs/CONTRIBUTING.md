@@ -370,6 +370,82 @@ pub fn get_cluster_capabilities() -> ClusterCapabilities {
 // In Component B: const partitionLimits = { amilan: { maxCores: 64 } };
 ```
 
+### 2. Frontend Stores Architecture
+
+**Stores are pure caching layers** with no business logic. All business logic lives in the Rust backend.
+
+#### Store Pattern
+```typescript
+import { writable } from 'svelte/store';
+import { invoke } from '@tauri-apps/api/tauri';
+
+// ✅ Store as pure cache
+export const clusterConfig = writable<ClusterCapabilities | null>(null);
+
+export async function loadClusterCapabilities() {
+    const capabilities = await invoke('get_cluster_capabilities');
+    clusterConfig.set(capabilities);
+}
+
+// ❌ Store with business logic
+export async function loadClusterCapabilities() {
+    const capabilities = await invoke('get_cluster_capabilities');
+    // Validation logic - belongs in backend!
+    if (capabilities.partitions.length === 0) {
+        throw new Error('No partitions available');
+    }
+    clusterConfig.set(capabilities);
+}
+```
+
+#### Backend-First Design Principle
+
+**All business logic in Rust backend:**
+- ✅ Validation (resource limits, NAMD parameters)
+- ✅ Calculations (cost estimation, queue times)
+- ✅ Cluster configuration (partitions, QoS, limits)
+- ✅ File operations (uploads, downloads, metadata)
+- ✅ SLURM commands (sbatch, squeue, sacct, scancel)
+
+**Frontend stores only cache:**
+- ✅ Reactive state management
+- ✅ IPC call wrapping
+- ✅ Event handling (progress updates)
+- ❌ No validation logic
+- ❌ No business rules
+- ❌ No calculations
+
+#### Component Patterns
+```svelte
+<script lang="ts">
+    import { jobs } from '$lib/stores/jobs';
+    import { clusterConfig } from '$lib/stores/clusterConfig';
+
+    // ✅ Subscribe to stores reactively
+    $: jobList = $jobs;
+    $: capabilities = $clusterConfig;
+
+    // ✅ Presentational logic (UI concerns)
+    function getStatusBadgeClass(status: JobStatus): string {
+        return status === 'RUNNING' ? 'badge-success' : 'badge-default';
+    }
+</script>
+
+<button on:click={() => jobs.createJob(params)}>
+    Create Job
+</button>
+```
+
+**Components handle:**
+- ✅ Display logic (formatting, colors, icons)
+- ✅ User interaction (button clicks, form inputs)
+- ✅ Navigation (routing)
+- ❌ Validation (backend only)
+- ❌ Calculations (backend only)
+- ❌ File operations (backend only)
+
+For high-level architecture overview, see [docs/ARCHITECTURE.md#frontend-architecture](ARCHITECTURE.md#frontend-architecture)
+
 ### Anti-Patterns to Avoid
 
 #### Critical Anti-Patterns (From NAMDRunner Experience)
@@ -705,8 +781,8 @@ For UI/UX requirements and design specifications, see [`docs/DESIGN.md`](DESIGN.
 
 ## Related Documentation
 
-For IPC interfaces, command specifications, and API contracts, see [`docs/API.md`](API.md).
-
-For database schemas, data validation, and persistence patterns, see [`docs/DB.md`](DB.md).
-
-For SLURM command patterns and cluster-specific details, see [`docs/reference/slurm-commands-reference.md`](reference/slurm-commands-reference.md) and [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md).
+- [`docs/API.md`](API.md): IPC interfaces, command specifications, and API contracts.
+- [`docs/DB.md`](DB.md): Database schemas, data validation, and persistence patterns.
+- [`docs/reference/slurm-commands-reference.md`](reference/slurm-commands-reference.md): Job script template, template variable reference, critical requirements checklist.
+- [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md): MPI best practices (node calculation, OpenMPI requirements), hardware partitions, QoS/resource limits, module loading sequences for Alpine.
+- [`docs/reference/namd-commands-reference.md`](reference/namd-commands-reference.md): NAMD config file templates (.namd files), parameter validation, resource estimation, and related NAMD requirements.

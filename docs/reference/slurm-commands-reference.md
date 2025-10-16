@@ -36,29 +36,96 @@ module load namd/3.0.1_cpu
 
 ## Job Submission
 
-### SLURM Script Template
+### Complete SLURM Job Script Template
+
+This template brings together SLURM directives, Alpine cluster requirements, MPI best practices, and NAMD execution. Each section is annotated with references to detailed documentation.
+
 ```bash
 #!/bin/bash
+
+#############################################################
+## SLURM RESOURCE DIRECTIVES                              ##
+#############################################################
+# Basic job identification
 #SBATCH --job-name={{ job_name }}
 #SBATCH --output={{ job_name }}_%j.out
 #SBATCH --error={{ job_name }}_%j.err
-#SBATCH --partition=amilan
-#SBATCH --nodes=1
-#SBATCH --ntasks={{ num_cores }}
-#SBATCH --time={{ walltime }}
-#SBATCH --mem={{ memory }}
-#SBATCH --qos=normal
-#SBATCH --constraint=ib
 
+# Alpine cluster partition and QoS
+# See: alpine-cluster-reference.md#hardware-partitions
+#SBATCH --partition=amilan
+#SBATCH --qos=normal
+
+# Node allocation (critical for MPI performance)
+# See: alpine-cluster-reference.md#node-calculation
+#SBATCH --nodes={{ nodes }}          # nodes = ceiling(cores / 64) for amilan
+#SBATCH --ntasks={{ num_cores }}     # total MPI tasks
+
+# Resource allocation
+#SBATCH --time={{ walltime }}        # format: HH:MM:SS or DD-HH:MM:SS
+#SBATCH --mem={{ memory }}GB         # CRITICAL: Must include "GB" unit
+
+# MPI requirements for Alpine
+# See: alpine-cluster-reference.md#mpi-best-practices
+#SBATCH --constraint=ib              # Force Infiniband-enabled nodes
+
+#############################################################
+## ENVIRONMENT INITIALIZATION                             ##
+#############################################################
+# Initialize module system (required for SSH connections)
+source /etc/profile
+
+# Load Alpine-specific software stack
+# See: alpine-cluster-reference.md#module-environment
 module purge
 module load gcc/14.2.0
 module load openmpi/5.0.6
 module load namd/3.0.1_cpu
 
+# OpenMPI requirement for login-node scheduled jobs
+# See: alpine-cluster-reference.md#openmpi-requirements
+export SLURM_EXPORT_ENV=ALL
+
+#############################################################
+## JOB EXECUTION                                          ##
+#############################################################
+# Navigate to working directory
 cd {{ working_dir }}
 
-mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-{{ num_cores - 1 }} {{ namd_config }} > {{ namd_log }}
+# Execute NAMD with MPI
+# See: namd-commands-reference.md#command-execution
+mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) {{ namd_config }} > {{ namd_log }}
+#      │             │     │                   │                                │               │
+#      │             │     │                   │                                │               └─ NAMD output log
+#      │             │     │                   │                                └─ NAMD config file
+#      │             │     │                   └─ CPU affinity optimization (Alpine-specific)
+#      │             │     └─ NAMD 3.x binary
+#      │             └─ Number of MPI tasks (from SLURM)
+#      └─ MPI launcher (recommended over srun on Alpine)
 ```
+
+### Template Variable Reference
+
+| Variable | Description | Example | Documentation |
+|----------|-------------|---------|---------------|
+| `{{ job_name }}` | Job identifier | `my-namd-job` | SLURM standard |
+| `{{ nodes }}` | Number of nodes | `1` (for ≤64 cores) | [alpine-cluster-reference.md#node-calculation](alpine-cluster-reference.md#node-calculation) |
+| `{{ num_cores }}` | Total MPI tasks | `48` | [alpine-cluster-reference.md#resource-allocation-rules](alpine-cluster-reference.md#resource-allocation-rules) |
+| `{{ walltime }}` | Maximum runtime | `24:00:00` | [alpine-cluster-reference.md#quality-of-service-qos](alpine-cluster-reference.md#quality-of-service-qos) |
+| `{{ memory }}` | Memory in GB | `32` (becomes `32GB`) |  |
+| `{{ working_dir }}` | Job working directory | `/scratch/alpine/user/job_001` | [alpine-cluster-reference.md#directory-structure-requirements](alpine-cluster-reference.md#directory-structure-requirements) |
+| `{{ namd_config }}` | NAMD config file | `config.namd` | [namd-commands-reference.md#configuration-templates](namd-commands-reference.md#configuration-templates) |
+| `{{ namd_log }}` | NAMD output log | `namd_output.log` | [namd-commands-reference.md#file-organization](namd-commands-reference.md#file-organization) |
+
+### Critical Requirements Checklist
+
+Before generating a job script, verify:
+- ✅ Memory includes `GB` unit (not bare number)
+- ✅ `--nodes` calculated correctly (`ceiling(cores/64)`) → [alpine-cluster-reference.md#node-calculation](alpine-cluster-reference.md#node-calculation)
+- ✅ `--constraint=ib` included for MPI jobs → [alpine-cluster-reference.md#infiniband-constraint](alpine-cluster-reference.md#infiniband-constraint)
+- ✅ `export SLURM_EXPORT_ENV=ALL` present → [alpine-cluster-reference.md#openmpi-requirements](alpine-cluster-reference.md#openmpi-requirements)
+- ✅ `source /etc/profile` before modules → [alpine-cluster-reference.md#module-environment](alpine-cluster-reference.md#module-environment)
+- ✅ NAMD config uses actual uploaded file names → [namd-commands-reference.md#file-naming-requirements](namd-commands-reference.md#file-naming-requirements)
 
 ### Submit Command
 ```bash

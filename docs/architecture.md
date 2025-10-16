@@ -43,7 +43,9 @@
   - [Module Structure](#module-structure)
     - [Frontend (Svelte/TypeScript)](#frontend-sveltetypescript)
     - [Backend (Rust)](#backend-rust)
+    - [Frontend Architecture](#frontend-architecture)
 - [Data Models & Interfaces](#data-models--interfaces)
+  - [Type-Safe IPC Boundary](#type-safe-ipc-boundary)
   - [Data Models](#data-models)
     - [TypeScript Type System](#typescript-type-system)
     - [Rust Type System](#rust-type-system)
@@ -376,7 +378,63 @@ src-tauri/
 └── tauri.conf.json            # Tauri configuration
 ```
 
+### Frontend Architecture
+
+**Backend-First Design:**
+NAMDRunner implements a backend-first architecture where all business logic, validation, and cluster configuration lives in Rust, while the frontend is a pure UI layer using reactive stores for state caching.
+
+> **For frontend state management patterns and component implementation details**, see [`docs/CONTRIBUTING.md#frontend-development-standards`](CONTRIBUTING.md#frontend-development-standards)
+
+**Key Architecture Principles:**
+- **Stores as pure caches** - No business logic, only reactive state management
+- **Backend is source of truth** - All validation and calculations happen in Rust
+- **Type-safe IPC boundary** - Consistent snake_case contracts between TypeScript and Rust
+- **Presentational components** - UI components handle display logic only
+
+**Frontend Responsibilities:**
+- Reactive state caching via Svelte stores ([`clusterConfig.ts`](../src/lib/stores/clusterConfig.ts), [`jobs.ts`](../src/lib/stores/jobs.ts), [`session.ts`](../src/lib/stores/session.ts))
+- UI presentation and user interaction
+- Progress event handling from backend
+- Display formatting (status badges, file icons, etc.)
+
+**Frontend Does NOT:**
+- Validate user inputs (backend validates)
+- Implement business logic (backend owns all rules)
+- Perform calculations (backend is source of truth)
+- Execute file operations directly (backend handles SSH/SFTP)
+
 ## Data Models & Interfaces
+
+### Type-Safe IPC Boundary
+
+All IPC communication uses **snake_case convention** for consistency between TypeScript and Rust, eliminating the need for case conversion layers and improving searchability across the codebase.
+
+```rust
+// Rust (native snake_case)
+#[derive(Serialize, Deserialize)]
+pub struct JobInfo {
+    pub job_id: String,
+    pub job_name: String,
+    pub slurm_job_id: Option<String>,
+    pub created_at: String,
+}
+```
+
+```typescript
+// TypeScript (matches Rust exactly)
+interface JobInfo {
+    job_id: string;
+    job_name: string;
+    slurm_job_id: string | null;
+    created_at: string;
+}
+```
+
+**Benefits:**
+- Type errors caught at compile time
+- Consistent naming across frontend and backend
+- No manual type conversions required
+- Improved code searchability
 
 ### Data Models
 

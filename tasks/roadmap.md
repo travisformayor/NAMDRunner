@@ -199,33 +199,49 @@ See: [phase-6-2-automation-verification.md](tasks/completed/phase-6-2-automation
 
 See: [phase-6-3-code-quality-refactoring.md](tasks/completed/phase-6-3-code-quality-refactoring.md)
 
-### Milestone 6.4: Frontend-Backend Integration 🔧 IN PROGRESS
-- [ ] **Critical Priority (Blockers)**
-  - [ ] Fix Create Job to call backend instead of stub implementation
-  - [ ] Implement comprehensive SSH/SFTP console logging across all operations
-  - [ ] Implement job discovery from server to rebuild database from metadata
-- [ ] **High Priority (Core Functionality)**
-  - [ ] Remove dead code from job store (addJob, updateJobStatus, removeJob)
-  - [ ] Fix Delete Job to use correct method (deleteJob instead of removeJob)
-  - [ ] Wire up "Sync Results from Scratch" button functionality
-  - [ ] Implement real file downloads (replace alert stubs)
-- [ ] **Medium Priority (Enhancements)**
-  - [ ] Fix job detail tabs to use real data (check demo mode, fetch from backend)
-  - [ ] Add unit tests for all fixes following testing philosophy
-- [ ] **No backwards compatibility required** - freely remove dead code, rename methods, clean up prototype artifacts
+### Milestone 6.4: Frontend-Backend Integration ✅ COMPLETED
+- [x] **Backend core systems:** cluster.rs, automations/, validation/, logging bridge
+- [x] **Frontend service layer removal:** Deleted orphaned/redundant services, tests, fixtures, duplicate logic (handled by backend only)
+- [x] **Stores architecture:** Reactive stores consuming backend APIs (clusterConfig, jobs)
+- [x] **Job automation chains:** Creation, submission, completion, sync, cleanup with comprehensive logging
+- [x] **Type safety:** Snake_case consistency, strict contracts
+- [x] **File upload reliability:** Chunked uploads (256KB), per-chunk flush, 300s timeout per chunk
+- [x] **Architecture cleanup:** Batch SLURM queries, delete_job cancels SLURM jobs
 
-See: [phase-6-4-frontend-backend-integration.md](tasks/active/phase-6-4-frontend-backend-integration.md)
+See: [phase-6-4-frontend-backend-integration.md](tasks/completed/phase-6-4-frontend-backend-integration.md)
 
-### Milestone 6.5: Comprehensive Testing
-- [ ] Unit test coverage >80% (including tests for Phase 6.4 fixes)
+### Milestone 6.5: Code Quality & Infrastructure Cleanup
+- [ ] **SLURM log caching implementation** - Complete end-to-end feature from database to UI
+  - [ ] Database schema: slurm_stdout/slurm_stderr columns, save/load methods
+  - [ ] Backend fetching: fetch_slurm_logs_if_needed() with three trigger points
+  - [ ] Frontend display: JobTabs cached logs, manual fetch button
+  - [ ] Status validation: Extend to FAILED/CANCELLED states
+- [ ] **Database infrastructure simplification** - Remove unused transaction and status history code
+- [ ] **Mock UI element removal** - Clean up fake progress bars and placeholder UI
+- [ ] **Miscellaneous improvements** - SLURM status codes, module init fixes, closure ownership
+
+See: [phase-6-5-code-quality-infrastructure-cleanup.md](tasks/active/phase-6-5-code-quality-infrastructure-cleanup.md)
+
+### Milestone 6.6: Job Lifecycle Reliability & Bug Fixes
+- [ ] **Issue 0: Automatic scratch→project rsync** - ARCHITECTURE BUG: Job completion doesn't automatically rsync scratch to project, logs fetch from wrong directory
+- [ ] **Issue 1: Server metadata sync** - job_info.json not updating on server after status changes
+- [ ] **Issue 2: Failed job file copying** - Terminal state rsync handles this (fixed by Issue 0)
+- [ ] **Issue 3a: SLURM memory unit** - Append "GB" to memory parameter (--mem=64GB not --mem=64)
+- [ ] **Issue 3b: NAMD config file names** - Use actual uploaded file names instead of hardcoded structure.psf/pdb
+- [ ] **Issue 4: OpenMPI environment export** - Add SLURM_EXPORT_ENV=ALL before mpirun
+- [ ] **Issue 5: Explicit nodes flag** - Calculate and specify --nodes based on core count for optimal MPI performance
+
+See: [phase-6-6-job-lifecycle-reliability-bug-fixes.md](tasks/active/phase-6-6-job-lifecycle-reliability-bug-fixes.md)
+
+### Milestone 6.7: Comprehensive Testing
+- [ ] Unit test coverage >80% (including tests for Phase 6.5 and 6.6 fixes)
 - [ ] E2E test suite complete
 - [ ] Manual testing checklist
 - [ ] Performance optimization testing
 
-See: [phase-6-5-comprehensive-testing.md](tasks/completed/phase-6-5-comprehensive-testing.md)
-
-### Milestone 6.6: Production Readiness
-- [ ] Windows executable build
+### Milestone 6.8: Production Readiness
+- [ ] Git Action x86 Windows executable build
+- [ ] Git Action x86 Linux executable build
 - [ ] Installation documentation
 - [ ] User guide (single-job workflow)
 - [ ] Deployment pipeline
@@ -285,9 +301,11 @@ See: [phase-6-5-comprehensive-testing.md](tasks/completed/phase-6-5-comprehensiv
 - **Milestone 6.1**: ✅ UI integrated into backend features with automation architecture foundation
 - **Milestone 6.2**: ✅ All automation chains verified and working correctly (creation, submission, status sync, completion, cleanup)
 - **Milestone 6.3**: ✅ Code quality improvements and refactoring complete (clean, maintainable codebase)
-- **Milestone 6.4**: 🔧 Frontend-backend integration complete (Create Job works, SSH logging comprehensive, job discovery implemented, dead code removed)
-- **Milestone 6.5**: All tests passing (>80% coverage) with comprehensive test suite validating final code
-- **Milestone 6.6**: Production-ready deployment with Windows exe and documentation
+- **Milestone 6.4**: ✅ Frontend-backend integration complete (stores architecture, backend automation chains, removed old code)
+- **Milestone 6.5**: Code quality and infrastructure cleanup (SLURM log caching, database simplification, UI polish)
+- **Milestone 6.6**: Job lifecycle reliability fixes (server metadata sync, failed job handling, SLURM/NAMD config bugs)
+- **Milestone 6.7**: All tests passing (>80% coverage) with comprehensive test suite validating final code
+- **Milestone 6.8**: Production-ready deployment with x86 Windows/Linux builds and documentation
 - **Single-job MVP ready for users with complete automation workflow and production-quality code**
 
 ## Phase 7: Production Hardening & Advanced Features

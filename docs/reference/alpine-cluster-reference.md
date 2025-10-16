@@ -58,6 +58,22 @@ This document provides the authoritative reference for Alpine cluster integratio
 - **Maximum walltime**: 24 hours (normal), 7 days (long/mem QoS)
 - **GPU limits**: 15 MI100, 21 A100, 6 L40 total across all user jobs
 
+### Memory Specification
+
+**SLURM Memory Units:**
+- Bare numbers (no unit) = **MEGABYTES**
+- `--mem=64` → 64 **MB** (will cause OOM failures!)
+- `--mem=64GB` → 64 **GB** (correct)
+- `--mem=65536` → 64 GB (65536 MB, correct but not recommended)
+
+**Always append unit suffix:**
+```bash
+#SBATCH --mem=32GB   # Correct
+#SBATCH --mem=32     # WRONG - only 32 MB!
+```
+
+**Common mistake:** Forgetting unit suffix causes ALL jobs to fail with Out of Memory errors.
+
 ### Billing Weights
 - **CPU partitions**: 1.0 SU per core-hour
 - **GPU partitions**: 1.0 SU per core-hour + 108.2 SU per GPU-hour
@@ -70,18 +86,31 @@ This document provides the authoritative reference for Alpine cluster integratio
 # For all SLURM operations (login nodes only)
 module load slurm/alpine
 
-# For NAMD job execution (in job scripts)
+# For NAMD job execution (in job scripts - MUST be in order)
 module purge
-module load gcc/14.2.0
-module load openmpi/5.0.6  
-module load namd/3.0.1_cpu
+module load gcc/14.2.0       # Base compiler (required first)
+module load openmpi/5.0.6    # Requires gcc/14.2.0
+module load namd/3.0.1_cpu   # Requires gcc/14.2.0 + openmpi/5.0.6
 ```
 
 ### Critical Module Notes
 - **Never load `slurm/alpine` on compute nodes** - login nodes only
 - **Always `module purge` in job scripts** to ensure clean environment
-- **Module versions are recommendations** - verify current availability
+- **Module loading order matters** - openmpi requires gcc, namd requires both
+- **Module versions are cluster-specific** - verify availability on compute nodes
+- **Modules only visible on compute nodes** - not available on login nodes
 - **Source environment**: Use `source /etc/profile` before module commands in scripts
+
+### Interactive Node Access
+```bash
+# Start interactive session for testing/debugging (preferred method)
+sinteractive --partition=amilan --time=00:10:00 --ntasks=1 --nodes=1 --qos=normal
+
+# Once in interactive session, modules are available:
+module spider gcc       # List available versions
+module spider openmpi   # Check dependencies
+module spider namd      # Verify installation
+```
 
 ## SLURM Command Patterns
 
@@ -166,77 +195,129 @@ Identify our jobs by working directory pattern:
 | `CANCELLED` | `CANCELLED` | User cancelled |
 | `TIMEOUT` | `FAILED` | Exceeded walltime limit |
 
-## NAMD Job Templates
+## MPI Best Practices for Alpine
 
-### Basic CPU Job Template
+### Node Calculation
+**Critical**: Always explicitly specify `--nodes` for optimal MPI performance and task placement.
+
+**Calculation Formula:**
+```
+nodes = ceiling(cores / cores_per_node)
+```
+
+**Alpine Core Counts per Node:**
+- `amilan`: 64 cores/node (most common)
+- `amilan` (some nodes): 32 or 48 cores/node
+- `amilan128c`: 128 cores/node
+- `amem`: 48, 64, or 128 cores/node
+
+**Examples:**
+- 48 cores → `--nodes=1` (single node, 48/64 = 0.75)
+- 64 cores → `--nodes=1` (single node, exactly one full node)
+- 96 cores → `--nodes=2` (multi-node, 96/64 = 1.5, round up)
+- 128 cores → `--nodes=2` on amilan OR `--nodes=1` on amilan128c
+
+**For NAMDRunner (single-node MVP):**
+- Always use `--nodes=1` for Phase 6
+- Core count limited to 64 (one full amilan node)
+- Multi-node support deferred to Phase 7+
+
+### OpenMPI Requirements
+
+**Environment Export (CRITICAL):**
+OpenMPI requires `SLURM_EXPORT_ENV=ALL` when jobs are scheduled from login nodes.
+
 ```bash
-#!/bin/bash
-#SBATCH --job-name={{job_name}}
-#SBATCH --output={{job_name}}_%j.out
-#SBATCH --error={{job_name}}_%j.err
-#SBATCH --partition=amilan
-#SBATCH --qos=normal
-#SBATCH --nodes=1
-#SBATCH --ntasks={{cores}}
-#SBATCH --time={{walltime}}
-#SBATCH --mem={{memory}}
+export SLURM_EXPORT_ENV=ALL
+```
 
+**Why?** Ensures proper MPI initialization and environment propagation to compute nodes.
+
+### MPI Execution Commands
+
+**Recommended:** Use `mpirun` or `mpiexec` (not `srun`)
+
+```bash
+# Preferred method for Alpine
+mpirun -np $SLURM_NTASKS <application>
+
+# Alternative (standardized across MPI distributions)
+mpiexec -np $SLURM_NTASKS <application>
+```
+
+**Why not srun?** CURC recommends `mpirun`/`mpiexec` for simplicity and reliability. `srun` can have execution issues.
+
+### Infiniband Constraint
+
+**Always use `--constraint=ib`** to force jobs onto Infiniband-enabled nodes.
+
+```bash
+#SBATCH --constraint=ib
+```
+
+**Why?** MPI communication requires high-speed interconnect. Not all Alpine nodes have Infiniband.
+
+### MPI Limitations on Alpine
+
+- **Maximum cores per job:** 4,096 (64 nodes × 64 cores)
+- **Chassis restriction:** MPI jobs cannot span chassis boundaries
+- **Infiniband requirement:** Use `--constraint=ib` for MPI jobs
+
+## Job Script Generation
+
+**For complete SLURM job script templates**, see [slurm-commands-reference.md#complete-slurm-job-script-template](slurm-commands-reference.md#complete-slurm-job-script-template)
+
+The SLURM reference provides a fully-annotated template integrating Alpine requirements, MPI best practices, and NAMD execution.
+
+### Alpine-Specific Job Script Requirements
+
+When generating job scripts for Alpine, ensure these Alpine-specific elements are included:
+
+**Memory specification:**
+```bash
+#SBATCH --mem=32GB   # Must include GB unit
+```
+
+**Node allocation:**
+```bash
+#SBATCH --nodes=1    # For single-node jobs (≤64 cores on amilan)
+```
+
+**Infiniband constraint:**
+```bash
+#SBATCH --constraint=ib   # Force Infiniband nodes for MPI
+```
+
+**Environment initialization:**
+```bash
+source /etc/profile       # Required for SSH connections
+export SLURM_EXPORT_ENV=ALL   # Required for OpenMPI
+```
+
+**Module loading sequence:**
+```bash
 module purge
 module load gcc/14.2.0
 module load openmpi/5.0.6
 module load namd/3.0.1_cpu
-
-cd {{working_directory}}
-
-mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-{{cores-1}} {{namd_config}} > {{log_file}}
 ```
 
-### High-Memory Job Template
-```bash
-#!/bin/bash
-#SBATCH --job-name={{job_name}}
-#SBATCH --output={{job_name}}_%j.out
-#SBATCH --error={{job_name}}_%j.err
-#SBATCH --partition=amem
-#SBATCH --qos=mem
-#SBATCH --nodes=1
-#SBATCH --ntasks={{cores}}
-#SBATCH --time={{walltime}}
-#SBATCH --mem={{memory}}  # minimum 256GB for mem QoS
+### Partition-Specific Considerations
 
-module purge
-module load gcc/14.2.0
-module load openmpi/5.0.6
-module load namd/3.0.1_cpu
+**Standard CPU jobs (amilan):**
+- Use `--partition=amilan --qos=normal`
+- 64 cores/node (most common)
+- Up to 24 hours walltime (7 days with `--qos=long`)
 
-cd {{working_directory}}
+**High-memory jobs (amem):**
+- Use `--partition=amem --qos=mem`
+- Minimum 256GB memory required
+- Up to 7 days walltime
 
-mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-{{cores-1}} {{namd_config}} > {{log_file}}
-```
-
-### GPU-Accelerated Job Template
-```bash
-#!/bin/bash
-#SBATCH --job-name={{job_name}}
-#SBATCH --output={{job_name}}_%j.out
-#SBATCH --error={{job_name}}_%j.err  
-#SBATCH --partition=aa100
-#SBATCH --qos=normal
-#SBATCH --nodes=1
-#SBATCH --ntasks={{cores}}
-#SBATCH --gres=gpu:{{gpu_count}}
-#SBATCH --time={{walltime}}
-#SBATCH --mem={{memory}}
-
-module purge
-module load gcc/14.2.0
-module load openmpi/5.0.6
-module load namd/3.0.1_cpu
-
-cd {{working_directory}}
-
-mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-{{cores-1}} {{namd_config}} > {{log_file}}
-```
+**GPU jobs (aa100):**
+- Use `--partition=aa100 --qos=normal`
+- Add `--gres=gpu:N` (N = 1-3)
+- Billing: 1 SU/core-hour + 108.2 SU/GPU-hour
 
 ## Directory Structure Requirements
 

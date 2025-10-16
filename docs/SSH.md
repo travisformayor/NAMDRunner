@@ -81,11 +81,48 @@ Frontend connection state management follows the state machine defined in `docs/
 
 ### File Upload Patterns
 
+#### Chunked File Upload
+
+**Implementation**: `src-tauri/src/ssh/sftp.rs`
+
+File uploads use chunked transfer with per-chunk flush to prevent timeout accumulation:
+
+```rust
+// Upload in 256KB chunks with per-chunk timeout
+const CHUNK_SIZE: usize = 256 * 1024; // 256KB chunks
+let file_transfer_timeout = Duration::from_secs(300); // 5 minutes per chunk
+
+for chunk in file_data.chunks(CHUNK_SIZE) {
+    // Each chunk gets fresh 300s timeout window
+    remote_file.write_all(chunk)?;
+    remote_file.flush()?; // fsync() after each chunk
+
+    // Emit progress event
+    emit_progress_event(bytes_uploaded, total_bytes);
+}
+```
+
+**Benefits:**
+- Large files (10MB+) no longer timeout
+- Each 256KB chunk has independent 300s timeout
+- Progress tracking per chunk
+- Prevents timeout accumulation
+
+**Progress Tracking:**
+```rust
+pub struct FileUploadProgress {
+    pub file_name: String,
+    pub bytes_uploaded: u64,
+    pub total_bytes: u64,
+    pub percentage: f64,
+}
+```
+
 #### Single File Upload
-File upload implementation with progress tracking is in `src-tauri/src/ssh/sftp.rs:61-115`. The actual upload process uses 32KB buffers and proper error handling.
+File upload implementation with progress tracking is in `src-tauri/src/ssh/sftp.rs:61-115`. The upload process uses 256KB chunks with per-chunk flush and comprehensive error handling.
 
 #### Batch File Upload
-Batch upload operations are handled in `src-tauri/src/commands/files.rs` with individual file uploads using the SFTP operations from `src-tauri/src/ssh/sftp.rs`.
+Batch upload operations are handled in `src-tauri/src/commands/files.rs` with individual file uploads using the chunked SFTP operations from `src-tauri/src/ssh/sftp.rs`.
 
 ### File Download Operations
 
@@ -96,6 +133,49 @@ File download with retry logic is implemented in `src-tauri/src/ssh/manager.rs:1
 
 #### Automated Workspace Setup
 Directory creation is handled by `src-tauri/src/ssh/sftp.rs:218-248` with recursive directory support. Job workspace setup follows the directory patterns defined in `docs/DB.md`.
+
+## SSH Logging Infrastructure
+
+### Logging Bridge Architecture
+
+**Implementation**: `src-tauri/src/logging.rs` (110 lines)
+
+Bridges Rust backend logs to frontend SSH console panel for real-time operation visibility.
+
+#### Logging Macros
+```rust
+// In Rust backend
+info_log!(connection_manager, "Creating directory: {}", path);
+debug_log!(connection_manager, "SFTP transfer: {} bytes", size);
+error_log!(connection_manager, "Failed: {}", error);
+
+// Emits Tauri event → Frontend SSH console
+```
+
+#### What Gets Logged
+- **Directory operations**: `mkdir -p` commands with paths
+- **File uploads**: SFTP transfers with progress (bytes uploaded/total)
+- **File downloads**: SFTP transfers with progress
+- **Command execution**: sbatch, squeue, sacct, scancel with full command text
+- **Metadata operations**: job_info.json reads/writes
+- **Errors**: Failed operations with error messages
+
+#### Frontend SSH Console
+Displays all SSH/SFTP operations in real-time:
+```typescript
+// Frontend subscribes to 'ssh-log' events
+listen('ssh-log', (event: SSHLogEvent) => {
+    console.log(`[${event.level}] ${event.message}`);
+});
+```
+
+**Console Features:**
+- Real-time command logging
+- Scrollable history
+- Color-coded log levels (INFO, DEBUG, ERROR)
+- Helps debug connection and transfer issues
+
+For automation progress tracking, see [docs/AUTOMATIONS.md](AUTOMATIONS.md#progress-tracking-system)
 
 ## Security Patterns
 

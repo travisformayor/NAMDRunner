@@ -188,8 +188,9 @@ The `execute_job_submission_with_progress` function handles the complete job sub
    - Validate job status is CREATED or FAILED (eligible for submission)
 
 2. **Mirror Job Directory to Scratch** (using rsync):
-   - Source: `/projects/$USER/namdrunner_jobs/{job_id}/`
-   - Destination: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/`
+   - NAMDRunner app -> SLURM execution (crosses project/scratch data boundary)
+   - Source: `/projects/$USER/namdrunner_jobs/{job_id}/` (app's work area)
+   - Destination: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/` (SLURM's work area)
    - Uses single `rsync -az` command to sync entire directory structure
    - Preserves complete directory layout with all subdirectories:
      - `input_files/` - All NAMD input files
@@ -200,41 +201,45 @@ The `execute_job_submission_with_progress` function handles the complete job sub
 
 3. **Submit to SLURM**:
    - Execute `sbatch` using the mirrored script in scratch location: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/scripts/job.sbatch`
+   - SLURM job now owns scratch directory - app does not touch it during execution
    - Parse SLURM job ID from output
    - Handle submission errors with proper timeout
 
 4. **Update Job Status**:
    - Set status to PENDING, add SLURM job ID, submission timestamp, and scratch directory path
    - Update local database
-   - Update `job_info.json` in project directory with submission details
+   - Update `job_info.json` in **project directory** with submission details
 
-**Directory Structure** (Mirrored Between Project and Scratch):
+**Directory Structure After Submission**:
 ```
 /projects/$USER/namdrunner_jobs/job_123/          /scratch/alpine/$USER/namdrunner_jobs/job_123/
-├── input_files/                     ⟷            ├── input_files/
+├── input_files/                                   ├── input_files/
 │   ├── structure.pdb                              │   ├── structure.pdb
 │   ├── structure.psf                              │   ├── structure.psf
 │   └── parameters.prm                             │   └── parameters.prm
-├── scripts/                         ⟷            ├── scripts/
+├── scripts/                                       ├── scripts/
 │   ├── job.sbatch                                 │   ├── job.sbatch
 │   └── config.namd                                │   └── config.namd
-├── outputs/                         ⟷            ├── outputs/
-└── job_info.json                    ⟷            └── job_info.json
+├── outputs/ (empty)                               ├── outputs/ (SLURM writes here during execution)
+└── job_info.json                                  └── job_info.json
+
+        ↑ APP AREA                                         ↑ SLURM AREA
+    (App reads/writes here)                        (App hands off, SLURM owns during execution)
 ```
 
-**Result**: Job status changes from CREATED to PENDING with SLURM job ID assigned. Complete job directory mirrored to scratch for execution. SLURM jobs execute from `/scratch/alpine/` location (required for cluster access).
+**Result**: Job status changes from CREATED to PENDING with SLURM job ID assigned. Complete job directory mirrored to scratch for execution. App no longer interacts with scratch until job completes (see Job Completion chain).
 
 ---
 
 ### 3. Status Synchronization Automation Chain
 
 **Trigger**: User clicks "Sync Status" button or automatic periodic sync (if implemented)
-**Purpose**: Query SLURM for current job status and update local database + server metadata
-**Status**: ✅ **IMPLEMENTED** in `src-tauri/src/automations/job_sync.rs` and `src-tauri/src/slurm/status.rs`
+**Purpose**: Query SLURM for current job status, update local database, trigger job discovery if needed, and return complete job list
+**Status**: 🔨 **REFACTORING IN PROGRESS** (Phase 6.6) - Current implementation has architecture violations
 
-#### Implementation:
+**Planned Architecture** (Backend-Owned Workflow):
 
-The `sync_all_jobs` function handles real-time synchronization of job status from SLURM:
+The `sync_all_jobs()` function will handle complete synchronization workflow, including automatic job discovery:
 
 1. **Validate Connection**:
    - Verify SSH connection is active
@@ -244,62 +249,129 @@ The `sync_all_jobs` function handles real-time synchronization of job status fro
    - Retrieve all jobs from database
    - Filter to only Pending or Running jobs (others don't need syncing)
 
-3. **Query SLURM for Each Job**:
-   - Use `SlurmStatusSync::sync_job_status()` with job's SLURM ID
-   - Query `squeue` for active jobs (Pending/Running)
+3. **Query SLURM for Active Jobs** (Batch Operation):
+   - Use `SlurmStatusSync::sync_all_jobs()` with job SLURM IDs
+   - Query `squeue` for active jobs (PENDING/RUNNING) in single batch command
    - Query `sacct` for completed jobs as fallback
    - Parse SLURM status output to JobStatus enum
+   - Update job status, timestamps in database
+   - **NO server metadata updates during execution** (Metadata-at-Boundaries principle)
 
-4. **Update Status if Changed**:
-   - Compare new status with current status
-   - If different, update job with new status and timestamp
-   - Set `completed_at` timestamp if job finished
-   - Save to local database immediately
+4. **Automatic Job Discovery** (If Database Empty):
+   - Check if database has zero jobs (first connection after DB reset)
+   - If empty, trigger automatic discovery from cluster:
+     - Scan `/projects/$USER/namdrunner_jobs/` for job directories
+     - Download `job_info.json` from each directory
+     - Parse and import to database
+     - For jobs with status=PENDING/RUNNING, they'll sync on next cycle
+   - If discovery fails, log error but continue with sync
 
-5. **Update Server Metadata**:
-   - Upload updated `job_info.json` to project directory
-   - Ensures cluster has latest job metadata
+5. **Trigger Job Completion if Terminal State**:
+   - If status changed to terminal state (COMPLETED, FAILED, CANCELLED, TIMEOUT, OUT_OF_MEMORY):
+     - Set `completed_at` timestamp
+     - **Trigger Job Completion Automation Chain** (see Section 4 below)
+     - Completion chain handles: rsync scratch→project FIRST, then cache logs, then update metadata
+   - If status is still PENDING/RUNNING:
+     - Save to database only (no metadata update)
+     - Wait for next sync
 
-6. **Log Completion**:
-   - When job transitions to Completed/Failed/Cancelled, log the event
-   - Frontend sees status change on next job list refresh
-   - Output downloading is always manual (user explicitly requests via UI)
+6. **Return Complete Job List**:
+   - Load all jobs from database (includes discovered + synced jobs)
+   - Return complete list to frontend
+   - Frontend simply caches the result (no orchestration logic)
 
-**Result**: Jobs display current SLURM status with accurate timestamps. Database and server metadata stay synchronized.
+**Architecture Principle (Metadata-at-Boundaries)**:
+Server metadata (`job_info.json`) is only updated at lifecycle boundaries, not during execution:
+- **Job Creation**: Update project metadata (job created)
+- **Job Submission**: Update project metadata (slurm_job_id, submitted_at added)
+- **During Execution**: Database ONLY (metadata shows submission state, becomes stale)
+- **Job Completion**: Rsync scratch→project FIRST, then update metadata (final status)
+
+This prevents rsync conflicts and keeps metadata updates simple and predictable.
+
+**Frontend Integration**:
+```typescript
+// Frontend store - pure caching (no business logic)
+const syncResult = await invoke('sync_jobs');
+// syncResult.jobs contains complete list (discovery + sync happened automatically)
+jobsStore.set(syncResult.jobs);
+```
+
+**Result**: Jobs display current SLURM status with accurate timestamps. Terminal state jobs automatically trigger completion chain. Database-empty scenario handled automatically. Frontend makes single backend call with no orchestration logic.
+
+**Known Issues (To Be Fixed in Phase 6.6)**:
+- ❌ Current: Frontend orchestrates discovery (3 backend calls)
+- ❌ Current: Server metadata updated during execution (violates Metadata-at-Boundaries)
+- ❌ Current: Rsync scratch→project missing on completion
+- ❌ Current: Logs fetched from scratch instead of project
+- ✅ Planned: Backend handles all workflows, frontend is pure caching
 
 ---
 
 ### 4. Job Completion and Results Retrieval Automation Chain
 
-**Trigger**: Automatic when job status changes to COMPLETED (or manual user request)
-**Purpose**: Mirror scratch directory back to project directory to preserve all results
-**Status**: ✅ **IMPLEMENTED** in `src-tauri/src/automations/job_completion.rs`
+**Trigger**: Automatic when job status transitions to terminal state (COMPLETED, FAILED, CANCELLED, TIMEOUT, OUT_OF_MEMORY) during status synchronization
+**Purpose**: Mirror scratch directory back to project directory to preserve all job results, then cache SLURM logs for offline viewing
+**Status**: 🔨 **REFACTORING IN PROGRESS** (Phase 6.6) - Rsync missing, logs fetched from wrong location (scratch instead of project)
 
-#### Implementation:
+**Architecture Principle**: Scratch directory is for SLURM execution only. NAMDRunner app only interacts with project directory. Rsync keeps them in sync at job submission (project→scratch) and completion (scratch→project).
 
-The `execute_job_completion_with_progress` function syncs all results back to permanent storage:
+**Planned Implementation** (Correct Order):
 
-1. **Validate Job Status**:
-   - Verify job is in COMPLETED state
-   - Ensure both project and scratch directories exist
+When job status changes to terminal state during `sync_job_status()`:
 
-2. **Mirror Scratch Back to Project** (using rsync):
-   - Source: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/`
-   - Destination: `/projects/$USER/namdrunner_jobs/{job_id}/`
+1. **Automatic Rsync Scratch→Project** (FIRST AND CRITICAL):
+   - Triggered immediately when terminal state detected in status sync
+   - **DATA BOUNDARY CROSSED**: SLURM execution → NAMDRunner app
+   - Source: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/` (append trailing slash)
+   - Destination: `/projects/$USER/namdrunner_jobs/{job_id}/` (no trailing slash)
    - Uses single `rsync -az` command to sync entire directory structure
-   - **Delta sync**: Only copies files that changed or were added (outputs)
+   - **Delta sync**: Only copies files that changed or were added
    - Preserves all job results:
-     - `outputs/` - All NAMD trajectory files, final coordinates, restart files
-     - Updated `job_info.json` - Final job metadata with completion status
-     - Any log files written during execution
-   - **Why rsync**: Efficient delta transfer only copies new/changed files (typically just the outputs), much faster than scanning and copying individual files
+     - `outputs/` - All NAMD trajectory files (.dcd), final coordinates, restart files
+     - `{job_name}_{slurm_job_id}.out` - SLURM stdout log file
+     - `{job_name}_{slurm_job_id}.err` - SLURM stderr log file
+     - `namd_output.log` - NAMD execution log
+     - Any other files written during execution
+   - **Why rsync**: Efficient delta transfer, handles all files in single operation
+   - **Error handling**: Log error if rsync fails but continue (don't block status sync)
+   - **CRITICAL**: This MUST happen before any log fetching or file operations
 
-3. **Update Job Metadata**:
-   - Mark job as results-synced in database
-   - Update completion timestamp
-   - Save updated job_info.json to project directory
+2. **Cache SLURM Logs from Project Directory** (AFTER RSYNC):
+   - After rsync completes, logs are now in project directory
+   - Construct paths: `{project_dir}/{job_name}_{slurm_job_id}.out` and `.err`
+   - Read log contents from **project directory** (not scratch!)
+   - Store in database `slurm_stdout` and `slurm_stderr` columns for offline viewing
+   - Implements "fetch once, cache forever" pattern
+   - Manual "Refetch Logs" button in UI allows re-fetching if needed
 
-**Result**: All simulation results are synced from scratch to permanent project storage in `/projects/$USER/namdrunner_jobs/{job_id}/outputs/`. Mirrored structure ensures consistency. rsync's delta algorithm makes this efficient even for large result sets.
+3. **Update Job Metadata in Project Directory** (FINAL STEP):
+   - Update job_info.json with final status and completion timestamp
+   - This is the only time metadata is updated during job lifecycle after submission
+   - Now metadata matches reality again (was stale during execution per Metadata-at-Boundaries principle)
+
+**Data Flow**:
+```
+Terminal State Detected
+         ↓
+   1. Rsync scratch→project (entire job directory)
+         ↓
+   2. Fetch logs from project directory
+         ↓
+   3. Cache logs in database
+         ↓
+   4. Update project metadata with final status
+         ↓
+   Complete - App now interacts with project directory only
+```
+
+**Result**: All job data automatically syncs from scratch to project when job finishes. SLURM logs cached in database for offline viewing. All file operations (downloads, listings) use project directory. Users can download individual output files or bulk download all outputs as a zip. No manual sync button needed.
+
+**Known Issues (To Be Fixed in Phase 6.6)**:
+- ❌ Current: Rsync scratch→project never happens
+- ❌ Current: Logs fetched from scratch directory (wrong location)
+- ❌ Current: Discovered jobs fetch logs from scratch (before rsync)
+- ✅ Planned: Rsync FIRST, then logs from project, then metadata update
 
 ---
 
@@ -536,7 +608,3 @@ Automation testing follows NAMDRunner's 3-tier architecture:
 - [`docs/API.md`](API.md) - IPC interfaces for automation commands
 - [`docs/SSH.md`](SSH.md) - File operations and security patterns
 - [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md) - Cluster-specific requirements
-
----
-
-*This document describes the current automation architecture implemented in NAMDRunner Phase 6.1.*

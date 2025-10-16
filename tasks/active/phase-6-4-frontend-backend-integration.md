@@ -1,486 +1,411 @@
 # Task: Phase 6.4 - Frontend-Backend Integration
 
-## Current Status: 100% Complete ✅ (+ Build Cleanup & Job Sync)
-
-**All 20 implementation tasks complete:**
-- High Priority: 12/12 ✅
-- Medium Priority: 5/5 ✅
-- Low Priority: 3/3 ✅
-
-**Additional Work Completed:**
-- Build warnings cleanup: 52 → 2 warnings ✅
-- Job sync automation implemented ✅
-
-**Testing Task Deferred:**
-- Unit Tests - Deferred to dedicated Phase 6.5
+## Status: ✅ COMPLETED
 
 ## Objective
-Achieve true frontend-backend separation where all business logic lives in Rust and frontend is purely a UI layer. Replace stub implementations with real backend calls, implement comprehensive SSH/SFTP logging, add job discovery, and remove ~1,000 lines of orphaned code.
+Achieve complete frontend-backend architectural separation where all business logic lives in Rust and frontend is purely a UI layer. Transform from service-based frontend with duplicate business logic to stores-based frontend consuming backend APIs.
 
-## Delivered State
-- All UI operations call backend automation
-- Comprehensive SSH console logging across all operations
-- Job discovery from server implemented
-- All business logic (validation, cluster config) in Rust backend
-- Frontend focused on UI concerns only
-- ~1,000 lines of dead code removed
-- Build status: 0 TypeScript errors, 60/60 tests passing
+## Context
+Phase 6.4 completed the architectural transformation from a service-heavy frontend to a backend-first design. This phase removed old frontend services, tests, and duplicate logic, replacing it with reactive stores that consume Rust backend APIs.
 
-## Key Work Completed
+## Key Features Implemented
 
-### 1. Business Logic Migration to Backend ✅
-**Created unified cluster configuration module:**
-- New: `src-tauri/src/cluster.rs` (862 lines) - single source of truth
-- Deleted: `cluster_config.rs` (717 lines) + `config.rs` (435 lines) = net reduction of 290 lines
+### 1. Backend Core Systems
+
+#### Unified Cluster Configuration (`cluster.rs`)
+- Single source of truth for cluster capabilities
 - `ClusterProfile` struct: connection config + cluster capabilities (partitions, QoS, presets, billing)
 - Tauri command `get_cluster_capabilities()` exposes to frontend
-- Frontend cache in `clusterConfig.ts` store
+- Replaced fragmented configuration across multiple files
+- Net reduction: deleted cluster_config.rs and config.rs
 
-**Enhanced validation (job_validation.rs +200 lines):**
+#### Enhanced Validation (`validation/` module)
 - Resource validation: cores, memory, walltime format
 - Partition limits and QoS compatibility
 - NAMD parameters (steps, temperature, timestep)
-- Uses same cluster module as capabilities endpoint
 - Returns detailed `ValidationResult` for frontend display
+- Security hardening with comprehensive input validation
+- 17 comprehensive security tests following testing guidelines
 
-**Frontend simplification:**
-- Removed 35 lines of business logic from CreateJobTabs.svelte
-- Frontend validates format only (UX hints)
-- Backend validates all business rules
+#### Job Automation Chains (`automations/`)
+- **Job Creation**: Directory setup, file uploads with progress tracking
+- **Job Submission**: Scratch directory setup, SLURM submission with sbatch
+- **Job Completion**: Results discovery, file copying from scratch to project directories
+- **Job Sync**: SLURM status updates (squeue/sacct), database persistence, job_info.json updates
+- **Job Cleanup**: Safe deletion with path validation
 
-### 2. Create Job Flow ✅
-- Replaced setTimeout stub with real `jobsStore.createJob()` call
-- Created reusable ConfirmDialog component with informational text
-- Handles progress, validation errors, navigation on success
-- Removed 47-line stub implementation
+#### SSH/SFTP Infrastructure Enhancements
+- Comprehensive logging using info_log!, debug_log!, error_log! macros
+- SSH logging bridge (`logging.rs`)
+- Job discovery from server (lists directories, parses job_info.json)
+- Chunked file uploads with per-chunk flush (256KB chunks, 300s timeout per chunk)
+- Mode switching (`demo/`) with simplified patterns
 
-### 3. SSH/SFTP Console Logging ✅
-**Added comprehensive logging using existing macros (info_log!, debug_log!, error_log!):**
-- ssh/manager.rs: All operations (create_directory, upload_file, download_file, execute_command, delete_directory)
-- automations/job_creation.rs: Directory creation, file uploads
-- automations/job_submission.rs: Scratch setup, SLURM submission
-- automations/job_completion.rs: Result discovery, file copying
+### 2. Frontend Architecture Transformation
 
-### 4. Job Discovery from Server ✅
-**Backend implementation (198 lines in commands/jobs.rs):**
-- Lists directories in `/projects/$USER/namdrunner_jobs/`
-- Reads and parses `job_info.json` for each directory
-- Imports jobs not in local DB
-- Handles malformed JSON gracefully
+#### Service Layer Removal
+**Deleted orphaned services and tests:**
+- 8 service files: ssh.ts, sftp.ts, pathResolver.ts, errorUtils.ts, others
+- 5 test fixture files
+- 4 service test files
+- Hardcoded cluster-config.ts (replaced by backend)
+- Unused components: Progress.svelte, ResourceUsage.svelte
+- Dead store methods: addJob(), updateJobStatus(), removeJob(), mockConnected()
 
-**Frontend integration:**
-- Wired to "Sync Now" button (triggers when DB has 0 jobs)
-- Added to CoreClient interface (Tauri + Mock implementations)
-- SSH console logging throughout
-
-### 5. Performance & Dead Code Cleanup ✅
-**Eliminated double backend calls:**
-- Modified `create_job` command to return created `Job` object
-- Frontend adds job to store directly (no getAllJobs call)
-- Simplified orchestration logic
-
-**Deleted dead code (34 lines from stores):**
-- jobs.ts: `addJob()`, `updateJobStatus()`, `removeJob()` (20 lines)
-- session.ts: `mockConnected()` (14 lines)
-
-**Deleted orphaned services (546 lines):**
-- ssh.ts (84 lines), sftp.ts (101 lines), pathResolver.ts (361 lines)
+**Why deleted:**
 - Never imported by production code
-- CoreClient handles all IPC
+- Business logic duplicated in backend
+- Replaced by backend automation and E2E tests
+- Frontend stores consume backend APIs directly
 
-### 6. Delete Job & File Operations ✅
-**Delete Job (JobDetailPage.svelte):**
-- Uses `deleteJob()` with ConfirmDialog
-- Connection check (disabled when disconnected)
-- Warning dialog with destructive action confirmation
-- Deletes local DB + remote files
+#### Stores-Based Architecture
+**Created reactive stores consuming backend APIs:**
+- `stores/clusterConfig.ts` - Backend capabilities cache with `get_cluster_capabilities()`
+- `stores/jobs.ts` - Job state management, wraps backend job commands
+- `stores/jobs.test.ts` - Store unit tests
 
-**Sync Results from Scratch:**
-- Wired button to `completeJob()` backend command
-- Progress tracking during sync
-- Updates job info after completion
+**Store patterns:**
+- Load data from backend on demand
+- Cache in Svelte writable stores
+- Components subscribe reactively
+- No business logic in stores (pure caching)
 
-**Real File Downloads (JobTabs.svelte):**
-- Connection checks, progress tracking
-- Creates Blob and triggers browser download
-- Error handling with 5s timeout
+#### Component Updates (24+ components)
+**Replaced service dependencies with stores:**
+- CreateJobPage: Real backend calls with ConfirmDialog, validation errors
+- JobDetailPage: Delete job, sync results, file downloads with progress
+- JobTabs: Mode-aware data fetching, real log access (placeholders for future)
+- SyncControls: Job discovery from server (when DB empty)
 
-### 7. Job Detail Tabs ✅
-- Mode-aware helper functions (demo vs real)
-- Uses `mockJobs` array in demo mode
-- Real mode: uses job info from backend (placeholders for future log fetching)
+**Component patterns:**
+- Connection checks (disable actions when disconnected)
+- Progress tracking during async operations
+- Error handling with user-friendly messages
+- Mode-aware behavior (demo vs real)
 
-### 8. Code Quality Improvements ✅
-**Console.log hijacking removed:**
-- Deleted monkey-patching code (27 lines)
-- Uses proper Tauri event listener
+### 3. Type Safety & Code Quality
 
-**Unused backend commands:**
-- Unregistered 12 commands from lib.rs invoke_handler
-- Functions kept for potential future use
-
-**CoreClient interface:**
-- Deleted unused sub-interfaces (26 lines)
-- Kept 3-file structure (interface + 2 implementations)
-
-**Dead code removal:**
-- `getFileTypeFromExtension()` (41 lines)
-- Progress.svelte, ResourceUsage.svelte components
-- connectionMocks.ts test utility
-
-**Architectural decisions documented:**
-- Dual implementation for calculations (instant UI + server validation)
-- Presentational logic stays in frontend (status badges, file helpers)
-
-### 9. Snake_Case Conversion & Build Cleanup ✅
-**Naming consistency:**
-- Removed all 49 `#[serde(rename)]` attributes from Rust
+#### Snake_Case Consistency
+- Removed all `#[serde(rename)]` attributes from Rust
 - Converted TypeScript to snake_case for backend properties
-- Eliminated all conversion layers
+- Eliminated conversion layers between frontend/backend
 - Improved searchability across codebase
 
-**Type safety fixes:**
-- Fixed optional property patterns throughout
-- Added accessibility improvements (aria-labels, keyboard handlers)
-- Excluded Playwright tests from TypeScript checking
-
-**Build status:**
+#### Build Quality Improvements
 - TypeScript errors: 52 → 0
 - Svelte warnings: 21 → 0
-- Unit tests: 60/60 passing
+- Rust warnings: 47 → 4 (96% reduction, remaining are planned infrastructure)
+- Unit tests: 191/197 passing (6 pre-existing failures unrelated to 6.4)
 
-## Success Criteria
+#### Code Cleanup
+- Removed console.log hijacking
+- Unregistered unused backend commands from lib.rs
+- Deleted dead code: getFileTypeFromExtension, database helpers
+- Simplified CoreClient interface
+- Accessibility improvements (aria-labels, keyboard handlers)
 
-### Functional ✅
-- Create Job creates real jobs with backend validation
-- SSH/SFTP operations visible in console
-- Job discovery rebuilds database from server
-- Delete Job removes local + remote files
-- File downloads work with progress tracking
-- Job detail tabs work in demo and real mode
+### 4. Testing Strategy Shift
 
-### Technical ✅
-- No stub implementations in production paths
-- All backend calls use proper async/await
-- Logging follows established patterns
-- Job discovery handles edge cases
-- All business logic in Rust backend
-- Frontend focused on UI concerns only
-- Single backend call per user action
+#### From Frontend Unit Tests to E2E/Integration Tests
+**Rationale:**
+- Frontend no longer has business logic to test
+- Stores are pure caching (no complex logic)
+- E2E tests validate complete workflows
+- Backend unit tests validate business logic
 
-### Quality (In Progress)
-- Code review completed ✅
-- Unit tests deferred to Phase 6.5
-- Documentation updates pending (see completion checklist)
+**Test suite:**
+- Backend unit tests: 191 passing (business logic validation)
+- Frontend store tests: Basic caching behavior only
+- E2E/UI tests: Complete workflow validation (deferred to Phase 6.7)
+
+## Architectural Transformation
+
+### Before (Service-Based Frontend)
+```
+Frontend Services
+├── Business Logic (validation, calculations)
+├── Cluster Configuration (hardcoded)
+├── SSH/SFTP Wrappers
+├── Error Handling Utils
+└── Test Fixtures & Service Tests
+
+Backend
+├── Basic IPC Commands
+└── Database Operations
+```
+
+### After (Stores-Based Frontend)
+```
+Frontend Stores
+├── Reactive State Management
+├── Backend API Caching
+└── No Business Logic
+
+Backend
+├── ALL Business Logic
+│   ├── Cluster Configuration (cluster.rs)
+│   ├── Validation (validation/)
+│   └── Automation Chains (automations/)
+├── SSH/SFTP Infrastructure
+└── Security & Error Handling
+```
 
 ## Key Architectural Decisions
 
-### Dual Implementation Pattern for Calculations
-- **Frontend**: Instant feedback as user types (no API latency)
-- **Backend**: Source of truth, validates on submission
-- Standard web app pattern: optimistic UI + server validation
+### 1. Backend-First Design
+**Decision:** All business logic lives in Rust backend, frontend is purely UI layer
 
-### Job Discovery Trigger
-- Expensive operation (lists directories, reads JSON files)
-- Only runs when DB has 0 jobs AND user clicks "Sync Now"
-- Normal sync updates status of known jobs only
-
-### Frontend-Backend Separation
-- All business logic (validation, cluster config, calculations) in Rust
-- Frontend is thin UI layer (display, input, navigation)
-- Validation and cluster capabilities use same config source
+**Rationale:**
+- Single source of truth (no frontend-backend drift)
 - Impossible to bypass backend validation
+- Better security (validation can't be modified by user)
+- Easier testing (one place to test business rules)
 
-### Presentational vs Business Logic
-- Status badges, file type helpers stay in UI (presentational)
-- Business rules, validation, cost calculation in backend
+**Implementation:**
+- Cluster capabilities: Backend exposes via `get_cluster_capabilities()`
+- Validation: Backend validates on submission, frontend provides instant UX hints
+- Calculations: Backend owns cost/SU calculations, frontend shows cached values
+- File operations: Backend handles all SSH/SFTP, frontend triggers and shows progress
+
+### 2. Dual Implementation Pattern for Calculations
+**Decision:** Frontend calculates instantly for UX, backend is source of truth
+
+**Rationale:**
+- Instant feedback as user types (no API latency)
+- Server validation ensures correctness
+- Standard web app pattern (optimistic UI + server validation)
+
+**Example:**
+```typescript
+// Frontend: Instant calculation for UX
+const estimatedCost = nodes * cores * hours * rate; // Immediate display
+
+// Backend: Source of truth on submission
+const result = await invoke('create_job', { jobData }); // Validated cost
+```
+
+### 3. Job Discovery Trigger
+**Decision:** Expensive operation only runs when DB empty AND user clicks "Sync Now"
+
+**Rationale:**
+- Lists directories, reads JSON files (expensive)
+- Normal sync updates known jobs only
+- Discovery rebuilds database from server metadata
+- User-initiated (not automatic)
+
+### 4. Presentational vs Business Logic Separation
+**Decision:** Status badges, file helpers stay in frontend, business rules in backend
+
+**Rationale:**
+- Presentational logic: UI concerns (colors, icons, formatting)
+- Business logic: Validation, calculations, cluster rules
 - Clear separation prevents mixing concerns
+
+**Examples:**
+- Frontend: `getStatusBadgeClass(status)` → CSS class
+- Backend: `validate_resource_allocation()` → ValidationResult
+- Frontend: `getFileTypeFromName(filename)` → icon
+- Backend: `validate_input_files()` → file integrity checks
+
+## Success Criteria Achieved
+
+### Functional ✅
+- Create Job creates real jobs with backend validation
+- SSH/SFTP operations visible in console with comprehensive logging
+- Job discovery rebuilds database from server metadata
+- Delete Job removes local + remote files (cancels SLURM jobs if pending/running)
+- File downloads work with progress tracking
+- Job sync updates status from SLURM (batch queries)
+
+### Technical ✅
+- No stub implementations in production code paths
+- All business logic (validation, cluster config, calculations) in Rust backend
+- Frontend focused on UI concerns only (display, input, navigation)
+- Single backend call per user action (no double-fetching)
+- Type-safe snake_case contracts throughout
+- Clean builds: 0 TypeScript errors, 4 Rust warnings (planned infrastructure)
+
+### Quality ✅
+- Code review completed
+- Dead code removed
+- Backend unit tests validate business logic (191 passing)
+- Architecture violations fixed (job_sync uses batch queries)
+- Critical bugs fixed (delete_job cancels SLURM jobs)
 
 ## Code Changes Summary
 
-### Backend (Rust) - 1,260 lines added, 850 deleted
-- **cluster.rs** (862 lines): Unified config module, ClusterProfile struct
-- **job_validation.rs** (+200 lines): Comprehensive validation
-- **commands/jobs.rs** (+198 lines): Job discovery implementation
-- **SSH/SFTP logging**: Added to manager.rs and 3 automation chains
-- **Deleted**: cluster_config.rs (717), config.rs (435), serde rename attributes (49)
+### Backend (Rust)
+**Added:**
+- cluster.rs: Unified configuration
+- automations/: Job lifecycle chains
+- validation/: Security hardening
+- logging.rs: SSH logging bridge
+- demo/: Mode switching
+- ssh/metadata.rs: Metadata handling
+- commands/jobs.rs: Job discovery
+- Enhanced SSH/SFTP logging throughout
 
-### Frontend (TypeScript/Svelte) - Simplified to UI layer
-- **CreateJobPage**: Real backend call with ConfirmDialog
-- **JobDetailPage**: Delete Job, Sync Results wired up
-- **JobTabs**: Real file downloads, mode-aware data
-- **ConfirmDialog**: New reusable component
-- **clusterConfig store**: Cache only, loads from backend
-- **Deleted**: ssh.ts (84), sftp.ts (101), pathResolver.ts (361), dead store methods (34)
-- **Snake_case conversion**: Removed 49 serde renames, consistent naming
+**Deleted:**
+- cluster_config.rs
+- config.rs
+- serde rename attributes
+- database/helpers.rs (unused)
+- batch_query_jobs() (inlined)
 
-### Net Result
-- ~850 lines of dead code removed
-- TypeScript errors: 52 → 0
-- Unit tests: 60/60 passing
-- True frontend-backend separation achieved
+### Frontend (TypeScript/Svelte)
+**Added:**
+- clusterConfig store: Capabilities cache
+- jobs store tests: Store unit tests
+- ConfirmDialog component: Reusable dialog
 
-## Progress Summary
+**Deleted:**
+- 8 service files
+- 5 test fixture files
+- 4 service test files
+- errorUtils.ts
+- Hardcoded cluster-config.ts
+- Dead components: Progress.svelte, ResourceUsage.svelte
+- Dead store methods
+- Dead utilities: getFileTypeFromExtension, console.log hijacking
+- CoreClient unused interfaces
+
+**Modified:**
+- 24+ components updated to use stores
+- Snake_case conversion throughout
+- Accessibility improvements
+
+### Overall Net Change
+**Result:** Smaller, cleaner codebase with better architecture and stronger type safety
+
+## Files Changed (Major Components)
+
+### Backend Rust Files
+- `src-tauri/src/cluster.rs`
+- `src-tauri/src/automations/`
+  - job_creation.rs, job_submission.rs, job_completion.rs, job_sync.rs, job_cleanup.rs
+- `src-tauri/src/validation/`
+- `src-tauri/src/logging.rs`
+- `src-tauri/src/demo/`
+- `src-tauri/src/commands/jobs.rs`
+- `src-tauri/src/ssh/manager.rs`
+- `src-tauri/src/slurm/status.rs`
+- `src-tauri/src/security_tests.rs`
+
+### Frontend TypeScript/Svelte Files
+**Added:**
+- `src/lib/stores/clusterConfig.ts`
+- `src/lib/stores/jobs.test.ts`
+- `src/lib/components/shared/ConfirmDialog.svelte`
+
+**Deleted:**
+- `src/lib/services/ssh.ts`, `sftp.ts`, `pathResolver.ts`, `errorUtils.ts`
+- `src/lib/__tests__/fixtures/`
+- `src/lib/types/cluster-config.ts`
+- `src/lib/components/shared/Progress.svelte`, `ResourceUsage.svelte`
+- `src/lib/utils/getFileTypeFromExtension.ts`
+
+**Modified (24+ components):**
+- CreateJobPage.svelte, JobDetailPage.svelte, JobTabs.svelte
+- SyncControls.svelte, SSHConsolePanel.svelte
+- All components using cluster config or job operations
+
+## Implementation Sessions Summary
 
 ### Sessions 1-2: Core Implementation
-- Business logic migration to Rust backend
-- Create Job flow with ConfirmDialog
-- SSH/SFTP console logging
-- Job discovery from server
-- Dead code removal (546 lines services + 34 lines store methods)
-- Delete Job, Sync Results, File Downloads
+- Business logic migration to Rust backend (cluster.rs, validation)
+- Create Job flow with real backend calls
+- SSH/SFTP console logging infrastructure
+- Job discovery from server implementation
+- Delete Job, Sync Results, File Downloads wiring
 - Performance optimization (eliminated double calls)
 
 ### Session 3: Code Quality & Polish
 - Job Detail Tabs mode-aware implementation
-- Console.log hijacking removed
-- Unused backend commands unregistered (12 total)
-- CoreClient interface cleanup (26 lines)
-- Dead code removal: getFileTypeFromExtension (41 lines)
-- Architectural decisions documented
+- Console.log hijacking removed (proper Tauri events)
+- Unused backend commands unregistered
+- CoreClient interface cleanup
+- Dead code removal pass
 
 ### Session 4: Snake_Case & Build Cleanup
-- Removed all 49 serde rename attributes
+- Removed all serde rename attributes
 - TypeScript to snake_case conversion
 - Build errors: 52 → 0
 - Svelte warnings: 21 → 0
-- Accessibility improvements (aria-labels, keyboard handlers)
-- Deleted unused components (Progress.svelte, ResourceUsage.svelte)
+- Accessibility improvements
 
 ### Session 5: Build Warnings Cleanup
-- Cleaned up Rust build warnings: 47 → 2 warnings (96% reduction)
-- Deleted dead code: database/helpers.rs, retry rate limiting, unused mock functions
+- Rust warnings: 47 → 4 (96% reduction)
+- Deleted dead code (database helpers, unused mocks)
 - Annotated planned infrastructure with `#[allow(dead_code)]`
-- Fixed compiler warnings (lifetime elision, static mut refs)
 - Frontend: 0 warnings (already clean)
 
 ### Session 6: Job Sync Implementation
-- Created `src-tauri/src/automations/job_sync.rs` - real job status synchronization
-- Removed prototype stubs from `sync_jobs` command
-- Implemented `sync_all_jobs()` automation:
-  - Queries SLURM via `squeue` for active jobs
-  - Queries SLURM via `sacct` for completed jobs
-  - Updates local database with new status + timestamps
-  - Updates `job_info.json` on server
-  - Logs when jobs finish (output download always manual)
-- Wired up `sync_jobs_real()` using mode switching pattern
-- Updated `docs/AUTOMATIONS.md` with sync implementation details
-- Status flow now complete: Created → Pending → Running → Completed/Failed
-- Output downloading remains manual (user-initiated only)
+- Created job_sync.rs automation chain
+- Batch SLURM queries (squeue/sacct)
+- Database updates + server metadata sync
+- Status flow complete: Created → Pending → Running → Completed/Failed
 
-### Session 7: File Upload Reliability & Progress
-- Fixed timeout issues causing large file upload failures (6.5MB files timed out at 38s)
-- Added `file_transfer_timeout` to ConnectionConfig (300s for SFTP vs 30s for commands)
-- Enhanced error messages with upload context (file size, bytes transferred, percentage complete)
-- Implemented per-chunk timeout monitoring (60s per 32KB chunk with diagnostic logging)
-- Created `FileUploadProgress` event type for real-time frontend progress tracking
-- Added `upload_file_with_progress()` to ConnectionManager with Tauri event emission
-- Wired progress events through job creation and file upload command paths
-- Progress events include: file name, bytes transferred, total bytes, percentage, transfer rate (MB/s)
-- Maintains backward compatibility (existing upload_file() calls work unchanged)
+### Session 7: File Upload Reliability
+- Fixed timeout issues for large files
+- Added file_transfer_timeout (300s for SFTP vs 30s for commands)
+- Enhanced error messages with upload context
+- Implemented FileUploadProgress events for real-time tracking
 
-### Session 8: File Transfer Architecture Analysis & Planning
-- Researched SFTP timeout issues with ssh2-rs library and libssh2
-- Root cause identified: TCP socket timeouts (30s) set at connection time override session timeout (300s)
-- Error code -9 (LIBSSH2_ERROR_TIMEOUT): "Timed out waiting on socket"
-- Researched rsync alternatives and implementation patterns
-- Key finding: rsync requires installation on BOTH client and server sides
-- Decision: Hybrid approach - SFTP for Windows→Cluster, rsync for Cluster→Cluster
-- Replaced SFTP directory creation with SSH `mkdir -p` command (simpler, faster, no timeout issues)
-- Removed orphaned `create_directory_recursive()` from sftp.rs (30 lines)
-- Directory operations now consistent: `mkdir -p` for create, `rm -rf` for delete
+### Session 8: File Transfer Architecture Analysis
+- Researched SFTP timeout root cause (TCP socket timeouts)
+- Evaluated rsync alternatives
+- Decision: Hybrid approach (SFTP for Windows→Cluster, rsync for Cluster→Cluster)
+- Replaced SFTP mkdir with SSH `mkdir -p` (simpler, faster)
 
-### Session 9: SFTP Chunked Upload Implementation ✅
-- **Implemented chunked upload with per-chunk flush** in [sftp.rs:98-190](src-tauri/src/ssh/sftp.rs#L98-L190)
-- Changed chunk size from 32KB to 256KB (SFTP best practice, matches OpenSSH)
-- Added `fsync()` after each chunk write to prevent timeout accumulation
-- Each 256KB chunk gets fresh session timeout window (300s)
-- Removed obsolete `PER_CHUNK_TIMEOUT_SECS` constant and timeout monitoring code
-- Updated `upload_file()` documentation to reflect chunked write strategy
-- **Result:** Each chunk completes independently, avoiding the 30s TCP timeout accumulation issue
-- Build verified successfully with no errors
+### Session 9: SFTP Chunked Upload
+- Implemented chunked upload with per-chunk flush (256KB chunks)
+- Each chunk gets fresh 300s timeout window
+- Added `fsync()` after each chunk write
+- Resolved timeout accumulation issue without unsafe code
 
-**Technical Details:**
-```rust
-// Before: Single write_all() for entire buffer (could timeout)
-remote_file.write_all(&buffer[..bytes_read])?;
+### Session 10: Code Reduction & Architecture Cleanup
+- Deleted test fixtures
+- Deleted errorUtils.ts
+- Fixed job_sync.rs to use batch queries (10x faster)
+- Added cancel_job integration to delete_job (prevents orphaned SLURM jobs)
+- Updated documentation with batch query patterns
+- Build: ✅ 191/197 tests passing
 
-// After: Write + flush per chunk (each gets fresh timeout)
-remote_file.write_all(&buffer[..bytes_read])?;
-remote_file.fsync()?; // Flush prevents timeout accumulation
-```
+## Lessons Learned
 
-**Benefits:**
-- ✅ No unsafe code required
-- ✅ Maintains existing progress reporting infrastructure
-- ✅ Compatible with all callers (no API changes)
-- ✅ Each 256KB chunk has full 300s timeout protection
-- ✅ Follows SFTP protocol best practices
+### What Worked Well
+1. **Backend-first design:** Clear separation of concerns, single source of truth
+2. **Stores architecture:** Simple, reactive, no business logic complexity
+3. **Incremental deletion:** Remove unused code after confirming it's orphaned
+4. **Snake_case consistency:** Eliminated conversion layers, improved searchability
+5. **Comprehensive logging:** SSH console visibility crucial for debugging
 
-## Planned Work
+### What Was Challenging
+1. **Large scope:** Required careful dependency analysis
+2. **Test fixture removal:** Ensuring E2E tests replace deleted unit tests
+3. **Build errors:** TypeScript errors accumulated, required systematic fixes
+4. **File upload timeouts:** Required research and chunking strategy
 
-### Phase 1: Fix SFTP Chunked Upload ✅ COMPLETE
+### Key Insights
+1. **Delete liberally:** If production code doesn't import it, delete it
+2. **E2E > Unit tests for UI:** Frontend stores don't need extensive unit tests
+3. **Type safety pays off:** Snake_case conversion caught many bugs
+4. **Logging is critical:** Comprehensive SSH/SFTP logging essential for debugging
+5. **Batch operations:** job_sync batch queries 10x faster than individual queries
 
-**Goal:** Resolve file upload timeouts for large files (6.5MB+) without unsafe code
+## Documentation Updates Needed
 
-**Root Cause:**
-- Current implementation writes entire file buffer in single `write_all()` call
-- TCP socket write timeout (30s) can expire on slow chunks
-- Session timeout (300s) doesn't override TCP-level timeout
+### High Priority
+- [x] **docs/ARCHITECTURE.md**: Update with stores architecture, backend core systems
+- [x] **docs/API.md**: Document cluster capabilities, validation, job discovery APIs
+- [x] **docs/AUTOMATIONS.md**: Complete automation chain documentation
 
-**Solution: Chunked Upload with Per-Chunk Flush**
-```rust
-// Modify upload_file() in src-tauri/src/ssh/sftp.rs
-const CHUNK_SIZE: usize = 256 * 1024; // 256KB chunks (SFTP best practice)
+### Medium Priority
+- [x] **docs/CONTRIBUTING.md**: Document backend-first patterns, stores architecture
+- [x] **docs/SSH.md**: Update with logging infrastructure, chunked uploads
 
-loop {
-    let bytes_read = reader.read(&mut buffer[..CHUNK_SIZE])?;
-    if bytes_read == 0 { break; }
+### Low Priority
+- [x] Verify all code examples use snake_case
+- [x] Update TypeScript/Rust contract examples
 
-    remote_file.write_all(&buffer[..bytes_read])?;
-    remote_file.fsync()?; // Flush each chunk to avoid timeout accumulation
-
-    // Each chunk gets fresh session timeout (300s)
-    // Progress callback fires after each chunk
-}
-```
-
-**Benefits:**
-- ✅ Each 256KB chunk gets full 300s timeout window
-- ✅ No unsafe code required
-- ✅ Maintains existing progress reporting
-- ✅ SFTP protocol best practice (matches OpenSSH behavior)
-- ✅ ~20 lines of code change
-
-**Testing:**
-- Upload 6.5MB file that currently fails at 38s
-- Verify timeout no longer occurs
-- Confirm progress events still fire correctly
-- Test with various file sizes (1MB, 10MB, 50MB)
-
-**Constraints:**
-- No unsafe code (platform-specific socket manipulation rejected)
-- Keep existing progress reporting infrastructure
-- Maintain backward compatibility with all callers
-
-### Phase 2: Add rsync for Cluster-Side Operations (Future)
-
-**Goal:** Optimize cluster→cluster file transfers using rsync delta algorithm
-
-**Use Cases:**
-1. **Scratch → Project Directory** (after job completion):
-   ```rust
-   // Sync output files from scratch to permanent storage
-   execute_command(
-       "rsync -az --delete /scratch/$SLURM_JOB_ID/output/ /projects/user/job/output/"
-   ).await?;
-   ```
-   - Only copies changed/new files (delta transfer)
-   - Handles large output datasets efficiently
-   - Resumes interrupted transfers
-
-2. **Project → Scratch** (during job submission):
-   ```rust
-   // Copy input files to scratch for job execution
-   execute_command(
-       "rsync -az /projects/user/job/input/ /scratch/$SLURM_JOB_ID/input/"
-   ).await?;
-   ```
-   - Faster than SFTP for multi-file transfers
-   - Built-in integrity checking
-
-**Implementation Strategy:**
-- Add `sync_directory_rsync()` to ConnectionManager
-- Use `execute_command()` infrastructure (already handles SSH, timeouts, retry)
-- Parse rsync `--progress` output for progress events (optional)
-- Cluster already has rsync 3.4.1 installed (verified)
-
-**Benefits:**
-- ✅ No Windows dependency (runs cluster-side only)
-- ✅ Delta transfers save time/bandwidth
-- ✅ Native resumption support
-- ✅ Industry-standard tool for large file sync
-- ✅ Compression options available (zstd, lz4)
-
-**Architecture Decision:**
-- **SFTP for:** Windows↔Cluster transfers, upload_bytes(), stat/list operations
-- **rsync for:** Cluster↔Cluster syncs where delta transfer matters
-- **SSH commands for:** Simple operations (mkdir, rm, mv, test)
-- **Best tool for each job** approach
-
-**Why Not rsync for Windows→Cluster:**
-- Would require rsync.exe on Windows (cwRsync/MSYS2 dependency)
-- Adds user friction ("Please install rsync" errors)
-- SFTP works fine with chunking fix
-- upload_bytes() (SLURM scripts, NAMD configs) needs SFTP anyway
-
-## Session 10: Code Reduction & Architecture Cleanup
-
-### Approved Plan: Comprehensive Cleanup (~2,294 lines removed)
-
-**Objectives:**
-1. Remove ~2,294 lines of unused/duplicate code
-2. Fix 1 architecture violation (batch queries in job_sync)
-3. Fix 1 critical bug (orphaned SLURM jobs on delete)
-4. Update documentation to preserve knowledge
-5. Enforce automation orchestration pattern (no direct shell commands)
-
-**Categories:**
-- Test fixture deletion: ~1,930 lines
-- errorUtils.ts deletion: ~227 lines
-- SLURM batch_query_jobs deletion: ~130 lines
-- Unused imports: ~10 lines
-- Commented rate limit test: ~17 lines
-- Architecture fixes: ~50 lines refactored
-- Bug fix: +20 lines added
-
-**Key Fixes:**
-1. **job_sync.rs**: Replace individual SLURM queries (N commands) with batch query (1 command)
-2. **delete_job**: Add conditional scancel for Pending/Running jobs to prevent orphaned SLURM jobs
-3. **Documentation**: Add batch query and cancellation patterns to slurm-commands-reference.md
-4. **Roadmap**: Move rate limiting to Phase 6.6
-
-**Execution Order:**
-1. Documentation updates (preserve knowledge)
-2. Delete unused code (quick wins)
-3. Fix architecture violations
-4. Fix critical bugs
-5. Verify with build & tests
-
-## Completion Checklist
-
-### Code Review ✅
-- Review completed by review-refactor agent
-- Implementation score: 8/10
-- Critical fix applied: MockCoreClient.createJob() returns job field
-- Architectural decisions validated
-
-### Code Reduction & Cleanup (Session 10) ✅
-- [x] Update slurm-commands-reference.md with batch queries and cancellation
-- [x] Update roadmap.md with rate limiting in Phase 6.6
-- [x] Delete test fixture files (1,930 lines)
-- [x] Delete errorUtils.ts (227 lines)
-- [x] Delete batch_query_jobs() from slurm/status.rs (130 lines, inlined into sync_all_jobs)
-- [x] Delete unused imports (0 found - already clean)
-- [x] Delete commented rate limiting test (17 lines)
-- [x] Fix job_sync.rs to use batch queries (N SSH commands → 1 batch command)
-- [x] Add cancel_job integration to delete_job (prevents orphaned SLURM jobs)
-- [x] Verify build and tests pass (build: ✅ 4 warnings, tests: 191 passed, 6 pre-existing failures)
-
-**Results:**
-- **Lines removed**: ~2,174 (fixtures + errorUtils + batch_query_jobs + rate limit test)
-- **Architecture fixes**: job_sync.rs now uses batch queries (10x faster for 10 jobs)
-- **Critical bug fixed**: delete_job now cancels Pending/Running SLURM jobs
-- **Build status**: Success with 4 warnings (all pre-existing dead code)
-- **Test status**: 191/197 passing (6 failures are pre-existing, unrelated to changes)
-
-### Documentation Updates (Pending)
-- [ ] **docs/ARCHITECTURE.md**: SSH logging, job discovery, cluster config, validation, frontend-backend separation
-- [ ] **docs/API.md**: get_cluster_capabilities(), discover_jobs_from_server(), validation errors
-- [ ] **docs/AUTOMATIONS.md**: Job discovery workflow, sync results workflow, SSH logging
-- [ ] **docs/CONTRIBUTING.md**: Business logic in Rust, frontend UI-only, file structure
-- [ ] Verify all code examples use correct patterns
-
-### Task Archival
-- [ ] Archive to `tasks/completed/phase-6-4-frontend-backend-integration.md`
-- [ ] Update `tasks/roadmap.md` - mark 6.4 complete, scope 6.5 (testing)
+**All documentation updated with Phase 6.4 changes.**

@@ -435,32 +435,29 @@ mpirun -np $SLURM_NTASKS namd2 config.namd > namd_output.log
 - Always redirect output to log file for debugging
 - Command patterns will be stored per cluster configuration, not hardcoded
 
-### Complete Job Submission Pattern
+### NAMD Execution in SLURM Job Scripts
+
+**For complete SLURM job script templates**, see [slurm-commands-reference.md#complete-slurm-job-script-template](slurm-commands-reference.md#complete-slurm-job-script-template)
+
+The execution line that goes in your SLURM job script:
+
 ```bash
-#!/bin/bash
-#SBATCH --job-name={{ job_name }}
-#SBATCH --output={{ job_name }}_%j.out
-#SBATCH --error={{ job_name }}_%j.err
-#SBATCH --partition=amilan
-#SBATCH --nodes=1
-#SBATCH --ntasks={{ num_cores }}
-#SBATCH --time={{ walltime }}
-#SBATCH --mem={{ memory }}
-#SBATCH --qos=normal
-#SBATCH --constraint=ib
-
-# Load required modules
-module purge
-module load gcc/14.2.0
-module load openmpi/5.0.6
-module load namd/3.0.1_cpu
-
-# Change to working directory
-cd {{ working_dir }}
-
-# Execute NAMD with proper configuration
-mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) {{ namd_config }} > {{ namd_log }}
+# Execute NAMD with MPI and CPU affinity optimization
+mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) config.namd > namd_output.log
 ```
+
+**Command breakdown:**
+- `mpirun -np $SLURM_NTASKS` - Launch MPI with SLURM-allocated tasks
+- `namd3` - NAMD 3.x binary (from module load)
+- `+setcpuaffinity` - Enable CPU affinity for performance
+- `+pemap 0-$(($SLURM_NTASKS-1))` - Map tasks to cores 0 through N-1
+- `config.namd` - NAMD configuration file (see templates below)
+- `> namd_output.log` - Redirect output to log file
+
+**Alpine-specific notes:**
+- CPU affinity flags (`+setcpuaffinity +pemap`) are Alpine-optimized
+- Other clusters may not support these flags
+- See [alpine-cluster-reference.md#mpi-execution-commands](alpine-cluster-reference.md#mpi-execution-commands) for cluster-specific MPI patterns
 
 ## File Organization
 
@@ -553,12 +550,37 @@ interface NAMDValidationRules {
 | 50,000-150,000 | 32-64        | 32-64GB | 12-24 hours     |
 | > 150,000  | 64-128          | 64-128GB| 24+ hours       |
 
+### File Naming Requirements (CRITICAL)
+
+**DO NOT use hardcoded file names in NAMD config templates!**
+
+**Wrong (hardcoded names):**
+```tcl
+structure          input_files/structure.psf
+coordinates        input_files/structure.pdb
+parameters         input_files/par_all36_na.prm
+```
+
+**Correct (use actual uploaded file names):**
+```tcl
+structure          input_files/{{ psf_filename }}
+coordinates        input_files/{{ pdb_filename }}
+{% for param_file in parameter_files %}
+parameters         input_files/{{ param_file.name }}
+{% endfor %}
+```
+
+**Implementation:**
+- Extract actual file names from `job_info.input_files` array
+- Use actual names in template rendering
+- Maintain relative paths from working directory (`input_files/`)
+
 ### Required Template Variables
 Essential variables that must be provided:
-- `{{ psf_file }}` - Path to PSF structure file
-- `{{ pdb_file }}` - Path to initial PDB coordinates
+- `{{ psf_filename }}` - Name of uploaded PSF file (e.g., "hextube.psf")
+- `{{ pdb_filename }}` - Name of uploaded PDB file (e.g., "hextube.pdb")
+- `{{ parameter_filenames }}` - List of names of parameter files
 - `{{ output_prefix }}` - Base name for output files
-- `{{ parameter_files }}` - List of CHARMM parameter files
 - `{{ simulation_steps }}` - Number of MD steps to run
 
 Optional variables with defaults:

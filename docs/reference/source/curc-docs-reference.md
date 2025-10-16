@@ -1431,3 +1431,601 @@ mpirun -np 16 ./example_mpi.exe
 ```
 ````
 `````
+
+# Example Application Job Building: VASP
+
+The Vienna Ab initio Simulation Package ([VASP](https://www.vasp.at)) is a computer program for atomic scale materials modelling, e.g. electronic structure calculations and quantum-mechanical molecular dynamics
+
+VASP requires a license. Individual students or entire departments/faculties are not eligible, and therefore CU Research Computing does not have a VASP module for community use. Licenses are issued to well-defined research groups under the direction of a single chair, professor, or group leader at one single physical location.  Group leaders may [apply for a VASP license](https://www.vasp.at/sign_in/registration_form/), after which they will be given access to the source code. 
+
+The documentation below demonstrates how to install and use VASP in one's `/projects/$USER` directory.  A typical case would be to install the software in the `/projects/$USER` directory of the group leader, and then make it available to group members by emailing rc-help@colorado.edu to request that they be added to the Linux user group of the group leader. 
+
+## Prerequisites
+* you have a copy of the source code
+* you are in a group that has a vasp license
+* you only use VASP for research purposes
+
+## Assumptions
+* the example below is for version 5.4.4; adjust version to match yours
+* the example below assumes the source code is in a tar.gz file; if the source code is in a directory, you can skip the "tar -xf" step
+* the example below assumes you will install the software in /projects/$USER/software; adjust as needed.
+* you have started an interactive job on alpine ("module load slurm/alpine; acompile")
+
+## To compile vasp
+```bash
+module purge
+module load intel/2022.1.2
+module load impi/2021.5.0
+module load mkl/2022.0.2
+cd /projects/$USER/software
+tar -xf vasp.5.4.4.tar.gz
+cd vasp.5.4.4
+cp arch/makefile.include.linux_intel ./makefile.include
+make
+```
+
+## To use vasp (example job script)
+
+```bash
+#!/bin/bash
+
+#SBATCH --partition=amilan
+#SBATCH --qos=normal
+#SBATCH --nodes=1
+#SBATCH --ntasks=2
+#SBATCH --time=1:00:00
+#SBATCH --output=vasp.%j.out
+#SBATCH --job-name=vasp
+#SBATCH --constraint=ib
+
+# this example draws on a the vasp tutorial at:
+#    https://www.vasp.at/tutorials/latest/bulk/part1/
+
+#download and unzip the tutorial files
+#and set up the POSCAR file (change "a" to "3.9")
+wget https://www.vasp.at/tutorials/latest/bulk-part1.zip
+tar -xf bulk-part1.zip
+unzip bulk-part1.zip
+cd bulk-part1/e01_fcc-Si/
+sed -i 's/a/3.9/g' ./POSCAR
+
+#load the required modules
+module purge
+module load intel/2022.1.2
+module load impi/2021.5.0
+module load mkl/2022.0.2
+
+# add the vasp bin directory to your path
+export PATH=$PATH:/projects/$USER/software/vasp.5.4.4/bin
+
+# run vasp
+mpirun -n ${SLURM_NTASKS} vasp_std
+```
+
+# Example Application Job Building: AlphaFold
+
+## AlphaFold Overview
+AlphaFold is a program that predicts the three-dimensional structure of proteins from their amino acid sequences. AlphaFold 2 and AlphaFold 3 are available as modules on both Alpine and Blanca. For detailed instructions on running each version, please select the relevant tab below.
+
+(tabset-ref-batch-scripting)=
+`````{tab-set}
+:sync-group: tabset-batch-scripting
+
+````{tab-item} AlphaFold 2 
+:sync: batch-scripting-ex1
+
+Load the default AlphaFold 2 module:
+```
+module load alphafold/2.3.1
+```
+
+View run options:
+```
+run_alphafold
+```
+#### AlphaFold 2 Module
+Loading the AlphaFold 2 module does the following:
+
+- redirects temporary files from `/tmp` to `/scratch/alpine/$USER`
+    - you can override this path by resetting TMPDIR *after* you load the module:
+        ```
+        module load alphafold/2.3.1
+        export TMPDIR=<path/of/your/choosing>
+        ```
+- activates the AlphaFold 2 conda environment
+
+- sets `CURC_AF_DBS` and `CURC_AF_EXAMPLES` environment variables (see "AlphaFold 2 Databases" and "AlphaFold 2 Examples" sections, below)
+
+- creates a shortcut to the AlphaFold 2 script so you can run the program with `run_alphafold`
+
+#### AlphaFold 2 Databases
+The AlphaFold 2 databases are located in `/gpfs/alpine1/datasets/bioinformatics/alphafold`.
+Note that this directory is not visible from a login node. Loading the AlphaFold 2 module stores this path in `CURC_AF_DBS`.
+
+#### AlphaFold 2 Examples
+Several example fasta files are located in `/curc/sw/install/bio/alphafold/examples`.
+Loading the AlphaFold 2 module stores this path in `CURC_AF_EXAMPLES`:
+
+```
+ls $CURC_AF_EXAMPLES
+dummy.fasta  multimer.fa  rcsb_pdb_7DDD.fasta  T1050.fasta
+```
+#### Example Job Script
+This example job script below is saved in `/curc/sw/install/bio/alphafold/2.3.1`. You can copy it to any space you have write permissions and make the desired changes:
+```bash
+cd /projects/$USER
+cp /curc/sw/install/bio/alphafold/2.3.1/alphafold_alpine.sh .
+```
+
+``` bash
+#!/bin/bash
+
+#SBATCH --nodes=1
+#SBATCH --time=06:00:00
+#SBATCH --partition=aa100
+#SBATCH --qos=normal
+#SBATCH --gres=gpu:1
+#SBATCH --job-name=multimer_test
+#SBATCH --output=multimer_test_%j.out
+#SBATCH --ntasks=40
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=<your email address>
+
+module purge
+module load alphafold/2.3.1
+
+#change directory
+cd /projects/$USER
+
+#run AlphaFold
+run_alphafold -d $CURC_AF_DBS -o . -f $CURC_AF_EXAMPLES/dummy.fasta -t 2020-05-14 -m "monomer" -g true
+```
+
+````
+````{tab-item} AlphaFold 3
+:sync: batch-scripting-ex2
+
+AlphaFold 3 has a substantially updated diffusion-based architecture that is capable of predicting the joint structure of complexes including proteins, nucleic acids, small molecules, ions and modified residues. That neccessitates a different kind of input than the fasta input in AlphaFold 2.
+
+On CURC’s Alpine system, AlphaFold 3 is available as a containerized module. It uses Apptainer/Singularity under the hood and is fully self-contained except for the separately downloaded model parameters (required).
+
+#### AlphaFold 3 Module
+Load AlphaFold 3 module:
+```
+module load alphafold/3.0.0
+```
+View run options:
+```
+run_alphafold --help
+```
+Loading the AlphaFold 3 module does the following:
+- sets environment variables used by the wrapper script:
+    - `AF3_IMAGE`: Path to the AlphaFold 3 container image 
+    - `AF3_CODE_DIR`: Directory containing the AlphaFold 3 codebase
+    - `AF3_DATABASES_DIR`: Location of the required AlphaFold 3 reference databases
+
+- redirects temporary files to `/scratch/alpine/$USER`
+    - you can override this path by resetting TMPDIR *after* you load the module:
+        ```
+        module load alphafold/3.0.0
+        export TMPDIR=<path/of/your/choosing>
+        ```
+- creates a shortcut to the AlphaFold 3 script so you can run the program with `run_alphafold`
+
+#### AlphaFold 3 Model Weights
+```{important}
+Due to license restrictions for AlphaFold 3 model weights, you must read and comply with the [Model Parameters](https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md) and [Outputs](https://github.com/google-deepmind/alphafold3/blob/main/OUTPUT_TERMS_OF_USE.md) Terms of Use. In short, only non-profit activity is allowed, unethical use of the outputs is disallowed and make sure to cite the AlphaFold 3 paper in any publication. To gain access to AlphaFold 3 at CURC, request access to the weights by filling out [this form](https://docs.google.com/forms/d/e/1FAIpQLSfWZAgo1aYk0O4MuAXZj8xRQ8DafeFJnldNOnh_13qAx2ceZw/viewform). You will receive two e-mails. First is acknowledgement of receipt of the request form. The second, in a day or so, is the approval with a link to download the weights. Once you have downloaded them, put them in a filesystem you have access to on Alpine.
+You will need to specify the path to the directory where you save the model weights using the `--model_dir=<path to weights>`.
+
+```
+
+#### AlphaFold 3 Input
+AlphaFold 3 uses JSON input files instead of FASTA.
+You can either:
+- Provide a single JSON file via `--json_path=<path of input>`
+- Or a directory of JSONs via `--input_dir=<path of input>`
+
+#### AlphaFold 3 Databases
+Databases used by AlphaFold 3 are pre-installed and accessible via:
+`/gpfs/alpine1/datasets/bioinformatics/alphafold3`. Note that this directory is not visible from a login node. Loading the AlphaFold 3 module stores this path in `AF3_DATABASES_DIR`.
+
+#### AlphaFold 3 Workflow
+AlphaFold 3 runs in two stages:
+
+Stage 1 (MSA Search): CPU and I/O-intensive; uses jackhmmer and hhmsearch.
+
+Stage 2 (Inference): GPU-intensive; performs structure prediction.
+
+To better utilize limited GPU resources, these stages can be split using flags:
+ - `--norun_inference` → Run only the MSA/data pipeline (Stage 1)
+ - `--norun_data_pipeline` → Run only the inference step (Stage 2)
+
+#### AlphaFold 3 Examples
+Example input files and scripts are in `/curc/sw/install/bio/alphafold/3.0.0/examples`.
+Loading the AlphaFold 3 module stores this path in `AF3_EXAMPLES`:
+```
+ls $AF3_EXAMPLES
+alphafold3_alpine_cpu.sh  alphafold3_alpine_gpu.sh  alphafold3_alpine.sh  fold_protein_2PV7
+```
+This folder includes:
+- `alphafold3_alpine.sh`: Sample batch script to run the complete AlphaFold 3 pipeline.
+- `alphafold3_alpine_cpu.sh`: Sample batch script to run only Stage 1(MSA Search).
+- `alphafold3_alpine_gpu.sh`: Sample batch script to run only Stage 2 (Inference).
+
+You can copy the examples folder to a location where you have write permissions and customize the scripts:
+
+```bash
+cd /projects/$USER
+cp -R /curc/sw/install/bio/alphafold/3.0.0/examples .
+cd examples
+```
+
+#### Example Job Script
+Path of the script: `$AF3_EXAMPLES/alphafold3_alpine.sh`
+
+``` bash
+#!/bin/bash
+
+#SBATCH --nodes=1
+#SBATCH --time=30:00
+#SBATCH --partition=al40
+#SBATCH --qos=normal
+#SBATCH --gres=gpu:1
+#SBATCH --job-name=af3_test
+#SBATCH --output=af3_test_%j.out
+#SBATCH --ntasks=8
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=<your email address>
+
+# Load the AlphaFold 3 module
+module purge
+module load alphafold/3.0.0
+
+# Set input JSON, output directory, and model parameter path
+export INPUT_FILE=$AF3_EXAMPLES/fold_protein_2PV7/alphafold_input.json
+export OUTPUT_DIR=/path/to/output
+export AF3_MODEL_PARAMETERS_DIR=/path/to/alphafold3/params
+
+# Run AlphaFold 3
+run_alphafold --json_path=$INPUT_FILE --output_dir=$OUTPUT_DIR --model_dir=$AF3_MODEL_PARAMETERS_DIR
+```
+````
+`````
+
+# MPI Best practices
+MPI, or Message Passing Interface, is a powerful library standard that allows for the parallel execution of applications across multiple processors on a system. It differs from other parallel execution libraries like OpenMP by also allowing a user to run their applications across multiple nodes. Unfortunately it can sometimes be a bit tricky to run a compiled MPI application within an HPC resource. The following page outlines best practices in running your MPI applications across CURC resources.  
+
+```{attention}
+Please note that this page *does not* cover compiling or optimization of MPI applications.  
+```
+
+## MPI Compatible Compilers and Libraries
+
+### Selecting your Compiler and MPI
+
+Several families of compilers are available to users: Intel, GCC, and AOCC _(Alpine only)_.  Intel compilers have Intel MPI available for messsage passing, and GCC and AOCC compilers have OpenMPI available for message passing. To load a compiler/MPI combo run one the following commands from a job script or compile node (note that you should subsitute the version you need for `<version>` in the examples below; available compiler versions can be seen by typing `module avail`):
+
+
+(tabset-ref-mpi-best-compiler)=
+`````{tab-set}
+:sync-group: tabset-mpi-best-compiler
+
+````{tab-item} Intel
+:sync: mpi-best-compiler-intel
+
+```bash
+module load intel/<version> impi
+```
+
+````
+
+````{tab-item} GCC
+:sync: mpi-best-compiler-gcc
+
+```bash
+module load gcc/<version> openmpi
+
+# Uncomment this additional line when adding this command to a JobScript!
+# SLURM_EXPORT_ENV=ALL
+```
+
+````
+
+````{tab-item} AOCC
+:sync: mpi-best-compiler-aocc
+
+```bash
+module load aocc/<version> openmpi
+
+# Uncomment this additional line when adding this command to a JobScript!
+# SLURM_EXPORT_ENV=ALL
+```
+
+````
+
+`````
+
+```{important}
+It is important to note that use of OpenMPI should be paired with the `SLURM_EXPORT_ENV=ALL` environment variable to ensure the job can function when scheduled from a login node!
+```
+
+```{note}
+On Blanca, in most situations you will want to try to compile and run your applications utilizing the Intel set of compilers and MPI libraries. Most CPUs on Blanca are of Intel architecture, so utilizing Intel will ensure the highest level of optimization comes from your compiler. GCC should only be utilized when your application cannot be compiled on intel software or if compiler specific optimizations exist within your code. We do not yet have compiler/MPI recommendations for Alpine, which has AMD CPUs. 
+```
+
+## Commands to Run MPI Applications
+Regardless of compiler or MPI distribution, there are 3 “wrapper” commands that will run MPI applications: `mpirun`, `mpiexec`, and `srun`. These “wrapper” commands should be used after loading in your desired compiler and MPI distribution and simply prepend whatever application you wish to run. Each command offers their own pros and cons alongside nuance as to how they function.
+
+
+(tabset-ref-mpi-best-prac-run)=
+`````{tab-set}
+:sync-group: tabset-mpi-best-prac-run
+
+````{tab-item} mpirun
+:sync: mpi-best-prac-run-mpirun
+
+`mpirun` is probably the most direct method to run MPI applications with the command being tied to the distribution. This means distribution dependent flags can be passed directly through the command.   
+
+```bash
+mpirun -np <core-count> ./<your-application>
+```
+
+````
+
+````{tab-item} mpiexec
+:sync: mpi-best-prac-run-mpiexec
+
+`mpiexec` is a standardized MPI command execution command that allows for more general MPI flags to be passed. This means that commands are universal across all distributions.
+
+```bash
+mpiexec -np <core-count> ./<your-application>
+```
+
+````
+
+````{tab-item} srun
+:sync: mpi-best-prac-run-srun
+
+The final command `srun` is probably the most abstracted away from a specific implementation. This command lets Slurm figure out specific MPI features that are available in your environment and handles running the process as a job. This command is usually a little less efficient and may have some issues with reliability. 
+
+```bash
+srun -n <core-count> ./<your-application>
+```
+
+````
+`````
+
+```{note}
+RC usually recommends `mpirun` and `mpiexec` for simplicity and reliability when running MPI applications. `srun` should be used sparingly to avoid issues with execution.
+```
+
+## Running MPI on Alpine
+
+Running MPI jobs on Alpine is relatively straightforward. However, one caveat on Alpine is that MPI jobs cannot be run across chassis, which limits them to a maximum `--ntask` count of 4096 cores (64 nodes per chassis * 64 cores each).
+
+Simply select the Compiler and MPI wrapper you wish to use and place it in a job script. In the following example, we run a 128 core, 4 hour job with a gcc compiler and OpenMPI:  
+
+```
+#!/bin/bash
+#SBATCH --nodes=2
+#SBATCH --time=04:00:00
+#SBATCH --partition=amilan
+#SBATCH --qos=normal
+#SBATCH --constraint=ib
+#SBATCH --ntasks=128
+#SBATCH --job-name=mpi-job
+#SBATCH --output=mpi-job.%j.out
+
+module purge
+module load gcc/10.3 openmpi
+  
+export SLURM_EXPORT_ENV=ALL
+
+#Run a 128 core job across 2 nodes:
+mpirun -np $SLURM_NTASKS /path/to/mycode.exe
+
+#Note: $SLURM_NTASKS has a value of the amount of cores you requested
+```
+
+```{important}
+When running MPI jobs on Alpine, you can use the `--constraint=ib` flag to force the job onto an Alpine node that has Infiniband, the networking fabric used by MPI.
+
+To ensure optimal MPI performance and proper task placement, always explicitly specify the number of nodes with the `--nodes` flag. For example:
+- Use `--nodes=1` if you're using up to 64 cores (one full node).
+- Use `--nodes=2` and `--ntasks=128` for 128-core jobs.
+Continue scaling by full nodes to maintain efficient communication (e.g., nodes=4 for 256 tasks, etc.).
+```
+
+## Running MPI on Blanca
+
+Blanca is often a bit more complicated due to the variety of nodes available. In general, there are 3 types of nodes on Blanca that can all run single node multi-core MPI processes that may require additional flags and parameters to achieve cross node parallelism.  
+
+```{important}
+As with Alpine, it's recommended to explicitly specify the number of nodes using `nodes` along with `ntasks`, especially for multi-node MPI jobs. Blanca nodes may have different core counts depending on the hardware configuration, so be sure to match your `ntasks` to the number of cores available per node. You can check a node's core count using `scontrol show node <node-name>`.
+```
+
+### General Blanca Nodes
+General Blanca nodes are not intended to run multi-node processes but this can still be achieved through the manipulation of some network fabric settings. In order to achieve cross node parallelism we must force MPI to utilize ethernet instead of our normal high speed network fabric. We can enforce this with various `mpirun` flags for each respective compiler.
+
+
+(tabset-ref-mpi-best-prac-blanca)=
+`````{tab-set}
+:sync-group: tabset-mpi-best-prac-blanca
+
+````{tab-item} Intel Single-Node Jobs
+:sync: mpi-best-prac-blanca-intel-sing
+
+```bash
+mpirun -genv I_MPI_FABRICS=shm
+```
+````
+
+````{tab-item} Intel Multi-Node Jobs
+:sync: mpi-best-prac-blanca-intel-mult
+
+Constrain Jobs to EDR IB (InfiniBand)
+
+```bash
+mpirun -genv I_MPI_FABRICS=edr
+```
+
+````
+
+````{tab-item} Open MPI
+:sync: mpi-best-prac-blanca-openmpi
+
+```bash
+mpirun --mca btl tcp <other arguments>
+```
+
+````
+
+
+`````
+
+```{note}
+This does not ensure high speed communications in message passing, but it will allow for basic parallelization across nodes.
+```
+
+### Blanca HPC
+Blanca HPC comes equipped with InfiniBand high speed interconnects that allow for high speed communication between nodes. These nodes supoort the Intel and Intel MPI compiler/MPI combo, as well as the `gcc`/`openmpi_ucx` modules _(note: bve sure to use the *ucx* version of the OpenMPI module)_. 
+
+Blanca HPC nodes can easily be distinguished from other Blanca nodes with the node's name in the cluster. Nodes will clearly be distinguished with the `bhpc` prefix.  They also will have the `edr` feature in their feature list if you query them with `scontrol show node`. If you are using Open MPI, jobs on  Blanca HPC nodes can be run using `mpirun` without any special arguments, although be sure to `export SLURM_EXPORT_ENV=ALL` prior to invoking `mpirun`.  If you are using IMPI, select the `ofa` (Open Fabrics Alliance) option to enable Infiniband-based message passing, the fastest interconnect availble on the `bhpc` nodes. You can do this with the following flag: 
+
+```
+mpirun -genv I_MPI_FABRICS shm:ofa <other arguments>
+```
+  
+ 
+### ROCE Enabled Nodes
+The nodes in Blanca chassis 5 (nodes named `bnode05<NN>`) are equipped with high speed network fabrics that are more suited for cross node MPI processes. These nodes are labeled as *RoCE enabled* and require applications to be compiled with UCX-enabled openmpi modules, which are available with both `gcc/8.2.0` and `gcc/10.2.0`.
+
+If you are unsure if your node supports RoCE feature then you can check by using the scontrol command on your node.  
+
+```
+scontrol show node <your-bnode>
+```
+
+You will be presented a block information that details all the nodes features. The key feature you should look for is `fdr`. If your Blanca node lacks this feature then it is not ROCE Enabled.  Jobs on RoCE nodes can be run using `mpirun` without any special arguments, although be sure to `export SLURM_EXPORT_ENV=ALL` prior to invoking `mpirun`. 
+
+# Load Balancer
+
+The CU Research Computing Load Balancer is an effective tool for
+optimally utilizing multiple processors and nodes on the CURC HPC
+resources, without the need to learn OpenMP or MPI. This document
+assumes user knowledge of Slurm jobs, shell scripting, and
+some python.
+
+
+## Why Use the Load Balancer?
+
+Suppose you have a very simple serial program that crops a photo, and
+you need to apply it to crop several million photos. You could rewrite
+the serial program into a parallel program that would utilize multiple
+processors to more quickly run the program over the entire set of
+photos (compared to doing one-at-a-time), but this would require some
+knowledge of parallel programming. Even worse, if your code is in a
+language that has limited parallelization capabilities, so this may not
+be an option. The easiest solution for this problem is to utilize the
+Load Balancer.
+
+
+## Using the Load Balancer
+
+The Load Balancer is a tool provided by CU Boulder Research Computing
+that allows shell commands (for example, calls to serial programs) to
+be distributed amongst nodes and cores on CURC clusters. This means code
+doesn’t need to be explicitly parallelized for MPI or
+OpenMP. Additionally, code can be written in any language that can be
+run from a Linux shell.
+
+Let’s create a simple ‘Hello World’ serial python script to
+demonstrate the Load Balancer tool. We will call the script
+`hello_World.py` and it will print “Hello World from process: ”
+followed by a command line argument:
+
+```python
+import sys
+
+print ("Hello World from process: ", sys.argv[1])
+```
+
+Now we will create a list of calls to the python script that will be
+distributed to multiple cores. (Each compute node has one or more
+discrete compute processor; most modern processors are made up of
+multiple compute "cores", each of which can operate independently and
+simultaneously.)
+
+Instead of slowly typing out commands one-at-a-time, we will use a
+bash shell script to create our commands. In a text editor, create a
+bash shell script called `create_hello.sh`, that has the following
+text:
+
+```bash
+#!/bin/bash
+
+for i in {1..4}
+do
+  echo "python hello_World.py $i;" >> lb_cmd_file
+done
+```
+
+Next run the bash script by first changing permissions of the script
+to be executable by typing: `chmod +x create_hello.sh` and then by
+typing: `./create_hello.sh` at the terminal prompt. It will create a
+file called `lb_cmd_file` that contains 4 calls to our
+`hello_World.py` script:
+
+```bash
+python3 hello_World.py 1;
+python3 hello_World.py 2;
+python3 hello_World.py 3;
+python3 hello_World.py 4;
+```
+
+Now create a job script called `run_hello.sh` that will run all instances of your python script in `lb_cmd_file` with the Load Balancer. Within the script, in addition to specifying the `loadbalance` module, we may need to load other software modules or an [anaconda environment we previously built](./python.md), in order to access whatever software we will be running with the Load Balancer. Your job script should look something like this:
+
+```bash
+#!/bin/bash
+
+#SBATCH --nodes=1
+#SBATCH --time 00:02:00
+#SBATCH --partition atesting
+#SBATCH --qos testing
+#SBATCH --ntasks=4
+#SBATCH --job-name lbPythonDemo
+#SBATCH --output loadbalance.out
+
+module purge
+
+# Load the Load Balancer module *first*
+module load loadbalance/0.2
+
+# Now load any other software modules you need, e.g.:
+# module load anaconda 
+# conda activate my_python_env
+
+# now run your workflow! 
+$CURC_LB_BIN/mpirun lb lb_cmd_file
+```
+
+Running this script via `sbatch run_hello.sh` will run the commands we stored in
+lb_cmd_file in parallel. A successful job will result in output that
+looks something like this:
+
+```
+Hello World from process: 2
+Hello World from process: 1
+Hello World from process: 4
+Hello World from process: 3
+```
+
+```{note}
+* The user must ensure they load the `loadbalance` module _before_ loading any other modules.
+* The user should invoke loadbalance with `$CURC_LB_BIN/mpirun lb your-command-file` as shown in the example above.
+* The `loadbalance` module uses 1 core as a workflow manager.  Therefore, if you request, e.g., 8 cores, the Load Balancer will employ 1 core to manage your workflow tasks across 7 cores.
+``` 
+
+## Additional Resources
+
+* [https://www.inspirenignite.com/load-balancing-in-parallel-computers/](https://www.inspirenignite.com/load-balancing-in-parallel-computers/)
