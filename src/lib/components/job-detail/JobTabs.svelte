@@ -3,11 +3,56 @@
   import { getFileIcon, getTypeLabel, getTypeColor, formatFileSize, getStatusBadgeClass } from '../../utils/file-helpers';
   import { CoreClientFactory } from '../../ports/clientFactory';
   import { isConnected } from '../../stores/session';
-  import { mockJobs } from '../../stores/jobs';
 
   export let job: JobInfo;
 
   type TabId = 'overview' | 'slurm-logs' | 'input-files' | 'output-files' | 'configuration';
+
+  // Display configuration types that include both real fields and demo-only fields
+  type DisplayNAMDConfig = {
+    simulationSteps: number;
+    temperature: number;
+    timestep: number;
+    outputName: string;
+    dcdFreq: number;
+    restartFreq: number;
+    // Demo-only fields (not in actual NAMDConfig type)
+    coordinates?: string;
+    structure?: string;
+    parameters?: string[];
+    cutoff?: number;
+    switchDist?: number;
+    pairlistDist?: number;
+    PME?: boolean;
+    PMEGridSpacing?: number;
+    langevin?: boolean;
+    langevinDamping?: number;
+    langevinTemp?: number;
+    langevinHydrogen?: boolean;
+    useGroupPressure?: boolean;
+    useFlexibleCell?: boolean;
+    useConstantArea?: boolean;
+    langevinPiston?: boolean;
+    langevinPistonTarget?: number;
+    langevinPistonPeriod?: number;
+    langevinPistonDecay?: number;
+    langevinPistonTemp?: number;
+  };
+
+  type DisplaySlurmConfig = {
+    cores: number;
+    memory: string;
+    wallTime: string;
+    partition: string;
+    qos: string;
+    // Demo-only fields (not in actual SlurmConfig type)
+    account?: string;
+    nodes?: number;
+    tasksPerNode?: number;
+    cpusPerTask?: number;
+    gpus?: number;
+    gpuType?: string;
+  };
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -177,8 +222,8 @@ Info: Load balancing completed, performance improved by 3.2%`;
     }
   ];
 
-  // Mock configuration data
-  const namdConfig = {
+  // Demo mode configuration for UI demonstration
+  const demoNamdConfig = {
     simulationSteps: 1000000,
     temperature: 310.0,
     timestep: 2.0,
@@ -207,7 +252,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
     langevinPistonTemp: 310.0
   };
 
-  const slurmConfig = {
+  const demoSlurmConfig = {
     cores: 128,
     memory: "512GB",
     wallTime: "04:00:00",
@@ -354,8 +399,13 @@ Info: Load balancing completed, performance improved by 3.2%`;
   function getSimulationProgress(): number {
     if (job.status === 'CREATED' || job.status === 'PENDING') return 0;
     if (job.status === 'COMPLETED') return 100;
-    if (job.status === 'FAILED') return 75; // Assume it failed at 75%
-    return 45; // Running jobs show 45% progress
+    // For running and failed jobs, we don't have real-time progress tracking yet
+    // Show a static value for demo/visual purposes only
+    if (isDemoMode) {
+      if (job.status === 'FAILED') return 75;
+      if (job.status === 'RUNNING') return 45;
+    }
+    return 0; // Real mode: progress tracking not yet implemented
   }
 
   function getCompletedSteps(): number {
@@ -364,43 +414,14 @@ Info: Load balancing completed, performance improved by 3.2%`;
   }
 
   function getTotalSteps(): number {
-    return job.namd_config?.steps || 1000000;
+    return job.namd_config?.steps || 0;
   }
 
   function getEstimatedTimeRemaining(): string {
     if (job.status === 'COMPLETED') return 'Completed';
     if (job.status === 'FAILED') return 'Failed';
     if (job.status === 'CREATED' || job.status === 'PENDING') return 'Not started';
-    return '1.23 hours remaining';
-  }
-
-  function getCpuUsage(): number {
-    if (job.status === 'RUNNING') return 92.5;
-    if (job.status === 'COMPLETED') return 100;
-    return 0;
-  }
-
-  function getMemoryUsage(): number {
-    if (job.status === 'RUNNING') return 76.8;
-    if (job.status === 'COMPLETED') return 100;
-    return 0;
-  }
-
-  function getGpuUsage(): number {
-    if (job.status === 'RUNNING') return 88.2;
-    if (job.status === 'COMPLETED') return 100;
-    return 0;
-  }
-
-  function getDiskUsage(): number {
-    if (job.status === 'RUNNING') return 34.5;
-    if (job.status === 'COMPLETED') return 45.2;
-    return 0;
-  }
-
-  function getPerformance(): string {
-    if (job.status === 'RUNNING') return '0.0249 s/step';
-    if (job.status === 'COMPLETED') return '0.0245 s/step (avg)';
+    if (job.status === 'RUNNING') return 'Real-time tracking not yet available';
     return '--';
   }
 
@@ -485,52 +506,25 @@ Info: Load balancing completed, performance improved by 3.2%`;
             </div>
           </div>
 
-          <!-- Resource Usage -->
+          <!-- Resource Allocation -->
           <div class="overview-section">
-            <h3>Resource Usage</h3>
-            <div class="resource-grid">
-              <div class="resource-card">
-                <div class="resource-header">
-                  <span class="resource-title">CPU Usage</span>
-                  <span class="resource-percentage">{getCpuUsage().toFixed(1)}%</span>
-                </div>
-                <div class="progress-bar">
-                  <div class="progress-fill progress-blue" style="width: {getCpuUsage()}%"></div>
-                </div>
-                <div class="resource-details">128 cores</div>
+            <h3>Resource Allocation</h3>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">Cores</span>
+                <span class="info-value">{slurmConfig.cores}</span>
               </div>
-
-              <div class="resource-card">
-                <div class="resource-header">
-                  <span class="resource-title">Memory Usage</span>
-                  <span class="resource-percentage">{getMemoryUsage().toFixed(1)}%</span>
-                </div>
-                <div class="progress-bar">
-                  <div class="progress-fill progress-green" style="width: {getMemoryUsage()}%"></div>
-                </div>
-                <div class="resource-details">512 GB</div>
+              <div class="info-item">
+                <span class="info-label">Memory</span>
+                <span class="info-value">{slurmConfig.memory}</span>
               </div>
-
-              <div class="resource-card">
-                <div class="resource-header">
-                  <span class="resource-title">GPU Usage</span>
-                  <span class="resource-percentage">{getGpuUsage().toFixed(1)}%</span>
-                </div>
-                <div class="progress-bar">
-                  <div class="progress-fill progress-purple" style="width: {getGpuUsage()}%"></div>
-                </div>
-                <div class="resource-details">4 × V100</div>
+              <div class="info-item">
+                <span class="info-label">Wall Time</span>
+                <span class="info-value">{slurmConfig.wallTime}</span>
               </div>
-
-              <div class="resource-card">
-                <div class="resource-header">
-                  <span class="resource-title">Disk Usage</span>
-                  <span class="resource-percentage">{getDiskUsage().toFixed(1)}%</span>
-                </div>
-                <div class="progress-bar">
-                  <div class="progress-fill progress-yellow" style="width: {getDiskUsage()}%"></div>
-                </div>
-                <div class="resource-details">2.5 TB</div>
+              <div class="info-item">
+                <span class="info-label">Partition</span>
+                <span class="info-value">{slurmConfig.partition}</span>
               </div>
             </div>
           </div>
@@ -544,8 +538,16 @@ Info: Load balancing completed, performance improved by 3.2%`;
                 <span class="info-value namd-status-badge {getStatusBadgeClass(job.status)}">{job.status}</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Performance</span>
-                <span class="info-value">{getPerformance()}</span>
+                <span class="info-label">Simulation Steps</span>
+                <span class="info-value">{job.namd_config.steps.toLocaleString()}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Temperature</span>
+                <span class="info-value">{job.namd_config.temperature} K</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Timestep</span>
+                <span class="info-value">{job.namd_config.timestep} fs</span>
               </div>
             </div>
           </div>
@@ -806,7 +808,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
 
             <!-- Basic Settings -->
             <div class="config-subsection">
-              <h4>Basic Settings</h4>
+              <h4>Simulation Settings</h4>
               <div class="config-grid-3">
                 <div class="config-item">
                   <div class="config-label">Simulation Steps</div>
@@ -826,31 +828,32 @@ Info: Load balancing completed, performance improved by 3.2%`;
                 </div>
                 <div class="config-item">
                   <div class="config-label">DCD Frequency</div>
-                  <div class="config-value">{namdConfig.dcdFreq.toLocaleString()}</div>
+                  <div class="config-value">{namdConfig.dcdFreq > 0 ? namdConfig.dcdFreq.toLocaleString() : 'Not set'}</div>
                 </div>
                 <div class="config-item">
                   <div class="config-label">Restart Frequency</div>
-                  <div class="config-value">{namdConfig.restartFreq.toLocaleString()}</div>
+                  <div class="config-value">{namdConfig.restartFreq > 0 ? namdConfig.restartFreq.toLocaleString() : 'Not set'}</div>
                 </div>
               </div>
             </div>
 
-            <!-- Input Files -->
+            {#if isDemoMode}
+            <!-- Input Files (Demo mode only - shows detailed NAMD config) -->
             <div class="config-subsection">
               <h4>Input Files</h4>
               <div class="input-files-config">
                 <div class="input-file-item">
                   <span class="input-file-label">Coordinates:</span>
-                  <span class="input-file-value">{namdConfig.coordinates}</span>
+                  <span class="input-file-value">{namdConfig.coordinates ?? 'N/A'}</span>
                 </div>
                 <div class="input-file-item">
                   <span class="input-file-label">Structure:</span>
-                  <span class="input-file-value">{namdConfig.structure}</span>
+                  <span class="input-file-value">{namdConfig.structure ?? 'N/A'}</span>
                 </div>
                 <div class="input-file-item">
                   <span class="input-file-label">Parameters:</span>
                   <div class="parameter-badges">
-                    {#each namdConfig.parameters as param}
+                    {#each (namdConfig.parameters ?? []) as param}
                       <span class="parameter-badge">{param}</span>
                     {/each}
                   </div>
@@ -858,21 +861,21 @@ Info: Load balancing completed, performance improved by 3.2%`;
               </div>
             </div>
 
-            <!-- Force Field & Cutoffs -->
+            <!-- Force Field & Cutoffs (Demo mode only) -->
             <div class="config-subsection">
               <h4>Force Field & Cutoffs</h4>
               <div class="config-grid-3">
                 <div class="config-item">
                   <div class="config-label">Cutoff (Å)</div>
-                  <div class="config-value">{namdConfig.cutoff}</div>
+                  <div class="config-value">{namdConfig.cutoff ?? 'N/A'}</div>
                 </div>
                 <div class="config-item">
                   <div class="config-label">Switch Distance (Å)</div>
-                  <div class="config-value">{namdConfig.switchDist}</div>
+                  <div class="config-value">{namdConfig.switchDist ?? 'N/A'}</div>
                 </div>
                 <div class="config-item">
                   <div class="config-label">Pairlist Distance (Å)</div>
-                  <div class="config-value">{namdConfig.pairlistDist}</div>
+                  <div class="config-value">{namdConfig.pairlistDist ?? 'N/A'}</div>
                 </div>
                 <div class="config-item">
                   <div class="config-label">PME</div>
@@ -882,12 +885,12 @@ Info: Load balancing completed, performance improved by 3.2%`;
                 </div>
                 <div class="config-item">
                   <div class="config-label">PME Grid Spacing (Å)</div>
-                  <div class="config-value">{namdConfig.PMEGridSpacing}</div>
+                  <div class="config-value">{namdConfig.PMEGridSpacing ?? 'N/A'}</div>
                 </div>
               </div>
             </div>
 
-            <!-- Dynamics Settings -->
+            <!-- Dynamics Settings (Demo mode only) -->
             <div class="config-subsection">
               <h4>Dynamics Settings</h4>
               <div class="config-grid-3">
@@ -899,11 +902,11 @@ Info: Load balancing completed, performance improved by 3.2%`;
                 </div>
                 <div class="config-item">
                   <div class="config-label">Langevin Damping</div>
-                  <div class="config-value">{namdConfig.langevinDamping} ps⁻¹</div>
+                  <div class="config-value">{namdConfig.langevinDamping ?? 'N/A'} ps⁻¹</div>
                 </div>
                 <div class="config-item">
                   <div class="config-label">Langevin Temperature (K)</div>
-                  <div class="config-value">{namdConfig.langevinTemp}</div>
+                  <div class="config-value">{namdConfig.langevinTemp ?? 'N/A'}</div>
                 </div>
                 <div class="config-item">
                   <div class="config-label">Langevin Hydrogen</div>
@@ -914,7 +917,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
               </div>
             </div>
 
-            <!-- Pressure Control -->
+            <!-- Pressure Control (Demo mode only) -->
             <div class="config-subsection">
               <h4>Pressure Control</h4>
               <div class="config-grid-3">
@@ -926,22 +929,23 @@ Info: Load balancing completed, performance improved by 3.2%`;
                 </div>
                 <div class="config-item">
                   <div class="config-label">Target Pressure (bar)</div>
-                  <div class="config-value">{namdConfig.langevinPistonTarget}</div>
+                  <div class="config-value">{namdConfig.langevinPistonTarget ?? 'N/A'}</div>
                 </div>
                 <div class="config-item">
                   <div class="config-label">Piston Period (fs)</div>
-                  <div class="config-value">{namdConfig.langevinPistonPeriod}</div>
+                  <div class="config-value">{namdConfig.langevinPistonPeriod ?? 'N/A'}</div>
                 </div>
                 <div class="config-item">
                   <div class="config-label">Piston Decay (fs)</div>
-                  <div class="config-value">{namdConfig.langevinPistonDecay}</div>
+                  <div class="config-value">{namdConfig.langevinPistonDecay ?? 'N/A'}</div>
                 </div>
                 <div class="config-item">
                   <div class="config-label">Piston Temperature (K)</div>
-                  <div class="config-value">{namdConfig.langevinPistonTemp}</div>
+                  <div class="config-value">{namdConfig.langevinPistonTemp ?? 'N/A'}</div>
                 </div>
               </div>
             </div>
+            {/if}
           </div>
 
           <!-- SLURM Configuration -->
@@ -968,26 +972,29 @@ Info: Load balancing completed, performance improved by 3.2%`;
                 <div class="config-label">QOS</div>
                 <div class="config-value">{slurmConfig.qos}</div>
               </div>
+              {#if isDemoMode}
+              <!-- Demo-only fields (not in actual SlurmConfig type) -->
               <div class="config-item">
                 <div class="config-label">Account</div>
-                <div class="config-value">{slurmConfig.account}</div>
+                <div class="config-value">{slurmConfig.account ?? 'N/A'}</div>
               </div>
               <div class="config-item">
                 <div class="config-label">Nodes</div>
-                <div class="config-value">{slurmConfig.nodes}</div>
+                <div class="config-value">{slurmConfig.nodes ?? 'N/A'}</div>
               </div>
               <div class="config-item">
                 <div class="config-label">Tasks per Node</div>
-                <div class="config-value">{slurmConfig.tasksPerNode}</div>
+                <div class="config-value">{slurmConfig.tasksPerNode ?? 'N/A'}</div>
               </div>
               <div class="config-item">
                 <div class="config-label">CPUs per Task</div>
-                <div class="config-value">{slurmConfig.cpusPerTask}</div>
+                <div class="config-value">{slurmConfig.cpusPerTask ?? 'N/A'}</div>
               </div>
               <div class="config-item">
                 <div class="config-label">GPUs</div>
-                <div class="config-value">{slurmConfig.gpus} × {slurmConfig.gpuType.toUpperCase()}</div>
+                <div class="config-value">{slurmConfig.gpus ?? 0} × {slurmConfig.gpuType?.toUpperCase() ?? 'N/A'}</div>
               </div>
+              {/if}
             </div>
           </div>
         </div>

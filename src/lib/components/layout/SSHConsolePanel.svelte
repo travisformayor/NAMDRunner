@@ -10,7 +10,6 @@
   }
 
   let consoleEntries: ConsoleEntry[] = [];
-  let currentPrompt = '$';
 
   function addEntry(type: ConsoleEntry['type'], content: string) {
     const timestamp = new Date().toLocaleTimeString();
@@ -79,7 +78,7 @@
       const prefix = entry.type === 'app-debug' ? `[${entry.timestamp}] ` : '';
       return `${prefix}${entry.content}`;
     }).join('\n');
-    navigator.clipboard.writeText(output + '\n' + currentPrompt);
+    navigator.clipboard.writeText(output);
   }
 
   function handleClear() {
@@ -137,11 +136,6 @@
           <span class="content">{entry.content}</span>
         </div>
       {/each}
-      <!-- Current prompt with cursor -->
-      <div class="prompt-line">
-        <span class="prompt">{currentPrompt}</span>
-        <span class="cursor"></span>
-      </div>
     </div>
   </div>
 {/if}
@@ -271,31 +265,6 @@
 
   .content {
     flex: 1;
-  }
-
-  .prompt-line {
-    display: flex;
-    align-items: center;
-    margin: 2px 0;
-  }
-
-  .prompt {
-    color: var(--namd-text-primary);
-    font-weight: 500;
-    margin-right: 4px;
-  }
-
-  .cursor {
-    display: inline-block;
-    width: 8px;
-    height: 16px;
-    background-color: var(--namd-text-primary);
-    animation: blink 1s infinite;
-  }
-
-  @keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
   }
 
   /* SVG icons */

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { isConnected } from '../../stores/session';
-  import { lastSyncTime, isSyncing } from '../../stores/jobs';
+  import { lastSyncTime, hasEverSynced, isSyncing } from '../../stores/jobs';
   import { CoreClientFactory } from '../../ports/clientFactory';
 
   let autoSync = false;
@@ -37,15 +37,27 @@
 
     if (isDemoMode) {
       if ($isConnected) {
-        return `Demo mode - sample data (last updated: ${formatSyncTime($lastSyncTime)})`;
+        if ($hasEverSynced) {
+          return `Demo mode - sample data (last updated: ${formatSyncTime($lastSyncTime)})`;
+        } else {
+          return `Demo mode - sample data (not synced)`;
+        }
       } else {
         return `Demo mode - sample data (offline)`;
       }
     } else {
       if ($isConnected) {
-        return `Last synced: ${formatSyncTime($lastSyncTime)}`;
+        if ($hasEverSynced) {
+          return `Last synced: ${formatSyncTime($lastSyncTime)}`;
+        } else {
+          return `Not synced yet`;
+        }
       } else {
-        return `Offline - showing cached data from ${$lastSyncTime.toLocaleString()}`;
+        if ($hasEverSynced) {
+          return `Offline - showing cached data from ${$lastSyncTime.toLocaleString()}`;
+        } else {
+          return `Offline - no data synced`;
+        }
       }
     }
   }
