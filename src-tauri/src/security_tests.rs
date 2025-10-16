@@ -401,44 +401,6 @@ mod security_integration_tests {
         }
     }
 
-    /// Test command building with malicious templates and parameters
-    #[test]
-    fn test_command_building_security() {
-        // Test that command building with malicious parameters is safe
-        let safe_template = "mkdir -p {} && cd {}";
-        let malicious_params = vec![
-            "dir; rm -rf /",
-            "dir && malicious",
-            "dir || backup",
-            "dir | evil",
-            "dir$(whoami)",
-            "dir`whoami`",
-        ];
-
-        for malicious_param in &malicious_params {
-            let result = shell::build_command_safely(safe_template, &[malicious_param, malicious_param]);
-
-            assert!(result.is_ok(), "Command building should succeed with proper escaping");
-
-            let command = result.unwrap();
-
-            // The command should contain escaped parameters
-            assert!(command.contains('\''), "Command should contain escaped parameters");
-
-            // Verify that dangerous characters are properly escaped
-            // The semicolon should be within single quotes, e.g., 'dir; rm -rf /'
-            // We can't have unquoted semicolons
-            let parts: Vec<&str> = command.split('\'').collect();
-            // In a properly escaped command, semicolons should only appear in odd-indexed parts
-            // (inside quotes): part0 'part1' part2 'part3' ...
-            for (i, part) in parts.iter().enumerate() {
-                if i % 2 == 0 && part.contains(';') {
-                    panic!("Unescaped semicolon found outside quotes in command: '{}'", command);
-                }
-            }
-        }
-    }
-
     /// Test complete job lifecycle with malicious inputs
     #[tokio::test]
     async fn test_complete_malicious_job_lifecycle() {

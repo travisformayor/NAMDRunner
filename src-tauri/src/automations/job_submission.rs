@@ -23,7 +23,8 @@ pub async fn execute_job_submission_with_progress(
     info_log!("[Job Submission] Starting job submission for: {}", job_id);
 
     // Load job from database
-    let mut job_info = with_database(|db| db.load_job(&job_id))
+    let job_id_clone = job_id.clone();
+    let mut job_info = with_database(move |db| db.load_job(&job_id_clone))
         .map_err(|e| {
             error_log!("[Job Submission] Database error loading job {}: {}", job_id, e);
             anyhow!("Database error: {}", e)
@@ -118,7 +119,8 @@ pub async fn execute_job_submission_with_progress(
     debug_log!("[Job Submission] Updated job status to Pending");
 
     // Save updated job info to database
-    with_database(|db| db.save_job(&job_info))
+    let job_info_clone = job_info.clone();
+    with_database(move |db| db.save_job(&job_info_clone))
         .map_err(|e| {
             error_log!("[Job Submission] Failed to save job to database: {}", e);
             anyhow!("Failed to update job in database: {}", e)
@@ -190,6 +192,8 @@ mod tests {
                 }
             ],
             remote_directory: "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),
+            slurm_stdout: None,
+            slurm_stderr: None,
         }
     }
 

@@ -3,15 +3,11 @@ use crate::ssh::get_connection_manager;
 use super::commands::*;
 use anyhow::{Result, anyhow};
 
-pub struct SlurmStatusSync {
-    username: String,
-}
+pub struct SlurmStatusSync {}
 
 impl SlurmStatusSync {
-    pub fn new(username: &str) -> Self {
-        Self {
-            username: username.to_string(),
-        }
+    pub fn new(_username: &str) -> Self {
+        Self {}
     }
 
     pub async fn sync_job_status(&self, slurm_job_id: &str) -> Result<JobStatus> {
@@ -89,6 +85,13 @@ impl SlurmStatusSync {
             "TO" | "TIMEOUT" => Ok(JobStatus::Failed),
             "NF" | "NODE_FAIL" => Ok(JobStatus::Failed),
             "PR" | "PREEMPTED" => Ok(JobStatus::Failed),
+
+            // Memory/Resource failures
+            "OOM" | "OUT_OF_MEMORY" | "OUT_OF_ME+" => Ok(JobStatus::Failed),
+
+            // System failures
+            "BF" | "BOOT_FAIL" => Ok(JobStatus::Failed),
+            "DL" | "DEADLINE" => Ok(JobStatus::Failed),
 
             // Handle unknown states
             _ => {
@@ -236,6 +239,17 @@ mod tests {
         assert_eq!(SlurmStatusSync::parse_slurm_status("NODE_FAIL").unwrap(), JobStatus::Failed);
         assert_eq!(SlurmStatusSync::parse_slurm_status("PR").unwrap(), JobStatus::Failed);
         assert_eq!(SlurmStatusSync::parse_slurm_status("PREEMPTED").unwrap(), JobStatus::Failed);
+
+        // Test memory/resource failures
+        assert_eq!(SlurmStatusSync::parse_slurm_status("OOM").unwrap(), JobStatus::Failed);
+        assert_eq!(SlurmStatusSync::parse_slurm_status("OUT_OF_MEMORY").unwrap(), JobStatus::Failed);
+        assert_eq!(SlurmStatusSync::parse_slurm_status("OUT_OF_ME+").unwrap(), JobStatus::Failed);
+
+        // Test system failures
+        assert_eq!(SlurmStatusSync::parse_slurm_status("BF").unwrap(), JobStatus::Failed);
+        assert_eq!(SlurmStatusSync::parse_slurm_status("BOOT_FAIL").unwrap(), JobStatus::Failed);
+        assert_eq!(SlurmStatusSync::parse_slurm_status("DL").unwrap(), JobStatus::Failed);
+        assert_eq!(SlurmStatusSync::parse_slurm_status("DEADLINE").unwrap(), JobStatus::Failed);
 
         // Test error cases
         assert!(SlurmStatusSync::parse_slurm_status("UNKNOWN").is_err());

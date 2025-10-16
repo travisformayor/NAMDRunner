@@ -165,6 +165,7 @@ pub mod input {
 
 /// Shell command construction utilities
 pub mod shell {
+    #[allow(unused_imports)]
     use super::*;
 
     /// Safely escape a parameter for shell commands
@@ -181,31 +182,8 @@ pub mod shell {
         }
     }
 
-    /// Build a shell command safely with escaped parameters
-    ///
-    /// Takes a command template with {} placeholders and replaces them with escaped parameters
-    pub fn build_command_safely(template: &str, params: &[&str]) -> Result<String> {
-        let mut result = template.to_string();
-
-        for param in params {
-            // Find the first {} and replace it with the escaped parameter
-            if let Some(pos) = result.find("{}") {
-                let escaped = escape_parameter(param);
-                result.replace_range(pos..pos+2, &escaped);
-            } else {
-                return Err(anyhow!("More parameters provided than placeholders in template"));
-            }
-        }
-
-        // Check if there are any unreplaced placeholders
-        if result.contains("{}") {
-            return Err(anyhow!("Template has more placeholders than parameters provided"));
-        }
-
-        Ok(result)
-    }
-
     /// Safely build a cp (copy) command with proper escaping
+    #[allow(dead_code)] // Used in production (job_submission.rs) but appears unused due to conditional compilation
     pub fn safe_cp(source: &str, destination: &str) -> String {
         format!("cp {} {}", escape_parameter(source), escape_parameter(destination))
     }
@@ -538,25 +516,6 @@ mod tests {
             assert_eq!(shell::escape_parameter("with'quote"), "'with'\"'\"'quote'");
             assert_eq!(shell::escape_parameter("dangerous;command"), "'dangerous;command'");
         }
-
-        #[test]
-        fn test_safe_command_building() {
-            let template = "mkdir -p {} && cd {}";
-            let params = vec!["test_dir", "test_dir"];
-            let result = shell::build_command_safely(template, &params).unwrap();
-            assert_eq!(result, "mkdir -p 'test_dir' && cd 'test_dir'");
-        }
-
-        #[test]
-        fn test_command_building_errors() {
-            // Too many parameters
-            let result = shell::build_command_safely("mkdir {}", &["dir1", "dir2"]);
-            assert!(result.is_err());
-
-            // Too few parameters
-            let result = shell::build_command_safely("mkdir {} {}", &["dir1"]);
-            assert!(result.is_err());
-        }
     }
 
     mod path_tests {
@@ -696,24 +655,6 @@ mod tests {
                 assert!(cp_cmd.contains(&escaped),
                         "Copy command should use escaped version: {}", cp_cmd);
             }
-        }
-
-        #[test]
-        fn test_build_command_safely() {
-            // Test successful template replacement
-            let cmd = shell::build_command_safely("echo {} {}", &["hello", "world"]).unwrap();
-            assert_eq!(cmd, "echo 'hello' 'world'");
-
-            // Test with malicious inputs
-            let malicious_cmd = shell::build_command_safely(
-                "find {} -name {}",
-                &["../../../", "; rm -rf /"]
-            ).unwrap();
-            assert_eq!(malicious_cmd, "find '../../../' -name '; rm -rf /'");
-
-            // Test error cases
-            assert!(shell::build_command_safely("echo {}", &["a", "b"]).is_err()); // Too many params
-            assert!(shell::build_command_safely("echo {} {}", &["a"]).is_err()); // Too few params
         }
     }
 

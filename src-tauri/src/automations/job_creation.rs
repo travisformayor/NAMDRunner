@@ -189,7 +189,8 @@ pub async fn execute_job_creation_with_progress(
     debug_log!("[Job Creation] Saving job {} to database", job_id);
 
     // Save to database using existing database utilities
-    with_database(|db| db.save_job(&job_info))
+    let job_info_clone = job_info.clone();
+    with_database(move |db| db.save_job(&job_info_clone))
         .map_err(|e| {
             error_log!("[Job Creation] Failed to save job to database: {}", e);
             anyhow!("Failed to save job to database: {}", e)

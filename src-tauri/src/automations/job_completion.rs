@@ -29,7 +29,8 @@ pub async fn execute_job_completion_with_progress(
     progress_callback("Loading job information...");
 
     // Load job from database
-    let mut job_info = with_database(|db| db.load_job(&clean_job_id))
+    let clean_job_id_clone = clean_job_id.clone();
+    let mut job_info = with_database(move |db| db.load_job(&clean_job_id_clone))
         .map_err(|e| {
             error_log!("[Job Completion] Database error loading job {}: {}", clean_job_id, e);
             anyhow!("Database error: {}", e)
@@ -102,7 +103,8 @@ pub async fn execute_job_completion_with_progress(
     job_info.updated_at = Some(Utc::now().to_rfc3339());
 
     // Save updated job info to database
-    with_database(|db| db.save_job(&job_info))
+    let job_info_clone = job_info.clone();
+    with_database(move |db| db.save_job(&job_info_clone))
         .map_err(|e| {
             error_log!("[Job Completion] Failed to update job in database: {}", e);
             anyhow!("Failed to update job in database: {}", e)
@@ -112,68 +114,6 @@ pub async fn execute_job_completion_with_progress(
     info_log!("[Job Completion] Job completion finished successfully: {} (results synced from scratch)", clean_job_id);
 
     Ok(job_info)
-}
-
-/// Automatically detect and process completed jobs
-pub async fn auto_process_completed_jobs(
-    app_handle: AppHandle,
-    progress_callback: impl Fn(&str),
-) -> Result<Vec<String>> {
-    progress_callback("Scanning for completed jobs...");
-    info_log!("[Job Completion] Auto-processing: Scanning for completed jobs");
-
-    // Load all jobs from database
-    let all_jobs = with_database(|db| db.load_all_jobs())
-        .map_err(|e| {
-            error_log!("[Job Completion] Failed to load jobs from database: {}", e);
-            anyhow!("Failed to load jobs from database: {}", e)
-        })?;
-    debug_log!("[Job Completion] Loaded {} jobs from database", all_jobs.len());
-
-    // Filter for completed jobs that haven't been processed yet
-    let completed_jobs: Vec<_> = all_jobs.into_iter()
-        .filter(|job| matches!(job.status, JobStatus::Completed))
-        .filter(|job| job.scratch_dir.is_some()) // Only process jobs with scratch directories
-        .collect();
-
-    if completed_jobs.is_empty() {
-        info_log!("[Job Completion] No completed jobs found requiring processing");
-        progress_callback("No completed jobs found requiring results preservation");
-        return Ok(vec![]);
-    }
-
-    info_log!("[Job Completion] Found {} completed jobs to process", completed_jobs.len());
-    progress_callback(&format!("Found {} completed jobs to process", completed_jobs.len()));
-
-    let mut processed_jobs = Vec::new();
-
-    for job in completed_jobs {
-        let job_id = job.job_id.clone();
-        progress_callback(&format!("Processing completed job: {}", job_id));
-        info_log!("[Job Completion] Auto-processing job: {}", job_id);
-
-        // Process this completed job
-        match execute_job_completion_with_progress(
-            app_handle.clone(),
-            job_id.clone(),
-            &progress_callback
-        ).await {
-            Ok(_) => {
-                processed_jobs.push(job_id.clone());
-                info_log!("[Job Completion] Successfully processed job: {}", job_id);
-                progress_callback(&format!("Successfully processed job: {}", job_id));
-            }
-            Err(e) => {
-                error_log!("[Job Completion] Failed to process job {}: {}", job_id, e);
-                progress_callback(&format!("Failed to process job {}: {}", job_id, e));
-                // Continue with other jobs even if one fails
-            }
-        }
-    }
-
-    info_log!("[Job Completion] Auto-processing complete - {} jobs processed", processed_jobs.len());
-    progress_callback(&format!("Auto-processing complete - {} jobs processed", processed_jobs.len()));
-    Ok(processed_jobs)
 }
 
 #[cfg(test)]
@@ -281,26 +221,6 @@ mod tests {
 
         // Project should have /projects/ prefix
         assert!(project_dir.starts_with("/projects/"));
-    }
-
-    #[test]
-    fn test_completed_job_filtering() {
-        // Test business logic for job filtering
-        let jobs = vec![
-            JobInfo { status: JobStatus::Completed, scratch_dir: Some("/scratch/job1".to_string()), ..create_test_job_info() },
-            JobInfo { status: JobStatus::Running, scratch_dir: Some("/scratch/job2".to_string()), ..create_test_job_info() },
-            JobInfo { status: JobStatus::Completed, scratch_dir: None, ..create_test_job_info() },
-            JobInfo { status: JobStatus::Failed, scratch_dir: Some("/scratch/job4".to_string()), ..create_test_job_info() },
-        ];
-
-        let completed_jobs: Vec<_> = jobs.into_iter()
-            .filter(|job| matches!(job.status, JobStatus::Completed))
-            .filter(|job| job.scratch_dir.is_some())
-            .collect();
-
-        assert_eq!(completed_jobs.len(), 1);
-        assert_eq!(completed_jobs[0].status, JobStatus::Completed);
-        assert!(completed_jobs[0].scratch_dir.is_some());
     }
 
 }

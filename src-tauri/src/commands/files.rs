@@ -105,8 +105,8 @@ async fn upload_job_files_real(app_handle: AppHandle, job_id: String, files: Vec
     };
 
     // Get job info from database to find the project directory
-    
-    let job_info = match with_database(|db| db.load_job(&clean_job_id)) {
+    let job_id_for_db = clean_job_id.clone();
+    let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
         Ok(Some(job)) => job,
         Ok(None) => return UploadResult {
             success: false,
@@ -294,8 +294,8 @@ async fn download_job_output_real(job_id: String, file_name: String) -> Download
     }
 
     // Get job info from database to find directories
-    
-    let job_info = match with_database(|db| db.load_job(&clean_job_id)) {
+    let job_id_for_db = clean_job_id.clone();
+    let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
         Ok(Some(job)) => job,
         Ok(None) => return DownloadResult {
             success: false,
@@ -467,8 +467,8 @@ async fn list_job_files_real(job_id: String) -> ListFilesResult {
     };
 
     // Get job info from database to find directories
-    
-    let job_info = match with_database(|db| db.load_job(&clean_job_id)) {
+    let job_id_for_db = clean_job_id.clone();
+    let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
         Ok(Some(job)) => job,
         Ok(None) => return ListFilesResult {
             success: false,
@@ -642,8 +642,8 @@ mod tests {
     }
 
     // Security validation tests
-    #[test]
-    fn test_malicious_job_id_rejection() {
+    #[tokio::test]
+    async fn test_malicious_job_id_rejection() {
         setup_test_environment();
 
         let dangerous_inputs = vec![
@@ -663,9 +663,8 @@ mod tests {
                 remote_name: "file.txt".to_string(),
             }];
 
-            // Use tokio test runtime to test async function
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let _result = rt.block_on(upload_job_files_demo(input.to_string(), files));
+            // Call async function directly
+            let _result = upload_job_files_demo(input.to_string(), files).await;
 
             // Should either fail immediately or reject the dangerous input
             // In mock mode, it might succeed but real validation should catch it

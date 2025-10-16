@@ -11,8 +11,8 @@ pub mod progress;
 // Re-export simplified automation functions with progress reporting
 pub use job_creation::execute_job_creation_with_progress;
 pub use job_submission::execute_job_submission_with_progress;
-pub use job_completion::{execute_job_completion_with_progress, auto_process_completed_jobs};
-pub use job_sync::{sync_all_jobs, JobSyncResult};
+pub use job_completion::execute_job_completion_with_progress;
+pub use job_sync::{sync_all_jobs, fetch_slurm_logs_if_needed, JobSyncResult};
 
 // Re-export error types for structured error handling
 pub use errors::{AutomationError, AutomationResult};
