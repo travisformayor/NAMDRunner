@@ -60,8 +60,8 @@ module load namd/3.0.1_cpu
 # Change to working directory
 cd {}
 
-# Execute NAMD with optimized settings
-mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) config.namd > namd_output.log
+# Execute NAMD with MPI (OpenMPI handles CPU affinity automatically)
+mpirun -np $SLURM_NTASKS namd3 config.namd > namd_output.log
 "#,
             job_name,
             job_name,
@@ -365,7 +365,8 @@ mod tests {
 
         // Verify NAMD execution
         assert!(script.contains("mpirun -np $SLURM_NTASKS namd3"));
-        assert!(script.contains("+setcpuaffinity +pemap"));
+        assert!(!script.contains("+setcpuaffinity"), "Script should not contain +setcpuaffinity flag");
+        assert!(!script.contains("+pemap"), "Script should not contain +pemap flag");
         assert!(script.contains("config.namd > namd_output.log"));
 
         // Verify working directory
