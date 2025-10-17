@@ -112,8 +112,7 @@ pub struct FailedUpload {
 #[derive(Debug, Serialize)]
 pub struct DownloadResult {
     pub success: bool,
-    pub content: Option<String>,
-    pub file_path: Option<String>,
+    pub saved_to: Option<String>,  // Local path where file was saved
     pub file_size: Option<u64>,
     pub error: Option<String>,
 }

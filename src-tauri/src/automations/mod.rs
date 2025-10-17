@@ -12,7 +12,7 @@ pub mod progress;
 pub use job_creation::execute_job_creation_with_progress;
 pub use job_submission::execute_job_submission_with_progress;
 pub use job_completion::execute_job_completion_with_progress;
-pub use job_sync::{sync_all_jobs, fetch_slurm_logs_if_needed, JobSyncResult};
+pub use job_sync::{sync_all_jobs, fetch_slurm_logs_if_needed, refetch_slurm_logs, JobSyncResult};
 
 // Re-export error types for structured error handling
 pub use errors::{AutomationError, AutomationResult};

@@ -143,7 +143,7 @@ async fn upload_job_files_real(app_handle: AppHandle, job_id: String, files: Vec
     let mut failed_uploads = Vec::new();
 
     // Ensure input_files directory exists
-    let input_files_dir = format!("{}/input_files", project_dir);
+    let input_files_dir = format!("{}/{}", project_dir, crate::ssh::JobDirectoryStructure::INPUT_FILES);
     if let Err(e) = connection_manager.create_directory(&input_files_dir).await {
         return UploadResult {
             success: false,
@@ -169,8 +169,8 @@ async fn upload_job_files_real(app_handle: AppHandle, job_id: String, files: Vec
             }
         }
 
-        // Construct remote path
-        let remote_path = format!("{}/{}", input_files_dir, file.remote_name);
+        // Construct remote path using centralized structure
+        let remote_path = crate::ssh::JobDirectoryStructure::full_input_path(project_dir, &file.remote_name);
 
         // Upload file using ConnectionManager with progress events
         match connection_manager.upload_file_with_progress(&file.local_path, &remote_path, Some(app_handle.clone())).await {
@@ -241,16 +241,40 @@ fn validate_upload_file(file: &FileUpload) -> Result<()> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn download_job_output(job_id: String, file_name: String) -> DownloadResult {
+pub async fn download_job_output(job_id: String, file_path: String) -> DownloadResult {
     execute_with_mode(
-        download_job_output_demo(job_id.clone(), file_name.clone()),
-        download_job_output_real(job_id, file_name)
+        download_job_output_demo(job_id.clone(), file_path.clone()),
+        download_job_output_real(job_id, file_path)
     ).await
 }
 
-async fn download_job_output_demo(job_id: String, file_name: String) -> DownloadResult {
+async fn download_job_output_demo(job_id: String, file_path: String) -> DownloadResult {
+    use rfd::FileDialog;
+
     // Mock implementation - simulate file download
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Extract just the filename for the save dialog
+    let file_name = Path::new(&file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("output.dat");
+
+    // Show save dialog
+    let save_path = FileDialog::new()
+        .set_file_name(file_name)
+        .set_title("Save Output File")
+        .save_file();
+
+    let save_path = match save_path {
+        Some(path) => path,
+        None => return DownloadResult {
+            success: false,
+            saved_to: None,
+            file_size: None,
+            error: Some("Download cancelled".to_string()),
+        },
+    };
 
     // Generate mock file content
     let mock_content = format!(
@@ -260,146 +284,298 @@ async fn download_job_output_demo(job_id: String, file_name: String) -> Download
         Utc::now().to_rfc3339()
     );
 
+    // Write to chosen location
+    if let Err(e) = std::fs::write(&save_path, &mock_content) {
+        return DownloadResult {
+            success: false,
+            saved_to: None,
+            file_size: None,
+            error: Some(format!("Failed to save file: {}", e)),
+        };
+    }
+
     DownloadResult {
         success: true,
-        content: Some(mock_content.clone()),
-        file_path: Some(format!("/tmp/{}", file_name)),
+        saved_to: Some(save_path.to_string_lossy().to_string()),
         file_size: Some(mock_content.len() as u64),
         error: None,
     }
 }
 
-async fn download_job_output_real(job_id: String, file_name: String) -> DownloadResult {
+async fn download_job_output_real(job_id: String, file_path: String) -> DownloadResult {
+    use rfd::FileDialog;
+
     // Validate and sanitize inputs
     let clean_job_id = match sanitize_job_id(&job_id) {
         Ok(id) => id,
         Err(e) => return DownloadResult {
             success: false,
-            content: None,
-            file_path: None,
+            saved_to: None,
             file_size: None,
             error: Some(format!("Invalid job ID: {}", e)),
         },
     };
 
-    // Validate filename (no path separators, no dangerous characters)
-    if file_name.contains('/') || file_name.contains('\\') || file_name.contains('\0') || file_name.is_empty() {
+    // Validate file path using centralized validation
+    if let Err(e) = crate::validation::input::validate_relative_file_path(&file_path) {
         return DownloadResult {
             success: false,
-            content: None,
-            file_path: None,
+            saved_to: None,
             file_size: None,
-            error: Some("Invalid file name".to_string()),
+            error: Some(format!("Invalid file path: {}", e)),
         };
     }
 
-    // Get job info from database to find directories
+    // Get job info from database to find project directory
     let job_id_for_db = clean_job_id.clone();
     let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
         Ok(Some(job)) => job,
         Ok(None) => return DownloadResult {
             success: false,
-            content: None,
-            file_path: None,
+            saved_to: None,
             file_size: None,
             error: Some(format!("Job {} not found", clean_job_id)),
         },
         Err(e) => return DownloadResult {
             success: false,
-            content: None,
-            file_path: None,
+            saved_to: None,
             file_size: None,
             error: Some(format!("Database error: {}", e)),
         },
     };
 
+    let project_dir = match &job_info.project_dir {
+        Some(dir) => dir,
+        None => return DownloadResult {
+            success: false,
+            saved_to: None,
+            file_size: None,
+            error: Some("Job has no project directory".to_string()),
+        },
+    };
+
+    // Build full remote path (project_dir + relative path)
+    let remote_path = format!("{}/{}", project_dir, file_path);
+
+    // Extract filename for save dialog
+    let file_name = Path::new(&file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("output.dat");
+
     let connection_manager = get_connection_manager();
 
-    // Try to find the file in multiple possible locations
-    let possible_paths = get_possible_file_paths(&job_info, &file_name);
+    // Check if file exists
+    match connection_manager.file_exists(&remote_path).await {
+        Ok(true) => {
+            // Show save dialog
+            let save_path = FileDialog::new()
+                .set_file_name(file_name)
+                .set_title("Save Output File")
+                .save_file();
 
-    for remote_path in possible_paths {
-        // Check if file exists
-        match connection_manager.file_exists(&remote_path).await {
-            Ok(true) => {
-                // File exists, try to download it
-                match download_file_to_string(&connection_manager, &remote_path).await {
-                    Ok((content, size)) => {
-                        return DownloadResult {
-                            success: true,
-                            content: Some(content),
-                            file_path: Some(remote_path),
-                            file_size: Some(size),
-                            error: None,
-                        };
-                    }
-                    Err(e) => {
-                        return DownloadResult {
-                            success: false,
-                            content: None,
-                            file_path: None,
-                            file_size: None,
-                            error: Some(format!("Download failed: {}", e)),
-                        };
-                    }
+            let save_path = match save_path {
+                Some(path) => path,
+                None => return DownloadResult {
+                    success: false,
+                    saved_to: None,
+                    file_size: None,
+                    error: Some("Download cancelled".to_string()),
+                },
+            };
+
+            // Download file from server and write to chosen location
+            match connection_manager.download_file(&remote_path, &save_path.to_string_lossy()).await {
+                Ok(progress) => {
+                    return DownloadResult {
+                        success: true,
+                        saved_to: Some(save_path.to_string_lossy().to_string()),
+                        file_size: Some(progress.total_bytes),
+                        error: None,
+                    };
+                }
+                Err(e) => {
+                    return DownloadResult {
+                        success: false,
+                        saved_to: None,
+                        file_size: None,
+                        error: Some(format!("Download failed: {}", e)),
+                    };
                 }
             }
-            Ok(false) => {
-                // File doesn't exist at this path, try next
-                continue;
+        }
+        Ok(false) => {
+            DownloadResult {
+                success: false,
+                saved_to: None,
+                file_size: None,
+                error: Some(format!("File '{}' not found", file_path)),
             }
-            Err(e) => {
-                log::warn!("Error checking file existence at {}: {}", remote_path, e);
-                continue;
+        }
+        Err(e) => {
+            DownloadResult {
+                success: false,
+                saved_to: None,
+                file_size: None,
+                error: Some(format!("Error checking file: {}", e)),
             }
         }
     }
+}
+
+/// Download all output files as a zip archive
+#[tauri::command(rename_all = "snake_case")]
+pub async fn download_all_outputs(job_id: String) -> DownloadResult {
+    execute_with_mode(
+        download_all_outputs_demo(job_id.clone()),
+        download_all_outputs_real(job_id)
+    ).await
+}
+
+async fn download_all_outputs_demo(_job_id: String) -> DownloadResult {
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     DownloadResult {
-        success: false,
-        content: None,
-        file_path: None,
-        file_size: None,
-        error: Some(format!("File '{}' not found in any expected location", file_name)),
+        success: true,
+        saved_to: Some("/tmp/demo_outputs.zip".to_string()),
+        file_size: Some(1048576),
+        error: None,
     }
 }
 
-/// Get possible remote paths where a file might be located
-fn get_possible_file_paths(job_info: &JobInfo, file_name: &str) -> Vec<String> {
-    let mut paths = Vec::new();
+async fn download_all_outputs_real(job_id: String) -> DownloadResult {
+    use rfd::FileDialog;
 
-    // Try scratch directory first (most likely for output files)
-    if let Some(scratch_dir) = &job_info.scratch_dir {
-        paths.push(format!("{}/{}", scratch_dir, file_name));
+    // Validate and sanitize job_id
+    let clean_job_id = match sanitize_job_id(&job_id) {
+        Ok(id) => id,
+        Err(e) => return DownloadResult {
+            success: false,
+            saved_to: None,
+            file_size: None,
+            error: Some(format!("Invalid job ID: {}", e)),
+        },
+    };
+
+    // Get job info from database
+    let job_info = match with_database(|db| db.load_job(&clean_job_id)) {
+        Ok(Some(job)) => job,
+        Ok(None) => return DownloadResult {
+            success: false,
+            saved_to: None,
+            file_size: None,
+            error: Some(format!("Job '{}' not found", clean_job_id)),
+        },
+        Err(e) => return DownloadResult {
+            success: false,
+            saved_to: None,
+            file_size: None,
+            error: Some(format!("Database error: {}", e)),
+        },
+    };
+
+    let project_dir: &str = match &job_info.project_dir {
+        Some(dir) => dir.as_str(),
+        None => return DownloadResult {
+            success: false,
+            saved_to: None,
+            file_size: None,
+            error: Some("Job project directory not configured".to_string()),
+        },
+    };
+
+    // Generate zip file path and command
+    let (zip_command, temp_zip_path) = match crate::ssh::commands::zip_outputs_command(project_dir, &clean_job_id) {
+        Ok(result) => result,
+        Err(e) => return DownloadResult {
+            success: false,
+            saved_to: None,
+            file_size: None,
+            error: Some(format!("Failed to generate zip command: {}", e)),
+        },
+    };
+
+    let connection_manager = get_connection_manager();
+
+    // Execute zip command on server
+    match connection_manager.execute_command(&zip_command, None).await {
+        Ok(result) => {
+            if result.exit_code != 0 {
+                return DownloadResult {
+                    success: false,
+                    saved_to: None,
+                    file_size: None,
+                    error: Some(format!("Failed to create zip file: {}", result.stderr)),
+                };
+            }
+        }
+        Err(e) => {
+            return DownloadResult {
+                success: false,
+                saved_to: None,
+                file_size: None,
+                error: Some(format!("Failed to execute zip command: {}", e)),
+            };
+        }
     }
 
-    // Try project directory (for input files or copied outputs)
-    if let Some(project_dir) = &job_info.project_dir {
-        paths.push(format!("{}/{}", project_dir, file_name));
-        paths.push(format!("{}/input_files/{}", project_dir, file_name));
-    }
+    // Show save dialog
+    let save_path = FileDialog::new()
+        .set_file_name(format!("{}_outputs.zip", clean_job_id))
+        .set_title("Save Output Files")
+        .add_filter("ZIP Archive", &["zip"])
+        .save_file();
 
-    paths
+    let save_path = match save_path {
+        Some(path) => path,
+        None => {
+            // User cancelled - clean up temp file
+            cleanup_temp_file(&connection_manager, &temp_zip_path).await;
+
+            return DownloadResult {
+                success: false,
+                saved_to: None,
+                file_size: None,
+                error: Some("Download cancelled".to_string()),
+            };
+        }
+    };
+
+    // Download the zip file
+    let download_result = match connection_manager.download_file(&temp_zip_path, &save_path.to_string_lossy()).await {
+        Ok(progress) => DownloadResult {
+            success: true,
+            saved_to: Some(save_path.to_string_lossy().to_string()),
+            file_size: Some(progress.total_bytes),
+            error: None,
+        },
+        Err(e) => DownloadResult {
+            success: false,
+            saved_to: None,
+            file_size: None,
+            error: Some(format!("Download failed: {}", e)),
+        },
+    };
+
+    // Clean up temporary zip file on server
+    cleanup_temp_file(&connection_manager, &temp_zip_path).await;
+
+    download_result
 }
 
-/// Download a file and read its content as a string
-async fn download_file_to_string(connection_manager: &crate::ssh::ConnectionManager, remote_path: &str) -> Result<(String, u64)> {
-    // Create a temporary local file
-    let temp_dir = std::env::temp_dir();
-    let local_filename = format!("namdrunner_download_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
-    let local_path = temp_dir.join(local_filename);
-
-    // Download the file
-    let progress = connection_manager.download_file(remote_path, local_path.to_str().unwrap()).await?;
-
-    // Read the file content
-    let content = std::fs::read_to_string(&local_path)
-        .map_err(|e| anyhow!("Failed to read downloaded file: {}", e))?;
-
-    // Clean up temporary file
-    let _ = std::fs::remove_file(&local_path);
-
-    Ok((content, progress.total_bytes))
+/// Helper to clean up temporary files on the server
+/// Logs errors but doesn't fail - cleanup is best-effort
+async fn cleanup_temp_file(connection_manager: &crate::ssh::ConnectionManager, file_path: &str) {
+    match crate::ssh::commands::remove_temp_file_command(file_path) {
+        Ok(cleanup_cmd) => {
+            if let Err(e) = connection_manager.execute_command(&cleanup_cmd, None).await {
+                log::warn!("Failed to clean up temporary file {}: {}", file_path, e);
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to generate cleanup command for {}: {}", file_path, e);
+        }
+    }
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -414,34 +590,39 @@ async fn list_job_files_demo(job_id: String) -> ListFilesResult {
     // Mock implementation - return sample file list
     tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
-    // Generate mock file list
+    // Generate mock file list with relative paths
     let files = vec![
         RemoteFile {
             name: "config.namd".to_string(),
+            path: "scripts/config.namd".to_string(),
             size: 2048,
             modified_at: Utc::now().to_rfc3339(),
             file_type: FileType::Config,
         },
         RemoteFile {
             name: "job.sbatch".to_string(),
+            path: "scripts/job.sbatch".to_string(),
             size: 1024,
             modified_at: Utc::now().to_rfc3339(),
             file_type: FileType::Config,
         },
         RemoteFile {
             name: "structure.pdb".to_string(),
+            path: "input_files/structure.pdb".to_string(),
             size: 102400,
             modified_at: Utc::now().to_rfc3339(),
             file_type: FileType::Input,
         },
         RemoteFile {
             name: "structure.psf".to_string(),
+            path: "input_files/structure.psf".to_string(),
             size: 51200,
             modified_at: Utc::now().to_rfc3339(),
             file_type: FileType::Input,
         },
         RemoteFile {
             name: format!("{}_output.log", job_id),
+            path: format!("{}_output.log", job_id),
             size: 15360,
             modified_at: Utc::now().to_rfc3339(),
             file_type: FileType::Log,
@@ -485,10 +666,10 @@ async fn list_job_files_real(job_id: String) -> ListFilesResult {
     let connection_manager = get_connection_manager();
     let mut all_files = Vec::new();
 
-    // List files from all available directories
+    // List files from all subdirectories
     let directories_to_check = get_directories_to_list(&job_info);
 
-    for (dir_path, dir_type) in directories_to_check {
+    for (dir_path, relative_prefix) in directories_to_check {
         match connection_manager.list_files(&dir_path).await {
             Ok(remote_files) => {
                 for remote_file in remote_files {
@@ -497,8 +678,15 @@ async fn list_job_files_real(job_id: String) -> ListFilesResult {
                         continue;
                     }
 
-                    // Convert RemoteFileInfo to RemoteFile
-                    let file_type = classify_file_type(&remote_file.name, &dir_type);
+                    // Build full relative path
+                    let relative_path = if relative_prefix.is_empty() {
+                        remote_file.name.clone()
+                    } else {
+                        format!("{}/{}", relative_prefix, remote_file.name)
+                    };
+
+                    // Classify file type based on name and location
+                    let file_type = classify_file_type(&remote_file.name, &relative_prefix);
                     let modified_at = remote_file.modified_time
                         .map(|t| chrono::DateTime::from_timestamp(t as i64, 0))
                         .flatten()
@@ -507,6 +695,7 @@ async fn list_job_files_real(job_id: String) -> ListFilesResult {
 
                     all_files.push(RemoteFile {
                         name: remote_file.name,
+                        path: relative_path,
                         size: remote_file.size,
                         modified_at,
                         file_type,
@@ -528,66 +717,70 @@ async fn list_job_files_real(job_id: String) -> ListFilesResult {
 }
 
 /// Get directories to list for a job
-fn get_directories_to_list(job_info: &JobInfo) -> Vec<(String, DirectoryType)> {
+/// Get directories to list with their relative path prefixes
+/// App ONLY lists from project directory - never scratch (which is temporary)
+fn get_directories_to_list(job_info: &JobInfo) -> Vec<(String, String)> {
     let mut directories = Vec::new();
 
-    // Scratch directory (most important for output files)
-    if let Some(scratch_dir) = &job_info.scratch_dir {
-        directories.push((scratch_dir.clone(), DirectoryType::Scratch));
-    }
-
-    // Project directory and input files
+    // Only list from project directory - scratch is temporary and could be wiped
     if let Some(project_dir) = &job_info.project_dir {
-        directories.push((project_dir.clone(), DirectoryType::Project));
-        directories.push((format!("{}/input_files", project_dir), DirectoryType::Input));
+        // List from each subdirectory with its relative path prefix
+        directories.push((
+            format!("{}/{}", project_dir, crate::ssh::JobDirectoryStructure::INPUT_FILES),
+            crate::ssh::JobDirectoryStructure::INPUT_FILES.to_string()
+        ));
+        directories.push((
+            format!("{}/{}", project_dir, crate::ssh::JobDirectoryStructure::SCRIPTS),
+            crate::ssh::JobDirectoryStructure::SCRIPTS.to_string()
+        ));
+        directories.push((
+            format!("{}/{}", project_dir, crate::ssh::JobDirectoryStructure::OUTPUTS),
+            crate::ssh::JobDirectoryStructure::OUTPUTS.to_string()
+        ));
+        // Also list root directory files (like job_info.json, SLURM logs)
+        directories.push((project_dir.clone(), String::new()));
     }
 
     directories
 }
 
-#[derive(Debug)]
-enum DirectoryType {
-    Scratch,
-    Project,
-    Input,
-}
+/// Classify file type based on name and directory location
+fn classify_file_type(filename: &str, relative_prefix: &str) -> FileType {
+    use crate::ssh::JobDirectoryStructure;
 
-/// Classify file type based on name and directory
-fn classify_file_type(filename: &str, dir_type: &DirectoryType) -> FileType {
     let extension = Path::new(filename)
         .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("")
         .to_lowercase();
 
+    // Classify based on directory location first (most reliable)
+    if relative_prefix == JobDirectoryStructure::INPUT_FILES {
+        return FileType::Input;
+    }
+    if relative_prefix == JobDirectoryStructure::OUTPUTS {
+        return FileType::Output;
+    }
+    if relative_prefix == JobDirectoryStructure::SCRIPTS {
+        return FileType::Config;
+    }
+
+    // For root directory files, classify by extension and name
     match extension.as_str() {
-        // Input files
-        "pdb" | "psf" | "prm" | "rtf" | "coor" | "vel" | "xsc" => FileType::Input,
-
-        // Configuration files
+        // NAMD configuration
         "namd" | "conf" => FileType::Config,
-
-        // Output files
-        "dcd" | "log" | "out" | "err" => FileType::Output,
-
-        // Other files - classify by directory and name patterns
+        // SLURM script
+        "sbatch" | "sh" => FileType::Config,
+        // SLURM logs
+        "out" | "err" if filename.contains("_") => FileType::Log,  // SLURM logs have job_id format
+        // Other logs
+        "log" => FileType::Log,
+        // Default for unknown root files
         _ => {
-            match dir_type {
-                DirectoryType::Input => FileType::Input,
-                DirectoryType::Scratch => {
-                    if filename.contains("output") || filename.contains("log") || filename.ends_with(".out") || filename.ends_with(".err") {
-                        FileType::Output
-                    } else {
-                        FileType::Output  // Default for scratch directory
-                    }
-                }
-                DirectoryType::Project => {
-                    if filename.contains("sbatch") || filename.contains("config") {
-                        FileType::Config
-                    } else {
-                        FileType::Log
-                    }
-                }
+            if filename.contains("sbatch") || filename.contains("config") || filename == "job_info.json" {
+                FileType::Config
+            } else {
+                FileType::Log
             }
         }
     }
@@ -860,7 +1053,7 @@ mod tests {
 
         assert!(!directories.is_empty());
 
-        for (dir_path, dir_type) in directories {
+        for (dir_path, relative_prefix) in directories {
             // All paths should be absolute and safe
             assert!(dir_path.starts_with("/"));
             assert!(!dir_path.contains(".."));
@@ -870,12 +1063,11 @@ mod tests {
                    dir_path.contains("testuser") ||
                    dir_path == job_info.remote_directory);
 
-            // Directory type should be meaningful - it's an enum, so just check it exists
-            match dir_type {
-                DirectoryType::Input => assert!(true),
-                DirectoryType::Project => assert!(true),
-                DirectoryType::Scratch => assert!(true),
-            }
+            // Relative prefix should be a valid subdirectory or empty string
+            assert!(relative_prefix == crate::ssh::JobDirectoryStructure::INPUT_FILES ||
+                   relative_prefix == crate::ssh::JobDirectoryStructure::SCRIPTS ||
+                   relative_prefix == crate::ssh::JobDirectoryStructure::OUTPUTS ||
+                   relative_prefix.is_empty());
         }
     }
 

@@ -118,7 +118,6 @@ pub async fn execute_job_completion_with_progress(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::types::{JobInfo, JobStatus, NAMDConfig, SlurmConfig};
     use chrono::Utc;
 

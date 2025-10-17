@@ -62,7 +62,8 @@ export interface FileUpload {
 }
 
 export interface RemoteFile {
-  name: string;
+  name: string;           // Display name (just filename)
+  path: string;           // Full relative path from job root (e.g., "outputs/sim.dcd")
   size: number;
   modified_at: Timestamp;
   file_type: 'input' | 'output' | 'config' | 'log';
@@ -142,7 +143,7 @@ export interface DiscoverJobsResult {
   error?: string;
 }
 
-export interface CompleteJobResult {
+export interface RefetchLogsResult {
   success: boolean;
   job_info?: JobInfo;
   error?: string;
@@ -159,8 +160,7 @@ export interface UploadResult {
 
 export interface DownloadResult {
   success: boolean;
-  content?: string;
-  file_path?: string;
+  saved_to?: string;  // Local path where file was saved
   file_size?: number;
   error?: string;
 }

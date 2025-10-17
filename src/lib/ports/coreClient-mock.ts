@@ -12,7 +12,7 @@ import type {
   SyncJobsResult,
   DeleteJobResult,
   DiscoverJobsResult,
-  CompleteJobResult,
+  RefetchLogsResult,
   FileUpload,
   UploadResult,
   DownloadResult,
@@ -423,6 +423,22 @@ export class MockCoreClient implements ICoreClient {
     };
   }
 
+  async refetchSlurmLogs(job_id: JobId): Promise<RefetchLogsResult> {
+    const job = this.jobs.get(job_id);
+    if (!job) {
+      return {
+        success: false,
+        error: `Job ${job_id} not found`,
+      };
+    }
+
+    // Mock: Simulate refreshing logs (in demo mode, logs don't actually change)
+    return {
+      success: true,
+      job_info: job,
+    };
+  }
+
   async discoverJobsFromServer(): Promise<DiscoverJobsResult> {
     // Mock implementation: simulate finding 3 jobs on server, but 0 imported (already in DB)
     return {
@@ -486,7 +502,7 @@ export class MockCoreClient implements ICoreClient {
     return result;
   }
 
-  async downloadJobOutput(job_id: JobId, file_name: string): Promise<DownloadResult> {
+  async downloadJobOutput(job_id: JobId, file_path: string): Promise<DownloadResult> {
 
     const job = this.jobs.get(job_id);
     if (!job) {
@@ -503,14 +519,38 @@ export class MockCoreClient implements ICoreClient {
       };
     }
 
-    // Simulate file content
-    const mockContent = `Mock content for ${file_name} from job ${job_id}\nGenerated at ${new Date().toISOString()}`;
+    // Simulate successful download with native save dialog
+    const fileName = file_path.split('/').pop() || 'file';
 
     return {
       success: true,
-      content: mockContent,
-      file_path: `/tmp/${file_name}`,
-      file_size: mockContent.length,
+      saved_to: `/mock/downloads/${fileName}`,
+      file_size: 1024,
+    };
+  }
+
+  async downloadAllOutputs(job_id: JobId): Promise<DownloadResult> {
+
+    const job = this.jobs.get(job_id);
+    if (!job) {
+      return {
+        success: false,
+        error: `Job ${job_id} not found`,
+      };
+    }
+
+    if (!this.stateManager.isConnected()) {
+      return {
+        success: false,
+        error: 'Must be connected to cluster to download files',
+      };
+    }
+
+    // Simulate successful zip download
+    return {
+      success: true,
+      saved_to: `/mock/downloads/${job_id}_outputs.zip`,
+      file_size: 10485760, // 10 MB mock
     };
   }
 
@@ -535,18 +575,21 @@ export class MockCoreClient implements ICoreClient {
     const mockFiles: RemoteFile[] = [
       {
         name: 'config.namd',
+        path: 'scripts/config.namd',
         size: 2048,
         modified_at: new Date().toISOString(),
         file_type: 'config' as const,
       },
       {
         name: 'job.sbatch',
+        path: 'scripts/job.sbatch',
         size: 1024,
         modified_at: new Date().toISOString(),
         file_type: 'config' as const,
       },
       {
         name: 'output.log',
+        path: 'outputs/output.log',
         size: 15360,
         modified_at: new Date().toISOString(),
         file_type: 'log' as const,

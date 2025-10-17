@@ -283,3 +283,54 @@ pub async fn fetch_slurm_logs_if_needed(job: &mut JobInfo) -> Result<()> {
     debug_log!("[Log Fetch] EXIT: Successfully completed for job {}", job.job_id);
     Ok(())
 }
+
+/// Force refetch SLURM logs from server, overwriting any cached logs
+/// Used when user explicitly requests fresh logs via "Refetch Logs" button
+pub async fn refetch_slurm_logs(job: &mut JobInfo) -> Result<()> {
+    debug_log!("[Log Refetch] ENTRY: job_id={}, status={:?}", job.job_id, job.status);
+
+    // Need both scratch_dir and slurm_job_id to construct paths
+    let scratch_dir = job.scratch_dir.as_ref()
+        .ok_or_else(|| anyhow!("No scratch directory for job {}", job.job_id))?;
+
+    let slurm_job_id = job.slurm_job_id.as_ref()
+        .ok_or_else(|| anyhow!("No SLURM job ID for job {}", job.job_id))?;
+
+    let connection_manager = get_connection_manager();
+
+    // Force fetch stdout (overwrite cache)
+    let stdout_path = format!("{}/{}_{}.out", scratch_dir, job.job_name, slurm_job_id);
+    debug_log!("[Log Refetch] Fetching stdout from: {}", stdout_path);
+
+    match connection_manager.read_remote_file(&stdout_path).await {
+        Ok(content) => {
+            let content_len = content.len();
+            job.slurm_stdout = Some(content);
+            info_log!("[Log Refetch] Refetched stdout for job {} ({} bytes)", job.job_id, content_len);
+        }
+        Err(e) => {
+            debug_log!("[Log Refetch] Could not read stdout for {}: {}", job.job_id, e);
+            // Set to empty if file doesn't exist
+            job.slurm_stdout = Some(String::new());
+        }
+    }
+
+    // Force fetch stderr (overwrite cache)
+    let stderr_path = format!("{}/{}_{}.err", scratch_dir, job.job_name, slurm_job_id);
+    debug_log!("[Log Refetch] Fetching stderr from: {}", stderr_path);
+
+    match connection_manager.read_remote_file(&stderr_path).await {
+        Ok(content) => {
+            let content_len = content.len();
+            job.slurm_stderr = Some(content);
+            info_log!("[Log Refetch] Refetched stderr for job {} ({} bytes)", job.job_id, content_len);
+        }
+        Err(e) => {
+            debug_log!("[Log Refetch] Could not read stderr for {}: {}", job.job_id, e);
+            job.slurm_stderr = Some(String::new());
+        }
+    }
+
+    debug_log!("[Log Refetch] EXIT: Successfully completed for job {}", job.job_id);
+    Ok(())
+}

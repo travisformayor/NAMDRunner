@@ -103,12 +103,6 @@
       </div>
     {/if}
 
-    {#if syncError}
-      <div class="error-banner">
-        <strong>Error syncing results:</strong> {syncError}
-      </div>
-    {/if}
-
     <!-- Job Summary -->
     <JobSummary job={$selectedJob} />
 

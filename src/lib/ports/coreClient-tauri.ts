@@ -13,7 +13,7 @@ import type {
   SyncJobsResult,
   DeleteJobResult,
   DiscoverJobsResult,
-  CompleteJobResult,
+  RefetchLogsResult,
   FileUpload,
   UploadResult,
   DownloadResult,
@@ -93,6 +93,10 @@ export class TauriCoreClient implements ICoreClient {
     return invoke('delete_job', { job_id, delete_remote });
   }
 
+  async refetchSlurmLogs(job_id: JobId): Promise<RefetchLogsResult> {
+    return invoke('refetch_slurm_logs', { job_id });
+  }
+
   async discoverJobsFromServer(): Promise<DiscoverJobsResult> {
     return invoke('discover_jobs_from_server');
   }
@@ -102,8 +106,12 @@ export class TauriCoreClient implements ICoreClient {
     return invoke('upload_job_files', { job_id, files });
   }
 
-  async downloadJobOutput(job_id: JobId, file_name: string): Promise<DownloadResult> {
-    return invoke('download_job_output', { job_id, file_name });
+  async downloadJobOutput(job_id: JobId, file_path: string): Promise<DownloadResult> {
+    return invoke('download_job_output', { job_id, file_path });
+  }
+
+  async downloadAllOutputs(job_id: JobId): Promise<DownloadResult> {
+    return invoke('download_all_outputs', { job_id });
   }
 
   async listJobFiles(job_id: JobId): Promise<ListFilesResult> {

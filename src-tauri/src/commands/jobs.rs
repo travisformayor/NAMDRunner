@@ -554,7 +554,74 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
     }
 }
 
+/// Result type for refetch logs operation
+#[derive(Debug, Serialize)]
+pub struct RefetchLogsResult {
+    pub success: bool,
+    pub job_info: Option<JobInfo>,
+    pub error: Option<String>,
+}
 
+/// Refetch SLURM logs from server, overwriting cached logs
+/// Used when user explicitly clicks "Refetch Logs" button
+#[tauri::command(rename_all = "snake_case")]
+pub async fn refetch_slurm_logs(job_id: String) -> RefetchLogsResult {
+    let clean_job_id = match input::sanitize_job_id(&job_id) {
+        Ok(id) => id,
+        Err(e) => {
+            return RefetchLogsResult {
+                success: false,
+                job_info: None,
+                error: Some(format!("Invalid job ID: {}", e)),
+            };
+        }
+    };
+
+    // Get job from database
+    let job_id_clone = clean_job_id.clone();
+    let mut job_info = match with_database(move |db| db.load_job(&job_id_clone)) {
+        Ok(Some(job)) => job,
+        Ok(None) => {
+            return RefetchLogsResult {
+                success: false,
+                job_info: None,
+                error: Some(format!("Job {} not found", clean_job_id)),
+            };
+        }
+        Err(e) => {
+            return RefetchLogsResult {
+                success: false,
+                job_info: None,
+                error: Some(format!("Database error: {}", e)),
+            };
+        }
+    };
+
+    // Refetch logs from server
+    if let Err(e) = automations::refetch_slurm_logs(&mut job_info).await {
+        return RefetchLogsResult {
+            success: false,
+            job_info: None,
+            error: Some(format!("Failed to refetch logs: {}", e)),
+        };
+    }
+
+    // Save updated job to database
+    let job_clone = job_info.clone();
+    if let Err(e) = with_database(move |db| db.save_job(&job_clone)) {
+        return RefetchLogsResult {
+            success: false,
+            job_info: None,
+            error: Some(format!("Failed to save updated logs: {}", e)),
+        };
+    }
+
+    RefetchLogsResult {
+        success: true,
+        job_info: Some(job_info),
+        error: None,
+    }
+}
 
 // Job completion automation commands
 

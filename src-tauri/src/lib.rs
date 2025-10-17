@@ -67,11 +67,13 @@ pub fn run() {
             commands::jobs::get_all_jobs,
             commands::jobs::sync_jobs,
             commands::jobs::delete_job,
+            commands::jobs::refetch_slurm_logs,
             commands::jobs::discover_jobs_from_server,
             // File management
             commands::files::select_input_files,
             commands::files::upload_job_files,
             commands::files::download_job_output,
+            commands::files::download_all_outputs,
             commands::files::list_job_files,
         ])
         .run(tauri::generate_context!())

@@ -219,7 +219,8 @@ pub struct SelectedFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteFile {
-    pub name: String,
+    pub name: String,           // Display name (just filename)
+    pub path: String,           // Full relative path from job root (e.g., "outputs/sim.dcd")
     pub size: u64,
     pub modified_at: String,
     pub file_type: FileType,

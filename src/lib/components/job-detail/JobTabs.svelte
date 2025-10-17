@@ -64,6 +64,8 @@
 
   let activeTab: TabId = 'overview';
   let activeLogTab: 'stdout' | 'stderr' = 'stdout';
+  let isRefetchingLogs = false;
+  let refetchError = '';
 
   // Check if we're in demo mode
   $: isDemoMode = CoreClientFactory.getUserMode() === 'demo';
@@ -134,36 +136,42 @@ Info: Load balancing completed, performance improved by 3.2%`;
   const mockInputFiles = [
     {
       name: "protein.pdb",
+      path: "input_files/protein.pdb",
       size: "2.3 MB",
       type: "structure",
       description: "Protein structure file"
     },
     {
       name: "protein.psf",
+      path: "input_files/protein.psf",
       size: "1.8 MB",
       type: "structure",
       description: "Protein structure file (PSF format)"
     },
     {
       name: "par_all36_prot.prm",
+      path: "input_files/par_all36_prot.prm",
       size: "456 KB",
       type: "parameters",
       description: "CHARMM36 protein parameters"
     },
     {
       name: "par_all36_lipid.prm",
+      path: "input_files/par_all36_lipid.prm",
       size: "234 KB",
       type: "parameters",
       description: "CHARMM36 lipid parameters"
     },
     {
       name: "toppar_water_ions.str",
+      path: "input_files/toppar_water_ions.str",
       size: "123 KB",
       type: "parameters",
       description: "Water and ion parameters"
     },
     {
       name: "simulation.conf",
+      path: "input_files/simulation.conf",
       size: "4.2 KB",
       type: "configuration",
       description: "NAMD configuration file"
@@ -174,6 +182,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
   const mockOutputFiles = [
     {
       name: "trajectory.dcd",
+      path: "outputs/trajectory.dcd",
       size: "1.2 GB",
       type: "trajectory",
       description: "Molecular dynamics trajectory",
@@ -182,6 +191,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
     },
     {
       name: "output.log",
+      path: "outputs/output.log",
       size: "45 MB",
       type: "log",
       description: "NAMD output log file",
@@ -190,6 +200,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
     },
     {
       name: "energy.log",
+      path: "outputs/energy.log",
       size: "23 MB",
       type: "analysis",
       description: "Energy analysis output",
@@ -198,6 +209,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
     },
     {
       name: "restart.coor",
+      path: "outputs/restart.coor",
       size: "12 MB",
       type: "checkpoint",
       description: "Restart coordinates",
@@ -206,6 +218,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
     },
     {
       name: "restart.vel",
+      path: "outputs/restart.vel",
       size: "12 MB",
       type: "checkpoint",
       description: "Restart velocities",
@@ -214,6 +227,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
     },
     {
       name: "restart.xsc",
+      path: "outputs/restart.xsc",
       size: "1 KB",
       type: "checkpoint",
       description: "Extended system coordinates",
@@ -300,7 +314,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
       return job.slurm_stdout || '(No output)';
     }
 
-    return 'Logs are being fetched from the server. If this message persists, click "Get Job Logs & Outputs" button.';
+    return 'Logs are being fetched from the server automatically...';
   }
 
   function getStderrContent(): string {
@@ -317,7 +331,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
       return job.slurm_stderr || '(No errors)';
     }
 
-    return 'Logs are being fetched from the server. If this message persists, click "Get Job Logs & Outputs" button.';
+    return 'Logs are being fetched from the server automatically...';
   }
 
   function getInputFiles() {
@@ -325,12 +339,16 @@ Info: Load balancing completed, performance improved by 3.2%`;
       return mockInputFiles;
     }
     // Real mode: use job.input_files from job info
-    return job.input_files?.map(file => ({
-      name: file.name || file.remote_name || 'unknown',
-      size: '--',  // Size not tracked in InputFile
-      type: file.file_type || getTypeFromName(file.name || file.remote_name || ''),
-      description: getDescriptionForType(file.file_type || '')
-    })) || [];
+    return job.input_files?.map(file => {
+      const name = file.name || file.remote_name || 'unknown';
+      return {
+        name,
+        path: `input_files/${name}`,  // Path in job directory structure
+        size: '--',  // Size not tracked in InputFile
+        type: file.file_type || getTypeFromName(name),
+        description: getDescriptionForType(file.file_type || '')
+      };
+    }) || [];
   }
 
   function getOutputFiles() {
@@ -381,18 +399,26 @@ Info: Load balancing completed, performance improved by 3.2%`;
     navigator.clipboard.writeText(content);
   }
 
-  function downloadLogs() {
-    const content = activeLogTab === 'stdout' ? getStdoutContent() : getStderrContent();
-    const filename = `${job.job_id}_${activeLogTab}.log`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  async function refetchLogs() {
+    if (!job || !$isConnected) return;
+
+    isRefetchingLogs = true;
+    refetchError = '';
+
+    try {
+      const result = await CoreClientFactory.getClient().refetchSlurmLogs(job.job_id);
+
+      if (!result.success) {
+        refetchError = result.error || 'Failed to refetch logs';
+      } else if (result.job_info) {
+        // Update the job with new logs (parent component should handle this via reactive update)
+        job = result.job_info;
+      }
+    } catch (error) {
+      refetchError = error instanceof Error ? error.message : 'An unexpected error occurred';
+    } finally {
+      isRefetchingLogs = false;
+    }
   }
 
   // Overview tab helper functions
@@ -429,7 +455,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
   let downloadingFiles = new Set<string>();
   let downloadErrors = new Map<string, string>();
 
-  async function downloadFile(file_name: string) {
+  async function downloadFile(file_path: string, file_name: string) {
     if (!$isConnected) {
       downloadErrors.set(file_name, 'Connect to server to download files');
       setTimeout(() => downloadErrors.delete(file_name), 3000);
@@ -441,29 +467,48 @@ Info: Load balancing completed, performance improved by 3.2%`;
     downloadErrors.delete(file_name);
 
     try {
-      const result = await CoreClientFactory.getClient().downloadJobOutput(job.job_id, file_name);
+      const result = await CoreClientFactory.getClient().downloadJobOutput(job.job_id, file_path);
 
-      if (result.success && result.content) {
-        // Create blob and trigger download
-        const blob = new Blob([result.content], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = file_name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } else {
+      if (!result.success) {
         downloadErrors.set(file_name, result.error || 'Failed to download file');
         setTimeout(() => downloadErrors.delete(file_name), 5000);
       }
+      // Success - file was saved to user's chosen location via native dialog
     } catch (error) {
       downloadErrors.set(file_name, error instanceof Error ? error.message : 'Download failed');
       setTimeout(() => downloadErrors.delete(file_name), 5000);
     } finally {
       downloadingFiles.delete(file_name);
       downloadingFiles = downloadingFiles; // Trigger reactivity
+    }
+  }
+
+  let isDownloadingAll = false;
+  let downloadAllError = '';
+
+  async function downloadAllOutputs() {
+    if (!$isConnected) {
+      downloadAllError = 'Connect to server to download files';
+      setTimeout(() => downloadAllError = '', 3000);
+      return;
+    }
+
+    isDownloadingAll = true;
+    downloadAllError = '';
+
+    try {
+      const result = await CoreClientFactory.getClient().downloadAllOutputs(job.job_id);
+
+      if (!result.success) {
+        downloadAllError = result.error || 'Failed to download output files';
+        setTimeout(() => downloadAllError = '', 5000);
+      }
+      // Success - zip file was saved to user's chosen location via native dialog
+    } catch (error) {
+      downloadAllError = error instanceof Error ? error.message : 'Download failed';
+      setTimeout(() => downloadAllError = '', 5000);
+    } finally {
+      isDownloadingAll = false;
     }
   }
 
@@ -587,18 +632,27 @@ Info: Load balancing completed, performance improved by 3.2%`;
                   </svg>
                   Copy
                 </button>
-                <button class="namd-button namd-button--outline log-action-btn" on:click={downloadLogs}>
+                <button
+                  class="namd-button namd-button--outline log-action-btn"
+                  on:click={refetchLogs}
+                  disabled={!$isConnected || isRefetchingLogs}
+                  title={!$isConnected ? "Connect to server to refetch logs" : "Re-fetch latest logs from server"}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7,10 12,15 17,10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
+                    <polyline points="23 4 23 10 17 10"/>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                   </svg>
-                  Download
+                  {isRefetchingLogs ? 'Refetching...' : 'Refetch Logs'}
                 </button>
               </div>
             </div>
 
             <div class="log-content">
+              {#if refetchError}
+                <div class="namd-error-message" style="margin-bottom: 1rem;">
+                  {refetchError}
+                </div>
+              {/if}
               {#if activeLogTab === 'stdout'}
                 <div class="log-viewer">
                   <pre class="log-text">{getStdoutContent()}</pre>
@@ -642,7 +696,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
 
                   <button
                     class="download-button"
-                    on:click={() => downloadFile(file.name)}
+                    on:click={() => downloadFile(file.path, file.name)}
                     disabled={!$isConnected || downloadingFiles.has(file.name)}
                     title={!$isConnected ? "Connect to server to download files" : "Download file"}
                   >
@@ -691,7 +745,25 @@ Info: Load balancing completed, performance improved by 3.2%`;
             <!-- Available Files -->
             {#if getOutputFiles().filter(f => f.available).length > 0}
               <div class="files-section">
-                <h3>Available Files</h3>
+                <div class="files-section-header">
+                  <h3>Available Files</h3>
+                  <button
+                    class="download-all-button"
+                    on:click={downloadAllOutputs}
+                    disabled={!$isConnected || isDownloadingAll}
+                    title={!$isConnected ? "Connect to server to download files" : "Download all output files as ZIP"}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7,10 12,15 17,10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    {isDownloadingAll ? 'Downloading...' : 'Download All Outputs'}
+                  </button>
+                </div>
+                {#if downloadAllError}
+                  <div class="download-all-error">{downloadAllError}</div>
+                {/if}
                 <div class="files-grid">
                   {#each getOutputFiles().filter(f => f.available) as file}
                     <div class="file-card">
@@ -714,7 +786,7 @@ Info: Load balancing completed, performance improved by 3.2%`;
 
                         <button
                           class="download-button"
-                          on:click={() => downloadFile(file.name)}
+                          on:click={() => downloadFile(file.path, file.name)}
                           disabled={!$isConnected || downloadingFiles.has(file.name)}
                           title={!$isConnected ? "Connect to server to download files" : "Download file"}
                         >
@@ -1316,11 +1388,53 @@ Info: Load balancing completed, performance improved by 3.2%`;
     gap: var(--namd-spacing-md);
   }
 
+  .files-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--namd-spacing-sm);
+  }
+
   .files-section h3 {
-    margin: 0 0 var(--namd-spacing-sm) 0;
+    margin: 0;
     font-size: var(--namd-font-size-lg);
     font-weight: var(--namd-font-weight-medium);
     color: var(--namd-text-primary);
+  }
+
+  .download-all-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--namd-spacing-xs);
+    padding: var(--namd-spacing-sm) var(--namd-spacing-md);
+    background: var(--namd-primary-color);
+    color: white;
+    border: none;
+    border-radius: var(--namd-border-radius);
+    font-size: var(--namd-font-size-sm);
+    font-weight: var(--namd-font-weight-medium);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .download-all-button:hover:not(:disabled) {
+    background: var(--namd-primary-hover);
+    transform: translateY(-1px);
+  }
+
+  .download-all-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .download-all-error {
+    padding: var(--namd-spacing-sm);
+    background: var(--namd-error-background);
+    color: var(--namd-error-color);
+    border-radius: var(--namd-border-radius);
+    font-size: var(--namd-font-size-sm);
+    margin-bottom: var(--namd-spacing-sm);
   }
 
   .expected-files-description {

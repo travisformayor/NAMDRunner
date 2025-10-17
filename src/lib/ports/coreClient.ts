@@ -11,7 +11,7 @@ import type {
   SyncJobsResult,
   DeleteJobResult,
   DiscoverJobsResult,
-  CompleteJobResult,
+  RefetchLogsResult,
   FileUpload,
   UploadResult,
   DownloadResult,
@@ -45,10 +45,12 @@ export interface ICoreClient {
   getAllJobs(): Promise<GetAllJobsResult>;
   syncJobs(): Promise<SyncJobsResult>;
   deleteJob(job_id: JobId, delete_remote: boolean): Promise<DeleteJobResult>;
+  refetchSlurmLogs(job_id: JobId): Promise<RefetchLogsResult>;
   discoverJobsFromServer(): Promise<DiscoverJobsResult>;
 
   // File management
   uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult>;
-  downloadJobOutput(job_id: JobId, file_name: string): Promise<DownloadResult>;
+  downloadJobOutput(job_id: JobId, file_path: string): Promise<DownloadResult>;
+  downloadAllOutputs(job_id: JobId): Promise<DownloadResult>;
   listJobFiles(job_id: JobId): Promise<ListFilesResult>;
 }
