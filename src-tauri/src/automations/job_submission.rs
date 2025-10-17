@@ -89,9 +89,10 @@ pub async fn execute_job_submission_with_progress(
     progress_callback("Submitting job to SLURM...");
 
     // Submit job using SLURM commands module (using mirrored script in scratch)
-    let script_path = format!("{}/scripts/job.sbatch", scratch_dir);
+    let script_relative = crate::ssh::JobDirectoryStructure::script_path("job.sbatch");
+    let script_path = format!("{}/{}", scratch_dir, script_relative);
     info_log!("[Job Submission] Executing sbatch with script: {}", script_path);
-    let submit_cmd = crate::slurm::commands::submit_job_command(&scratch_dir, "scripts/job.sbatch")?;
+    let submit_cmd = crate::slurm::commands::submit_job_command(&scratch_dir, &script_relative)?;
     let output = connection_manager.execute_command(&submit_cmd, Some(crate::cluster::timeouts::JOB_SUBMIT)).await
         .map_err(|e| {
             error_log!("[Job Submission] Failed to submit job to SLURM: {}", e);
@@ -150,7 +151,6 @@ pub async fn execute_job_submission_with_progress(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::types::{JobInfo, JobStatus, NAMDConfig, SlurmConfig, InputFile};
     use chrono::Utc;
 
@@ -318,7 +318,7 @@ mod tests {
         let scratch_dir = "/scratch/alpine/testuser/namdrunner_jobs/test_job_001";
         let filename = "structure.pdb";
 
-        let source = format!("{}/input_files/{}", project_dir, filename);
+        let source = format!("{}/{}", project_dir, crate::ssh::JobDirectoryStructure::input_path(filename));
         let dest = format!("{}/input/{}", scratch_dir, filename);
 
         let copy_cmd = shell::safe_cp(&source, &dest);

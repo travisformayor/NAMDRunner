@@ -46,8 +46,8 @@ pub async fn execute_job_creation_with_progress(
 
     progress_callback("Generating job paths...");
 
-    // Generate unique job ID and project directory path using existing validation functions
-    let job_id = paths::generate_job_id(&clean_job_name);
+    // Generate unique job ID using timestamp
+    let job_id = format!("{}_{}", clean_job_name, chrono::Utc::now().timestamp_micros());
     let project_dir = paths::project_directory(&username, &job_id)?;
     info_log!("[Job Creation] Generated job ID: {} at path: {}", job_id, project_dir);
 
@@ -61,8 +61,8 @@ pub async fn execute_job_creation_with_progress(
             anyhow!("Could not create job directory on cluster: {}", e)
         })?;
 
-    // Create subdirectories using existing path utilities
-    for subdir in paths::job_subdirectories() {
+    // Create standard job subdirectories
+    for subdir in crate::ssh::JobDirectoryStructure::subdirectories() {
         let subdir_path = format!("{}/{}", project_dir, subdir);
         debug_log!("[Job Creation] Creating subdirectory: {}", subdir_path);
         connection_manager.create_directory(&subdir_path).await
@@ -96,7 +96,6 @@ pub async fn execute_job_creation_with_progress(
 
     // Upload input files if any are provided
     if !params.input_files.is_empty() {
-        let input_files_dir = format!("{}/input_files", project_dir);
         info_log!("[Job Creation] Uploading {} input files", params.input_files.len());
 
         for (i, file) in params.input_files.iter().enumerate() {
@@ -117,8 +116,8 @@ pub async fn execute_job_creation_with_progress(
             validate_upload_file(file)?;
             debug_log!("[Job Creation] Validation passed for: {}", remote_name);
 
-            // Construct remote path
-            let remote_path = format!("{}/{}", input_files_dir, remote_name);
+            // Construct remote path using centralized helper
+            let remote_path = crate::ssh::JobDirectoryStructure::full_input_path(&project_dir, remote_name);
 
             // Upload file using ConnectionManager with progress events
             connection_manager.upload_file_with_progress(&file.local_path, &remote_path, Some(app_handle.clone())).await
@@ -161,8 +160,8 @@ pub async fn execute_job_creation_with_progress(
     // Clear scratch_dir again - it will be set properly during submission
     job_info.scratch_dir = None;
 
-    // Upload script to scripts/ subdirectory
-    let script_path = format!("{}/scripts/job.sbatch", project_dir);
+    // Upload script to scripts subdirectory
+    let script_path = crate::ssh::JobDirectoryStructure::full_script_path(&project_dir, "job.sbatch");
     crate::ssh::metadata::upload_content(&connection_manager, &slurm_script, &script_path).await
         .map_err(|e| {
             error_log!("[Job Creation] Failed to upload SLURM script: {}", e);
@@ -176,8 +175,8 @@ pub async fn execute_job_creation_with_progress(
     let namd_config_content = crate::slurm::script_generator::SlurmScriptGenerator::generate_namd_config(&job_info)?;
     info_log!("[Job Creation] Generated NAMD config ({} bytes)", namd_config_content.len());
 
-    // Upload config to scripts/ subdirectory
-    let config_path = format!("{}/scripts/config.namd", project_dir);
+    // Upload config to scripts subdirectory
+    let config_path = crate::ssh::JobDirectoryStructure::full_script_path(&project_dir, "config.namd");
     crate::ssh::metadata::upload_content(&connection_manager, &namd_config_content, &config_path).await
         .map_err(|e| {
             error_log!("[Job Creation] Failed to upload NAMD config: {}", e);

@@ -4,6 +4,7 @@ pub mod commands;
 pub mod errors;
 pub mod manager;
 pub mod metadata;
+pub mod directory_structure;
 
 #[cfg(test)]
 pub mod test_utils;
@@ -13,6 +14,7 @@ pub use sftp::{SFTPOperations, FileTransferProgress, RemoteFileInfo, ProgressCal
 pub use commands::{CommandExecutor, CommandResult};
 pub use errors::{SSHError, map_ssh_error, ConnectionError};
 pub use manager::ConnectionManager;
+pub use directory_structure::JobDirectoryStructure;
 
 lazy_static::lazy_static! {
     /// Global connection manager for Tauri commands

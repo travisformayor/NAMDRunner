@@ -108,6 +108,29 @@ pub mod input {
         Ok(sanitized)
     }
 
+    /// Validate that a relative file path is safe (no traversal, no absolute paths, no null bytes)
+    ///
+    /// Used for validating user-provided relative paths like file downloads
+    pub fn validate_relative_file_path(path: &str) -> Result<()> {
+        if path.is_empty() {
+            return Err(anyhow!("File path cannot be empty"));
+        }
+
+        if path.contains('\0') {
+            return Err(anyhow!("File path contains null bytes"));
+        }
+
+        if path.starts_with('/') {
+            return Err(anyhow!("File path must be relative, not absolute"));
+        }
+
+        if path.contains("..") {
+            return Err(anyhow!("File path contains directory traversal"));
+        }
+
+        Ok(())
+    }
+
     /// Validate that a constructed path is safe
     ///
     /// This performs additional validation on complete paths to ensure
@@ -402,17 +425,6 @@ pub mod paths {
         Ok(path)
     }
 
-    /// Get the standard subdirectories that should be created for a job
-    pub fn job_subdirectories() -> Vec<&'static str> {
-        vec!["input_files", "outputs", "scripts"]
-    }
-
-    /// Generate a unique job ID
-    pub fn generate_job_id(job_name: &str) -> String {
-        use chrono::Utc;
-        format!("{}_{}", job_name, Utc::now().timestamp_micros())
-    }
-
 }
 
 #[cfg(test)]
@@ -546,14 +558,6 @@ mod tests {
             // Should fail with malicious inputs
             assert!(paths::project_directory("../admin", "job_001").is_err());
             assert!(paths::project_directory("testuser", "../../../etc").is_err());
-        }
-
-        #[test]
-        fn test_subdirectories() {
-            let subdirs = paths::job_subdirectories();
-            assert!(subdirs.contains(&"input_files"));
-            assert!(subdirs.contains(&"outputs"));
-            assert!(subdirs.contains(&"scripts"));
         }
     }
 

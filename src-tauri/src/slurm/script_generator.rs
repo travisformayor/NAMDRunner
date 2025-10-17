@@ -1,5 +1,4 @@
 use crate::types::*;
-use crate::validation::input;
 use anyhow::{anyhow, Result};
 
 /// SLURM script generator for NAMD molecular dynamics jobs
@@ -72,6 +71,13 @@ mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) con
     pub fn generate_namd_config(job_info: &JobInfo) -> Result<String> {
         let namd_config = &job_info.namd_config;
 
+        // Use JobDirectoryStructure for consistent path references
+        let structure_path = crate::ssh::JobDirectoryStructure::input_path("structure.psf");
+        let coordinates_path = crate::ssh::JobDirectoryStructure::input_path("structure.pdb");
+        let output_path = crate::ssh::JobDirectoryStructure::output_path(&namd_config.outputname);
+        let param_path_1 = crate::ssh::JobDirectoryStructure::input_path("par_all36_na.prm");
+        let param_path_2 = crate::ssh::JobDirectoryStructure::input_path("par_water_ions_cufix.prm");
+
         // Generate basic NAMD configuration based on the template from reference docs
         let config = format!(
 r#"#############################################################
@@ -86,8 +92,8 @@ r#"#############################################################
 #############################################################
 
 # Input structure and coordinates
-structure          input_files/structure.psf
-coordinates        input_files/structure.pdb
+structure          {}
+coordinates        {}
 
 # Output naming
 outputName         {}
@@ -106,8 +112,8 @@ firsttimestep      0
 
 # Force field parameters
 paraTypeCharmm     on
-parameters         input_files/par_all36_na.prm
-parameters         input_files/par_water_ions_cufix.prm
+parameters         {}
+parameters         {}
 
 # Non-bonded force calculations
 exclude            scaled1-4
@@ -162,8 +168,12 @@ run {}
             job_info.job_name,
             chrono::Utc::now().to_rfc3339(),
             job_info.job_id,
-            namd_config.outputname,
+            structure_path,
+            coordinates_path,
+            output_path,
             namd_config.temperature,
+            param_path_1,
+            param_path_2,
             namd_config.timestep,
             namd_config.dcd_freq.unwrap_or(9600),
             namd_config.dcd_freq.unwrap_or(9600),
@@ -309,7 +319,7 @@ mod tests {
         // Verify essential NAMD parameters
         assert!(config.contains("structure          input_files/structure.psf"));
         assert!(config.contains("coordinates        input_files/structure.pdb"));
-        assert!(config.contains("outputName         test_output"));
+        assert!(config.contains("outputName         outputs/test_output"));
         assert!(config.contains("set temperature    300"));
         assert!(config.contains("timestep           2"));
         assert!(config.contains("run 100000"));
