@@ -1,4 +1,4 @@
-name: Windows Build Pipeline
+name: Multi-Platform Build Pipeline
 
 on:
   push:
@@ -88,3 +88,91 @@ jobs:
         echo "- NSIS executable created" >> $GITHUB_STEP_SUMMARY
         echo "- Artifacts uploaded for download" >> $GITHUB_STEP_SUMMARY
       shell: bash
+
+  # Linux build - x86_64 target
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ env.RUST_VERSION }}
+        components: rustfmt, clippy
+
+    - name: Install Linux dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libwebkit2gtk-4.1-dev \
+          build-essential \
+          curl \
+          wget \
+          file \
+          libssl-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev
+
+    - name: Cache Linux dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          src-tauri/target
+          node_modules
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/Cargo.lock', '**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
+
+    - name: Install frontend dependencies
+      run: npm ci
+
+    - name: Run basic linting checks
+      run: |
+        npm run lint
+        npm run check
+
+    - name: Check Rust formatting and linting
+      run: |
+        cd src-tauri
+        cargo fmt --all -- --check
+        cargo clippy -- -D warnings
+
+    - name: Build Tauri Linux application
+      run: npm run tauri build
+      env:
+        TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+        TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+    - name: Verify Linux build artifacts
+      run: |
+        echo "Checking for Linux build artifacts..."
+        ls -la src-tauri/target/release/
+        ls -la src-tauri/target/release/bundle/
+
+    - name: Upload Linux build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-build-artifacts
+        path: |
+          src-tauri/target/release/bundle/deb/*.deb
+          src-tauri/target/release/bundle/appimage/*.AppImage
+        retention-days: 30
+
+    - name: Create release summary
+      run: |
+        echo "## Linux Build Complete" >> $GITHUB_STEP_SUMMARY
+        echo "- DEB package created" >> $GITHUB_STEP_SUMMARY
+        echo "- AppImage created" >> $GITHUB_STEP_SUMMARY
+        echo "- Artifacts uploaded for download" >> $GITHUB_STEP_SUMMARY
