@@ -35,12 +35,12 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
         .ok_or_else(|| {
             error_log!("[Job Completion] Job {} has no project directory", job_id);
             anyhow!("Job has no project directory")
-        })?;
+        })?.clone();
     let scratch_dir = job.scratch_dir.as_ref()
         .ok_or_else(|| {
             error_log!("[Job Completion] Job {} has no scratch directory", job_id);
             anyhow!("Job has no scratch directory")
-        })?;
+        })?.clone();
 
     // CRITICAL: Rsync scratch→project FIRST (DATA BOUNDARY CROSSED)
     // This preserves all results including SLURM logs before they're cleaned up
@@ -51,7 +51,7 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     };
 
     info_log!("[Job Completion] Rsyncing scratch→project: {} -> {}", scratch_dir, project_dir);
-    connection_manager.sync_directory_rsync(&source_with_slash, project_dir).await
+    connection_manager.sync_directory_rsync(&source_with_slash, &project_dir).await
         .map_err(|e| {
             error_log!("[Job Completion] Rsync failed: {}", e);
             anyhow!("Failed to rsync: {}", e)
@@ -63,6 +63,22 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     if let Err(e) = crate::automations::fetch_slurm_logs_if_needed(job).await {
         error_log!("[Job Completion] Failed to fetch logs: {}", e);
         // Don't fail completion if log fetch fails - logs are nice-to-have
+    }
+
+    // Fetch output file metadata from project directory (after rsync)
+    let output_dir = format!("{}/output_files", project_dir);
+    info_log!("[Job Completion] Fetching output file metadata from: {}", output_dir);
+
+    match connection_manager.list_files_with_metadata(&output_dir).await {
+        Ok(output_files) => {
+            info_log!("[Job Completion] Found {} output files", output_files.len());
+            job.output_files = Some(output_files);
+        }
+        Err(e) => {
+            error_log!("[Job Completion] Failed to fetch output file metadata: {}", e);
+            // Don't fail completion if metadata fetch fails - it's nice-to-have
+            job.output_files = None;
+        }
     }
 
     // Update database
@@ -113,6 +129,7 @@ mod tests {
                 qos: None,
             },
             input_files: Vec::new(),
+            output_files: None,
             remote_directory: "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),
             slurm_stdout: None,
             slurm_stderr: None,

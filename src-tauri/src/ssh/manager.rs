@@ -303,6 +303,65 @@ impl ConnectionManager {
         }
     }
 
+    /// List files in a directory with metadata for OutputFile
+    /// Only returns regular files (not directories)
+    pub async fn list_files_with_metadata(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
+        patterns::retry_quick_operation(|| self.list_files_with_metadata_once(remote_path)).await
+    }
+
+    async fn list_files_with_metadata_once(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
+        let mut conn = self.connection.lock().await;
+        match conn.as_mut() {
+            Some(connection) => {
+                if !connection.is_connected() {
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+
+                // Set file transfer timeout before SFTP operation
+                connection.set_file_transfer_timeout()?;
+
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+                let result = sftp.list_files_with_metadata(remote_path);
+
+                // Reset to command timeout after operation
+                connection.reset_command_timeout()?;
+
+                result
+            }
+            None => Err(anyhow::anyhow!("Please connect to the cluster first"))
+        }
+    }
+
+    /// Get file metadata (stat) for a remote file
+    pub async fn stat_file(&self, remote_path: &str) -> Result<RemoteFileInfo> {
+        patterns::retry_quick_operation(|| self.stat_file_once(remote_path)).await
+    }
+
+    async fn stat_file_once(&self, remote_path: &str) -> Result<RemoteFileInfo> {
+        let mut conn = self.connection.lock().await;
+        match conn.as_mut() {
+            Some(connection) => {
+                if !connection.is_connected() {
+                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
+                }
+
+                // Set file transfer timeout before SFTP operation
+                connection.set_file_transfer_timeout()?;
+
+                let session = connection.get_session()?;
+                let sftp = super::sftp::SFTPOperations::new(session);
+                let result = sftp.stat(remote_path);
+
+                // Reset to command timeout after operation
+                connection.reset_command_timeout()?;
+
+                result
+            }
+            None => Err(anyhow::anyhow!("Please connect to the cluster first"))
+        }
+    }
+
     /// Create a directory using SSH mkdir -p command
     pub async fn create_directory(&self, remote_path: &str) -> Result<()> {
         // Use retry logic for directory creation

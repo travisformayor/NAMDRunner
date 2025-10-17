@@ -88,6 +88,14 @@
   let createError: string = '';
   let uploadProgress: Map<string, { percentage: number }> = new Map();
 
+  function detectFileType(filename: string): 'pdb' | 'psf' | 'prm' | 'other' {
+    const ext = filename.toLowerCase().split('.').pop();
+    if (ext === 'pdb') return 'pdb';
+    if (ext === 'psf') return 'psf';
+    if (ext === 'prm') return 'prm';
+    return 'other';
+  }
+
   async function handleSubmit() {
     // Validation is now handled in CreateJobTabs component
     if (Object.keys(errors).length > 0) {
@@ -119,6 +127,7 @@
           name: file.name,
           local_path: file.path,  // Use absolute path from Tauri dialog
           remote_name: file.name,
+          file_type: detectFileType(file.name),
         })),
       };
 

@@ -61,7 +61,7 @@ module load namd/3.0.1_cpu
 cd {}
 
 # Execute NAMD with MPI (OpenMPI handles CPU affinity automatically)
-mpirun -np $SLURM_NTASKS namd3 config.namd > namd_output.log
+mpirun -np $SLURM_NTASKS namd3 scripts/config.namd > namd_output.log
 "#,
             job_name,
             job_name,
@@ -310,26 +310,35 @@ mod tests {
                     local_path: "/tmp/structure.psf".to_string(),
                     remote_name: Some("structure.psf".to_string()),
                     file_type: Some(NAMDFileType::Psf),
+                    size: Some(1024),
+                    uploaded_at: Some(chrono::Utc::now().to_rfc3339()),
                 },
                 InputFile {
                     name: "structure.pdb".to_string(),
                     local_path: "/tmp/structure.pdb".to_string(),
                     remote_name: Some("structure.pdb".to_string()),
                     file_type: Some(NAMDFileType::Pdb),
+                    size: Some(2048),
+                    uploaded_at: Some(chrono::Utc::now().to_rfc3339()),
                 },
                 InputFile {
                     name: "par_all36_na.prm".to_string(),
                     local_path: "/tmp/par_all36_na.prm".to_string(),
                     remote_name: Some("par_all36_na.prm".to_string()),
                     file_type: Some(NAMDFileType::Prm),
+                    size: Some(512),
+                    uploaded_at: Some(chrono::Utc::now().to_rfc3339()),
                 },
                 InputFile {
                     name: "par_water_ions_cufix.prm".to_string(),
                     local_path: "/tmp/par_water_ions_cufix.prm".to_string(),
                     remote_name: Some("par_water_ions_cufix.prm".to_string()),
                     file_type: Some(NAMDFileType::Prm),
+                    size: Some(256),
+                    uploaded_at: Some(chrono::Utc::now().to_rfc3339()),
                 },
             ],
+            output_files: None,
             project_dir: Some("/projects/testuser/namdrunner_jobs/test_job_001".to_string()),
             scratch_dir: Some("/scratch/alpine/testuser/namdrunner_jobs/test_job_001".to_string()),
             status: JobStatus::Created,
@@ -367,7 +376,7 @@ mod tests {
         assert!(script.contains("mpirun -np $SLURM_NTASKS namd3"));
         assert!(!script.contains("+setcpuaffinity"), "Script should not contain +setcpuaffinity flag");
         assert!(!script.contains("+pemap"), "Script should not contain +pemap flag");
-        assert!(script.contains("config.namd > namd_output.log"));
+        assert!(script.contains("scripts/config.namd > namd_output.log"));
 
         // Verify working directory
         assert!(script.contains("cd /scratch/alpine/testuser/namdrunner_jobs/test_job_001"));

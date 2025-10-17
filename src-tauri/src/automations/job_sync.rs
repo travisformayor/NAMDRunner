@@ -496,6 +496,7 @@ mod tests {
                 qos: None,
             },
             input_files: Vec::new(),
+            output_files: None,
             remote_directory: "/projects/user/job".to_string(),
             slurm_stdout: None,
             slurm_stderr: None,

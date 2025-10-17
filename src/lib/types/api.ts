@@ -29,6 +29,7 @@ export interface JobInfo {
   namd_config: NAMDConfig;
   slurm_config: SlurmConfig;
   input_files: InputFile[];
+  output_files?: OutputFile[];
   remote_directory: string;
 }
 
@@ -54,6 +55,14 @@ export interface InputFile {
   local_path: string;
   remote_name?: string;
   file_type?: 'pdb' | 'psf' | 'prm' | 'other';
+  size?: number;
+  uploaded_at?: string;
+}
+
+export interface OutputFile {
+  name: string;
+  size: number;
+  modified_at: string;
 }
 
 export interface FileUpload {

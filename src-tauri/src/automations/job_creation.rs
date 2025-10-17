@@ -94,7 +94,8 @@ pub async fn execute_job_creation_with_progress(
 
     progress_callback("Uploading input files...");
 
-    // Upload input files if any are provided
+    // Upload input files and collect metadata
+    let mut input_files_with_metadata = Vec::new();
     if !params.input_files.is_empty() {
         info_log!("[Job Creation] Uploading {} input files", params.input_files.len());
 
@@ -126,6 +127,28 @@ pub async fn execute_job_creation_with_progress(
                     anyhow!("Could not upload file '{}' to cluster: {}", remote_name, e)
                 })?;
             info_log!("[Job Creation] Successfully uploaded: {} -> {}", file.local_path, remote_path);
+
+            // Get file size from remote after successful upload
+            let file_size = match connection_manager.stat_file(&remote_path).await {
+                Ok(stat) => {
+                    debug_log!("[Job Creation] File size for {}: {} bytes", remote_name, stat.size);
+                    Some(stat.size)
+                }
+                Err(e) => {
+                    error_log!("[Job Creation] Failed to stat file {}: {}", remote_name, e);
+                    None
+                }
+            };
+
+            // Create InputFile with metadata
+            input_files_with_metadata.push(InputFile {
+                name: file.name.clone(),
+                local_path: file.local_path.clone(),
+                remote_name: file.remote_name.clone(),
+                file_type: file.file_type.clone(),
+                size: file_size,
+                uploaded_at: Some(chrono::Utc::now().to_rfc3339()),
+            });
         }
     }
 
@@ -138,7 +161,7 @@ pub async fn execute_job_creation_with_progress(
         clean_job_name,
         params.namd_config,
         params.slurm_config,
-        params.input_files,
+        input_files_with_metadata,
         project_dir.clone(),
     );
 

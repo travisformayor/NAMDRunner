@@ -280,6 +280,45 @@ impl<'a> SFTPOperations<'a> {
         Ok(files)
     }
 
+    /// List files in a directory with metadata formatted for OutputFile
+    /// Only returns regular files (not directories)
+    pub fn list_files_with_metadata(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
+        let sftp = self.get_sftp()?;
+
+        let mut files = Vec::new();
+        let entries = sftp.readdir(Path::new(remote_path))
+            .map_err(|e| SSHError::FileTransferError(format!("Failed to list directory: {}", e)))?;
+
+        for (path, stat) in entries {
+            // Only include regular files, skip directories
+            if !stat.is_file() {
+                continue;
+            }
+
+            let name = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+
+            // Format timestamp as RFC3339 string
+            let modified_at = if let Some(mtime) = stat.mtime {
+                chrono::DateTime::from_timestamp(mtime as i64, 0)
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_else(|| "unknown".to_string())
+            } else {
+                "unknown".to_string()
+            };
+
+            files.push(crate::types::OutputFile {
+                name,
+                size: stat.size.unwrap_or(0),
+                modified_at,
+            });
+        }
+
+        Ok(files)
+    }
+
     /// Create a directory (single level only - use SSH mkdir -p for recursive)
     /// Note: Directory creation now uses SSH commands in manager.rs for better performance
     pub fn create_directory(&self, remote_path: &str, mode: i32) -> Result<()> {

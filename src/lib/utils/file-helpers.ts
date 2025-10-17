@@ -1,42 +1,70 @@
 // File type display utilities
 
-export function getFileIcon(type: string): string {
-  const icons: Record<string, string> = {
-    structure: "🧬",
-    parameters: "⚙️",
-    configuration: "📋",
-    trajectory: "📊",
-    log: "📄",
-    analysis: "📈",
-    checkpoint: "💾"
-  };
-  return icons[type] || "📄";
+interface FileTypeInfo {
+  label: string;
+  icon: string;
+  color: string;
+  description: string;
 }
 
-export function getTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    structure: "Structure",
-    parameters: "Parameters",
-    configuration: "Configuration",
-    trajectory: "Trajectory",
-    log: "Log",
-    analysis: "Analysis",
-    checkpoint: "Checkpoint"
-  };
-  return labels[type] || "Unknown";
+const FILE_TYPE_MAP: Record<string, FileTypeInfo> = {
+  // Structure files
+  pdb: { label: "Structure", icon: "🧬", color: "namd-file-type-structure", description: "Protein structure file" },
+  psf: { label: "Structure", icon: "🧬", color: "namd-file-type-structure", description: "Protein structure file (PSF format)" },
+
+  // Parameter files
+  prm: { label: "Parameters", icon: "⚙️", color: "namd-file-type-parameters", description: "Parameter file" },
+  rtf: { label: "Parameters", icon: "⚙️", color: "namd-file-type-parameters", description: "Parameter file" },
+  str: { label: "Parameters", icon: "⚙️", color: "namd-file-type-parameters", description: "Parameter file" },
+
+  // Configuration files
+  conf: { label: "Configuration", icon: "📋", color: "namd-file-type-configuration", description: "Configuration file" },
+  namd: { label: "Configuration", icon: "📋", color: "namd-file-type-configuration", description: "NAMD configuration file" },
+
+  // Trajectory files
+  dcd: { label: "Trajectory", icon: "📊", color: "namd-file-type-trajectory", description: "Trajectory data" },
+
+  // Checkpoint files
+  coor: { label: "Checkpoint", icon: "💾", color: "namd-file-type-checkpoint", description: "Coordinate checkpoint" },
+  vel: { label: "Checkpoint", icon: "💾", color: "namd-file-type-checkpoint", description: "Velocity checkpoint" },
+  xsc: { label: "Checkpoint", icon: "💾", color: "namd-file-type-checkpoint", description: "Extended system checkpoint" },
+
+  // Log files
+  log: { label: "Log", icon: "📄", color: "namd-file-type-log", description: "Log file" },
+
+  // Other
+  other: { label: "Other", icon: "📄", color: "namd-file-type-default", description: "Data file" }
+};
+
+const DEFAULT_FILE_TYPE: FileTypeInfo = {
+  label: "Unknown",
+  icon: "📄",
+  color: "namd-file-type-default",
+  description: "Data file"
+};
+
+function getFileTypeInfo(extensionOrType: string): FileTypeInfo {
+  return FILE_TYPE_MAP[extensionOrType.toLowerCase()] || DEFAULT_FILE_TYPE;
 }
 
-export function getTypeColor(type: string): string {
-  const colors: Record<string, string> = {
-    structure: "namd-file-type-structure",
-    parameters: "namd-file-type-parameters",
-    configuration: "namd-file-type-configuration",
-    trajectory: "namd-file-type-trajectory",
-    log: "namd-file-type-log",
-    analysis: "namd-file-type-analysis",
-    checkpoint: "namd-file-type-checkpoint"
-  };
-  return colors[type] || "namd-file-type-default";
+export function getFileIcon(extensionOrType: string): string {
+  return getFileTypeInfo(extensionOrType).icon;
+}
+
+export function getTypeLabel(extensionOrType: string): string {
+  return getFileTypeInfo(extensionOrType).label;
+}
+
+export function getTypeColor(extensionOrType: string): string {
+  return getFileTypeInfo(extensionOrType).color;
+}
+
+export function getFileDescription(extensionOrType: string): string {
+  return getFileTypeInfo(extensionOrType).description;
+}
+
+export function getFileExtension(filename: string): string {
+  return filename.split('.').pop()?.toLowerCase() || 'other';
 }
 
 export function formatFileSize(bytes: number): string {
@@ -47,10 +75,6 @@ export function formatFileSize(bytes: number): string {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-export function getFileExtension(filename: string): string {
-  return filename.split('.').pop()?.toLowerCase() || '';
 }
 
 export function getStatusBadgeClass(status: string): string {

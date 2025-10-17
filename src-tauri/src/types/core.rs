@@ -91,6 +91,13 @@ pub enum NAMDFileType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputFile {
+    pub name: String,
+    pub size: u64,
+    pub modified_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobInfo {
     pub job_id: String,
     pub job_name: String,
@@ -108,6 +115,7 @@ pub struct JobInfo {
     pub namd_config: NAMDConfig,
     pub slurm_config: SlurmConfig,
     pub input_files: Vec<InputFile>,
+    pub output_files: Option<Vec<OutputFile>>,
     pub remote_directory: String,
 }
 
@@ -138,6 +146,7 @@ impl JobInfo {
             namd_config,
             slurm_config,
             input_files,
+            output_files: None,
             remote_directory,
         }
     }
@@ -194,6 +203,8 @@ pub struct InputFile {
     pub local_path: String,
     pub remote_name: Option<String>,
     pub file_type: Option<NAMDFileType>,
+    pub size: Option<u64>,
+    pub uploaded_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

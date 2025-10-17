@@ -189,8 +189,11 @@ mod tests {
                     local_path: "/local/path/structure.pdb".to_string(),
                     remote_name: Some("structure.pdb".to_string()),
                     file_type: Some(crate::core::NAMDFileType::Pdb),
+                    size: Some(2048),
+                    uploaded_at: Some(chrono::Utc::now().to_rfc3339()),
                 }
             ],
+            output_files: None,
             remote_directory: "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),
             slurm_stdout: None,
             slurm_stderr: None,

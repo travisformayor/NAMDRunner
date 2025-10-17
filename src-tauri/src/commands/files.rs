@@ -822,6 +822,8 @@ mod tests {
                     local_path: "/local/test.pdb".to_string(),
                     remote_name: Some("test.pdb".to_string()),
                     file_type: Some(NAMDFileType::Pdb),
+                    size: Some(1024),
+                    uploaded_at: Some(chrono::Utc::now().to_rfc3339()),
                 },
             ],
             "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),

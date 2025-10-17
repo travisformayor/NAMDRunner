@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { JobInfo } from '../../types/api';
-  import { getFileIcon, getTypeLabel, getTypeColor, formatFileSize, getStatusBadgeClass } from '../../utils/file-helpers';
+  import { getFileIcon, getTypeLabel, getTypeColor, getFileDescription, getFileExtension, formatFileSize, getStatusBadgeClass } from '../../utils/file-helpers';
   import { CoreClientFactory } from '../../ports/clientFactory';
   import { isConnected } from '../../stores/session';
 
@@ -341,12 +341,13 @@ Info: Load balancing completed, performance improved by 3.2%`;
     // Real mode: use job.input_files from job info
     return job.input_files?.map(file => {
       const name = file.name || file.remote_name || 'unknown';
+      const ext = file.file_type || getFileExtension(name);
       return {
         name,
-        path: `input_files/${name}`,  // Path in job directory structure
-        size: '--',  // Size not tracked in InputFile
-        type: file.file_type || getTypeFromName(name),
-        description: getDescriptionForType(file.file_type || '')
+        path: `input_files/${name}`,
+        size: file.size ? formatFileSize(file.size) : '--',
+        type: ext,
+        description: getFileDescription(ext)
       };
     }) || [];
   }
@@ -355,43 +356,19 @@ Info: Load balancing completed, performance improved by 3.2%`;
     if (isDemoMode) {
       return mockOutputFiles;
     }
-    // Real mode: would need to call listJobFiles() to get real output files
-    // For now, return empty array until implemented
-    return [];
-  }
-
-  function getTypeFromName(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    const typeMap: Record<string, string> = {
-      'pdb': 'structure',
-      'psf': 'structure',
-      'prm': 'parameters',
-      'rtf': 'parameters',
-      'str': 'parameters',
-      'conf': 'configuration',
-      'namd': 'configuration',
-      'dcd': 'trajectory',
-      'log': 'log',
-      'coor': 'checkpoint',
-      'vel': 'checkpoint',
-      'xsc': 'checkpoint'
-    };
-    return typeMap[ext || ''] || 'other';
-  }
-
-  function getDescriptionForType(type: string): string {
-    const descriptions: Record<string, string> = {
-      'pdb': 'Protein structure file',
-      'psf': 'Protein structure file (PSF format)',
-      'prm': 'Parameter file',
-      'parameters': 'Parameter file',
-      'structure': 'Structure file',
-      'configuration': 'Configuration file',
-      'trajectory': 'Trajectory data',
-      'log': 'Log file',
-      'checkpoint': 'Checkpoint file'
-    };
-    return descriptions[type] || 'Data file';
+    // Real mode: use job.output_files from job info
+    return job.output_files?.map(file => {
+      const ext = getFileExtension(file.name);
+      return {
+        name: file.name,
+        path: `output_files/${file.name}`,
+        size: formatFileSize(file.size),
+        type: ext,
+        description: getFileDescription(ext),
+        lastModified: file.modified_at,
+        available: true
+      };
+    }) || [];
   }
 
   function copyLogs() {
