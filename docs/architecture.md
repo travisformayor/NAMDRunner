@@ -154,7 +154,7 @@ A desktop application for scientists to manage NAMD molecular dynamics simulatio
 * **Job Automation System** - Complete lifecycle automation with progress tracking and real-time UI feedback.
   > **For automation architecture details**, see [`docs/AUTOMATIONS.md`](AUTOMATIONS.md)
 * **SSH/SFTP** via Rust `ssh2` (libssh2). Password and keyboard-interactive auth match cluster policies.
-* **SQLite** via `rusqlite` with comprehensive schema and status history tracking. See [`docs/DB.md`](DB.md) for complete database patterns.
+* **SQLite** via `rusqlite` using simple document-store pattern for job caching. See [`docs/DB.md`](DB.md) for complete database patterns.
 * **Logging Bridge** - Real-time Rust-to-Frontend logging system for SSH debugging and progress tracking.
 * **Security Validation** - Comprehensive input sanitization, path safety, and secure password handling.
 * **Templating** (NAMD `.conf` + Slurm scripts) via `tera` or `handlebars` - **Phase 5+**: Templates stored as configurable data in database.
@@ -209,10 +209,10 @@ Development mode with simulated cluster responses is built into the core archite
 NAMDRunner uses SQLite for local data persistence with job lifecycle management and status tracking.
 
 **Key Features:**
-- **Local SQLite cache** for job metadata and status history
+- **Local SQLite cache** for job metadata (document-store pattern)
 - **Thread-safe global database** with singleton pattern
 - **Atomic operations** integrated with automation chains
-- **Schema versioning** for development iteration
+- **Zero-migration schema** using JSON serialization
 
 > **For complete database schemas, implementation patterns, and data management details**, see [`docs/DB.md`](DB.md)
 
@@ -234,7 +234,7 @@ NAMDRunner uses SQLite for local data persistence with job lifecycle management 
 ### Data Placement Strategy
 
 #### Storage Architecture
-* **Local**: SQLite cache with job metadata, timestamps, status history. See [`docs/DB.md`](DB.md) for complete schema definitions.
+* **Local**: SQLite cache storing complete job metadata as JSON. See [`docs/DB.md`](DB.md) for schema details.
 * **Remote** (cluster filesystem): JSON metadata files under project/job folders; job scratch directories contain runtime outputs
 * **Single-writer rule**: The application writes JSON metadata; jobs write only inside their scratch/results directories
 
@@ -569,9 +569,9 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
   - Job creation: `src-tauri/src/automations/job_creation.rs::execute_job_creation_with_progress()`
   - Job submission: `src-tauri/src/automations/job_submission.rs::execute_job_submission_with_progress()`
   - Job completion: `src-tauri/src/automations/job_completion.rs::execute_job_completion_with_progress()`
-- **Database Layer** - SQLite persistence with status history tracking
-  > **For complete database schemas, implementation patterns, and data management details**, see [`docs/DB.md`](DB.md)
-  - Main database: `src-tauri/src/database/mod.rs::NAMDRunnerDatabase`
+- **Database Layer** - SQLite document-store for job caching
+  > **For complete database patterns and data management details**, see [`docs/DB.md`](DB.md)
+  - Main database: `src-tauri/src/database/mod.rs::JobDatabase`
 - **Validation System** - Comprehensive input sanitization and business logic validation
   > **For security requirements and implementation patterns**, see [`docs/CONTRIBUTING.md#security-requirements`](CONTRIBUTING.md#security-requirements)
   - Input validation: `src-tauri/src/validation/mod.rs::input` module (sanitization, path traversal prevention)
