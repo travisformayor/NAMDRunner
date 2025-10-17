@@ -127,7 +127,8 @@ export interface GetAllJobsResult {
 
 export interface SyncJobsResult {
   success: boolean;
-  jobs_updated: number;
+  jobs: JobInfo[];           // Complete job list after sync
+  jobs_updated: number;       // Number of jobs updated during sync
   errors: string[];
 }
 

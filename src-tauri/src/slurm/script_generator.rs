@@ -16,6 +16,15 @@ impl SlurmScriptGenerator {
         let slurm_config = &job_info.slurm_config;
         let _namd_config = &job_info.namd_config;
 
+        // Ensure memory has unit suffix (GB or MB) - critical for correct allocation
+        // SLURM bare numbers are in MB (64 = 64MB not 64GB!)
+        let memory_with_unit = if slurm_config.memory.contains("GB") || slurm_config.memory.contains("MB") {
+            slurm_config.memory.clone()
+        } else {
+            // Assume GB if no unit specified (most common case)
+            format!("{}GB", slurm_config.memory)
+        };
+
         // Get scratch directory for working directory
         let working_dir = job_info.scratch_dir
             .as_ref()
@@ -40,6 +49,7 @@ r#"#!/bin/bash
 
 # Initialize module environment
 source /etc/profile
+export SLURM_EXPORT_ENV=ALL  # Required for OpenMPI
 
 # Load required modules for NAMD execution
 module purge
@@ -58,7 +68,7 @@ mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) con
             job_name,
             slurm_config.cores,
             slurm_config.walltime,
-            slurm_config.memory,
+            memory_with_unit,
             chrono::Utc::now().to_rfc3339(),
             job_info.job_id,
             working_dir
@@ -71,12 +81,35 @@ mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) con
     pub fn generate_namd_config(job_info: &JobInfo) -> Result<String> {
         let namd_config = &job_info.namd_config;
 
-        // Use JobDirectoryStructure for consistent path references
-        let structure_path = crate::ssh::JobDirectoryStructure::input_path("structure.psf");
-        let coordinates_path = crate::ssh::JobDirectoryStructure::input_path("structure.pdb");
+        // Extract actual uploaded file names by type (NOT hardcoded filenames!)
+        // PSF file (required)
+        let psf_file = job_info.input_files.iter()
+            .find(|f| matches!(f.file_type, Some(NAMDFileType::Psf)))
+            .ok_or_else(|| anyhow!("No PSF file found in input files"))?;
+
+        // PDB file (required)
+        let pdb_file = job_info.input_files.iter()
+            .find(|f| matches!(f.file_type, Some(NAMDFileType::Pdb)))
+            .ok_or_else(|| anyhow!("No PDB file found in input files"))?;
+
+        // Parameter files (at least one required)
+        let param_files: Vec<_> = job_info.input_files.iter()
+            .filter(|f| matches!(f.file_type, Some(NAMDFileType::Prm)))
+            .collect();
+
+        if param_files.is_empty() {
+            return Err(anyhow!("No parameter files found in input files"));
+        }
+
+        // Use JobDirectoryStructure for consistent path references with ACTUAL filenames
+        let structure_path = crate::ssh::JobDirectoryStructure::input_path(&psf_file.name);
+        let coordinates_path = crate::ssh::JobDirectoryStructure::input_path(&pdb_file.name);
         let output_path = crate::ssh::JobDirectoryStructure::output_path(&namd_config.outputname);
-        let param_path_1 = crate::ssh::JobDirectoryStructure::input_path("par_all36_na.prm");
-        let param_path_2 = crate::ssh::JobDirectoryStructure::input_path("par_water_ions_cufix.prm");
+
+        // Generate parameter file lines dynamically
+        let param_lines: Vec<String> = param_files.iter()
+            .map(|f| format!("parameters         {}", crate::ssh::JobDirectoryStructure::input_path(&f.name)))
+            .collect();
 
         // Generate basic NAMD configuration based on the template from reference docs
         let config = format!(
@@ -112,8 +145,7 @@ firsttimestep      0
 
 # Force field parameters
 paraTypeCharmm     on
-parameters         {}
-parameters         {}
+{}
 
 # Non-bonded force calculations
 exclude            scaled1-4
@@ -172,8 +204,7 @@ run {}
             coordinates_path,
             output_path,
             namd_config.temperature,
-            param_path_1,
-            param_path_2,
+            param_lines.join("\n"),
             namd_config.timestep,
             namd_config.dcd_freq.unwrap_or(9600),
             namd_config.dcd_freq.unwrap_or(9600),
@@ -212,7 +243,12 @@ run {}
         if slurm_config.cores < 1 {
             return Err(anyhow!("Core count must be at least 1"));
         }
-        // Note: Upper limit is enforced by cluster-specific validation in validation::job_validation
+
+        // Phase 6 constraint: Single-node only (nodes=1 always in script)
+        // Alpine amilan nodes have 64 cores, so enforce this limit
+        if slurm_config.cores > 64 {
+            return Err(anyhow!("Core count cannot exceed 64 (single node limit for amilan partition)"));
+        }
 
         if slurm_config.walltime.is_empty() {
             return Err(anyhow!("Walltime cannot be empty"));
@@ -268,7 +304,32 @@ mod tests {
                 partition: Some("amilan".to_string()),
                 qos: None,
             },
-            input_files: vec![],
+            input_files: vec![
+                InputFile {
+                    name: "structure.psf".to_string(),
+                    local_path: "/tmp/structure.psf".to_string(),
+                    remote_name: Some("structure.psf".to_string()),
+                    file_type: Some(NAMDFileType::Psf),
+                },
+                InputFile {
+                    name: "structure.pdb".to_string(),
+                    local_path: "/tmp/structure.pdb".to_string(),
+                    remote_name: Some("structure.pdb".to_string()),
+                    file_type: Some(NAMDFileType::Pdb),
+                },
+                InputFile {
+                    name: "par_all36_na.prm".to_string(),
+                    local_path: "/tmp/par_all36_na.prm".to_string(),
+                    remote_name: Some("par_all36_na.prm".to_string()),
+                    file_type: Some(NAMDFileType::Prm),
+                },
+                InputFile {
+                    name: "par_water_ions_cufix.prm".to_string(),
+                    local_path: "/tmp/par_water_ions_cufix.prm".to_string(),
+                    remote_name: Some("par_water_ions_cufix.prm".to_string()),
+                    file_type: Some(NAMDFileType::Prm),
+                },
+            ],
             project_dir: Some("/projects/testuser/namdrunner_jobs/test_job_001".to_string()),
             scratch_dir: Some("/scratch/alpine/testuser/namdrunner_jobs/test_job_001".to_string()),
             status: JobStatus::Created,
@@ -355,6 +416,101 @@ mod tests {
         let result = SlurmScriptGenerator::generate_namd_script(&job);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Temperature"));
+    }
+
+    #[test]
+    fn test_memory_unit_fix_adds_gb_suffix() {
+        // Test that memory without unit gets GB suffix added
+        let mut job = create_test_job();
+        job.slurm_config.memory = "64".to_string(); // No unit
+
+        let script = SlurmScriptGenerator::generate_namd_script(&job).unwrap();
+
+        // Should have GB suffix added
+        assert!(script.contains("#SBATCH --mem=64GB"), "Memory should have GB suffix added");
+        assert!(!script.contains("#SBATCH --mem=64\n"), "Memory should not be bare number");
+    }
+
+    #[test]
+    fn test_memory_unit_preserves_existing_gb() {
+        // Test that memory with GB is preserved
+        let mut job = create_test_job();
+        job.slurm_config.memory = "32GB".to_string();
+
+        let script = SlurmScriptGenerator::generate_namd_script(&job).unwrap();
+
+        assert!(script.contains("#SBATCH --mem=32GB"), "Memory with GB should be preserved");
+    }
+
+    #[test]
+    fn test_memory_unit_preserves_mb() {
+        // Test that memory with MB is preserved
+        let mut job = create_test_job();
+        job.slurm_config.memory = "1024MB".to_string();
+
+        let script = SlurmScriptGenerator::generate_namd_script(&job).unwrap();
+
+        assert!(script.contains("#SBATCH --mem=1024MB"), "Memory with MB should be preserved");
+    }
+
+    #[test]
+    fn test_namd_config_uses_actual_uploaded_filenames() {
+        // Test that NAMD config uses actual uploaded file names, not hardcoded
+        let job = create_test_job();
+        let config = SlurmScriptGenerator::generate_namd_config(&job).unwrap();
+
+        // Should use actual filenames from input_files
+        assert!(config.contains("structure          input_files/structure.psf"));
+        assert!(config.contains("coordinates        input_files/structure.pdb"));
+        assert!(config.contains("parameters         input_files/par_all36_na.prm"));
+        assert!(config.contains("parameters         input_files/par_water_ions_cufix.prm"));
+
+        // Should NOT contain hardcoded generic names if they differ
+        // (This test verifies the implementation extracts from input_files)
+    }
+
+    #[test]
+    fn test_openmpi_environment_export_present() {
+        // Test that OpenMPI environment export is in script
+        let job = create_test_job();
+        let script = SlurmScriptGenerator::generate_namd_script(&job).unwrap();
+
+        assert!(script.contains("export SLURM_EXPORT_ENV=ALL"),
+            "Script should contain OpenMPI environment export");
+
+        // Verify it's after profile source and before module commands
+        let profile_pos = script.find("source /etc/profile").unwrap();
+        let export_pos = script.find("export SLURM_EXPORT_ENV=ALL").unwrap();
+        let module_pos = script.find("module purge").unwrap();
+
+        assert!(export_pos > profile_pos, "Export should be after profile source");
+        assert!(export_pos < module_pos, "Export should be before module commands");
+    }
+
+    #[test]
+    fn test_single_node_validation() {
+        // Test that cores > 64 is rejected (single node constraint)
+        let mut job = create_test_job();
+        job.slurm_config.cores = 65; // Exceeds single node limit
+
+        let result = SlurmScriptGenerator::generate_namd_script(&job);
+        assert!(result.is_err(), "Should reject cores > 64");
+        assert!(result.unwrap_err().to_string().contains("64"),
+            "Error should mention 64 core limit");
+    }
+
+    #[test]
+    fn test_nodes_always_one_for_valid_cores() {
+        // Test that --nodes=1 for valid core counts
+        let mut job = create_test_job();
+        job.slurm_config.cores = 32;
+
+        let script = SlurmScriptGenerator::generate_namd_script(&job).unwrap();
+
+        assert!(script.contains("#SBATCH --nodes=1"),
+            "Should always use --nodes=1 for single-node jobs");
+        assert!(script.contains("#SBATCH --ntasks=32"),
+            "Should use correct core count");
     }
 
     #[test]

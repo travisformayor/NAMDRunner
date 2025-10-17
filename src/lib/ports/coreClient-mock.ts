@@ -11,7 +11,6 @@ import type {
   GetAllJobsResult,
   SyncJobsResult,
   DeleteJobResult,
-  DiscoverJobsResult,
   RefetchLogsResult,
   FileUpload,
   UploadResult,
@@ -378,6 +377,7 @@ export class MockCoreClient implements ICoreClient {
     if (!this.stateManager.isConnected()) {
       return {
         success: false,
+        jobs: [],
         jobs_updated: 0,
         errors: ['Must be connected to cluster to sync jobs'],
       };
@@ -402,6 +402,7 @@ export class MockCoreClient implements ICoreClient {
 
     return {
       success: true,
+      jobs: Array.from(this.jobs.values()),
       jobs_updated: updatesCount,
       errors: [],
     };
@@ -436,15 +437,6 @@ export class MockCoreClient implements ICoreClient {
     return {
       success: true,
       job_info: job,
-    };
-  }
-
-  async discoverJobsFromServer(): Promise<DiscoverJobsResult> {
-    // Mock implementation: simulate finding 3 jobs on server, but 0 imported (already in DB)
-    return {
-      success: true,
-      jobs_found: 3,
-      jobs_imported: 0,
     };
   }
 

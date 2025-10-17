@@ -307,6 +307,7 @@ async fn sync_jobs_demo() -> SyncJobsResult {
     if !is_connected {
         return SyncJobsResult {
             success: false,
+            jobs: vec![],
             jobs_updated: 0,
             errors: vec!["Not connected to cluster".to_string()],
         };
@@ -318,6 +319,7 @@ async fn sync_jobs_demo() -> SyncJobsResult {
     if should_fail {
         return SyncJobsResult {
             success: false,
+            jobs: vec![],
             jobs_updated: 0,
             errors: vec!["Network error: Unable to contact SLURM controller".to_string()],
         };
@@ -339,8 +341,14 @@ async fn sync_jobs_demo() -> SyncJobsResult {
         }).unwrap_or(0)
     };
 
+    // Get complete job list from demo state
+    let jobs = get_demo_state(|state| {
+        state.jobs.values().cloned().collect::<Vec<_>>()
+    }).unwrap_or_default();
+
     SyncJobsResult {
         success: true,
+        jobs,
         jobs_updated,
         errors: vec![],
     }
@@ -351,20 +359,15 @@ async fn sync_jobs_real() -> SyncJobsResult {
     info_log!("[Sync Jobs] Starting real job sync");
 
     match automations::sync_all_jobs().await {
-        Ok(results) => {
-            let jobs_updated = results.iter().filter(|r| r.updated).count() as u32;
-            info_log!("[Sync Jobs] Successfully synced {} jobs", jobs_updated);
-
-            SyncJobsResult {
-                success: true,
-                jobs_updated,
-                errors: vec![],
-            }
+        Ok(result) => {
+            info_log!("[Sync Jobs] Successfully synced {} jobs", result.jobs_updated);
+            result
         }
         Err(e) => {
             error_log!("[Sync Jobs] Failed to sync jobs: {}", e);
             SyncJobsResult {
                 success: false,
+                jobs: vec![],
                 jobs_updated: 0,
                 errors: vec![e.to_string()],
             }

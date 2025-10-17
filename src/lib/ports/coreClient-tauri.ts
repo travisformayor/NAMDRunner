@@ -12,7 +12,6 @@ import type {
   GetAllJobsResult,
   SyncJobsResult,
   DeleteJobResult,
-  DiscoverJobsResult,
   RefetchLogsResult,
   FileUpload,
   UploadResult,
@@ -95,10 +94,6 @@ export class TauriCoreClient implements ICoreClient {
 
   async refetchSlurmLogs(job_id: JobId): Promise<RefetchLogsResult> {
     return invoke('refetch_slurm_logs', { job_id });
-  }
-
-  async discoverJobsFromServer(): Promise<DiscoverJobsResult> {
-    return invoke('discover_jobs_from_server');
   }
 
   // File management

@@ -243,7 +243,20 @@ function createJobsStore() {
 
           const syncResult = await CoreClientFactory.getClient().syncJobs();
 
-          if (!syncResult.success) {
+          if (syncResult.success) {
+            // Pure caching - backend returns complete job list (discovery happens automatically if DB empty)
+            if (typeof window !== 'undefined' && window.sshConsole) {
+              window.sshConsole.addDebug(`[SYNC] Sync completed - ${syncResult.jobs_updated} job(s) updated, ${syncResult.jobs.length} total jobs`);
+            }
+
+            update(state => ({
+              ...state,
+              jobs: syncResult.jobs || [],
+              lastSyncTime: new Date(),
+              hasEverSynced: true,
+              isSyncing: false
+            }));
+          } else {
             // Sync failed - log error and keep existing jobs
             if (typeof window !== 'undefined' && window.sshConsole) {
               window.sshConsole.addDebug(`[SYNC] Job sync failed: ${syncResult.errors.join(', ')}`);
@@ -254,69 +267,6 @@ function createJobsStore() {
               hasEverSynced: true,
               isSyncing: false
             }));
-            return;
-          }
-
-          if (typeof window !== 'undefined' && window.sshConsole) {
-            window.sshConsole.addDebug(`[SYNC] Sync completed - ${syncResult.jobs_updated} job(s) updated`);
-          }
-
-          // After sync completes, fetch updated jobs from database
-          const result = await CoreClientFactory.getClient().getAllJobs();
-
-          if (result.success && result.jobs) {
-            // Check if database is empty - trigger job discovery if so
-            if (result.jobs.length === 0) {
-              if (typeof window !== 'undefined' && window.sshConsole) {
-                window.sshConsole.addDebug('[JOBS] No jobs in database - attempting to discover jobs from server');
-              }
-
-              // Attempt to discover jobs from server
-              const discoveryResult = await CoreClientFactory.getClient().discoverJobsFromServer();
-
-              if (discoveryResult.success && discoveryResult.jobs_imported > 0) {
-                if (typeof window !== 'undefined' && window.sshConsole) {
-                  window.sshConsole.addDebug(`[JOBS] Discovered ${discoveryResult.jobs_imported} jobs from server`);
-                }
-
-                // Re-fetch jobs after discovery
-                const updatedResult = await CoreClientFactory.getClient().getAllJobs();
-                update(state => ({
-                  ...state,
-                  jobs: updatedResult.jobs || [],
-                  lastSyncTime: new Date(),
-                  hasEverSynced: true,
-                  isSyncing: false
-                }));
-                return;
-              } else if (discoveryResult.success) {
-                if (typeof window !== 'undefined' && window.sshConsole) {
-                  window.sshConsole.addDebug('[JOBS] No jobs found on server to discover');
-                }
-              }
-            }
-
-            // Update jobs and sync time
-            update(state => ({
-              ...state,
-              jobs: result.jobs || [],
-              lastSyncTime: new Date(),
-              hasEverSynced: true,
-              isSyncing: false
-            }));
-            // Jobs synced successfully from backend
-          } else {
-            // Keep existing jobs but update sync time on error
-            update(state => ({
-              ...state,
-              lastSyncTime: new Date(),
-              hasEverSynced: true,
-              isSyncing: false
-            }));
-            // Sync failed - maintaining existing jobs
-            if (typeof window !== 'undefined' && window.sshConsole) {
-              window.sshConsole.addDebug(`[JOBS] Sync failed: ${result.error}`);
-            }
           }
         }
       } catch (error) {

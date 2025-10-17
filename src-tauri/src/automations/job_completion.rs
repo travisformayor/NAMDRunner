@@ -1,119 +1,81 @@
 use anyhow::{Result, anyhow};
-use tauri::AppHandle;
 use chrono::Utc;
 
 use crate::types::{JobStatus, JobInfo};
-use crate::validation::input;
 use crate::ssh::get_connection_manager;
 use crate::database::with_database;
-use crate::{info_log, debug_log, error_log};
+use crate::{info_log, error_log};
 
-/// Job completion automation that preserves critical results from scratch to project directory
-/// This follows NAMDRunner's direct function patterns with progress reporting through callbacks.
+/// Execute job completion automation (called automatically when job reaches terminal state)
 ///
-/// Key functionality: Detects completed jobs, copies important output files from temporary
-/// scratch directory to permanent project directory for long-term storage before cleanup.
-pub async fn execute_job_completion_with_progress(
-    _app_handle: AppHandle,
-    job_id: String,
-    progress_callback: impl Fn(&str),
-) -> Result<JobInfo> {
-    progress_callback("Starting job completion automation...");
-    info_log!("[Job Completion] Starting job completion for: {}", job_id);
+/// This function:
+/// 1. Rsyncs all files from scratch directory to project directory (DATA BOUNDARY CROSSED)
+/// 2. Fetches SLURM logs from project directory (after rsync)
+/// 3. Updates database with final state
+///
+/// Called automatically by job_sync when a job reaches terminal state (Completed, Failed, etc.)
+pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
+    let job_id = job.job_id.clone();
+    info_log!("[Job Completion] Starting automatic completion for: {}", job_id);
 
-    // Validate and sanitize job ID
-    let clean_job_id = input::sanitize_job_id(&job_id)
-        .map_err(|e| anyhow!("Invalid job ID: {}", e))?;
-    debug_log!("[Job Completion] Sanitized job ID: {}", clean_job_id);
-
-    progress_callback("Loading job information...");
-
-    // Load job from database
-    let clean_job_id_clone = clean_job_id.clone();
-    let mut job_info = with_database(move |db| db.load_job(&clean_job_id_clone))
-        .map_err(|e| {
-            error_log!("[Job Completion] Database error loading job {}: {}", clean_job_id, e);
-            anyhow!("Database error: {}", e)
-        })?
-        .ok_or_else(|| {
-            error_log!("[Job Completion] Job {} not found", clean_job_id);
-            anyhow!("Job {} not found", clean_job_id)
-        })?;
-    debug_log!("[Job Completion] Loaded job: {} (status: {:?})", clean_job_id, job_info.status);
-
-    // Validate job is in finished state
-    if !matches!(job_info.status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
-        error_log!("[Job Completion] Job {} not finished, status: {:?}", clean_job_id, job_info.status);
-        return Err(anyhow!("Job has not finished running (status: {:?}). Only Completed, Failed, or Cancelled jobs can have results synced.", job_info.status));
+    // Validate job is in terminal state
+    if !matches!(job.status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
+        return Err(anyhow!("Job not in terminal state: {:?}", job.status));
     }
-
-    progress_callback("Validating connection...");
 
     // Verify SSH connection is active
     let connection_manager = get_connection_manager();
     if !connection_manager.is_connected().await {
         error_log!("[Job Completion] SSH connection not active");
-        return Err(anyhow!("Please connect to the cluster to preserve job results"));
+        return Err(anyhow!("Not connected to cluster"));
     }
 
     // Ensure we have both project and scratch directories
-    let project_dir = job_info.project_dir.as_ref()
+    let project_dir = job.project_dir.as_ref()
         .ok_or_else(|| {
-            error_log!("[Job Completion] Job {} has no project directory", clean_job_id);
+            error_log!("[Job Completion] Job {} has no project directory", job_id);
             anyhow!("Job has no project directory")
         })?;
-    let scratch_dir = job_info.scratch_dir.as_ref()
+    let scratch_dir = job.scratch_dir.as_ref()
         .ok_or_else(|| {
-            error_log!("[Job Completion] Job {} has no scratch directory", clean_job_id);
+            error_log!("[Job Completion] Job {} has no scratch directory", job_id);
             anyhow!("Job has no scratch directory")
         })?;
-    info_log!("[Job Completion] Preserving results from {} to {}", scratch_dir, project_dir);
 
-    progress_callback("Mirroring scratch directory back to project...");
-
-    // Use rsync to mirror entire scratch directory back to project
-    // Note: source must end with / to sync contents, destination should NOT end with / to sync into it
+    // CRITICAL: Rsync scratch→project FIRST (DATA BOUNDARY CROSSED)
+    // This preserves all results including SLURM logs before they're cleaned up
     let source_with_slash = if scratch_dir.ends_with('/') {
         scratch_dir.to_string()
     } else {
         format!("{}/", scratch_dir)
     };
 
-    info_log!("[Job Completion] Mirroring scratch to project: {} -> {}", scratch_dir, project_dir);
+    info_log!("[Job Completion] Rsyncing scratch→project: {} -> {}", scratch_dir, project_dir);
     connection_manager.sync_directory_rsync(&source_with_slash, project_dir).await
         .map_err(|e| {
-            error_log!("[Job Completion] Failed to mirror scratch directory: {}", e);
-            anyhow!("Failed to mirror scratch directory to project: {}", e)
+            error_log!("[Job Completion] Rsync failed: {}", e);
+            anyhow!("Failed to rsync: {}", e)
         })?;
 
-    info_log!("[Job Completion] Successfully mirrored scratch directory back to project");
+    info_log!("[Job Completion] Rsync complete - all files now in project directory");
 
-    progress_callback("Caching SLURM logs...");
-
-    // Fetch and cache SLURM logs if not already cached
-    if let Err(e) = crate::automations::fetch_slurm_logs_if_needed(&mut job_info).await {
+    // NOW fetch logs from project directory (after rsync)
+    if let Err(e) = crate::automations::fetch_slurm_logs_if_needed(job).await {
         error_log!("[Job Completion] Failed to fetch logs: {}", e);
-        // Don't fail completion if log fetch fails
+        // Don't fail completion if log fetch fails - logs are nice-to-have
     }
 
-    progress_callback("Updating job status...");
-    debug_log!("[Job Completion] Updating job status in database");
-
-    // Update job info with completion timestamp and mark as results preserved
-    job_info.updated_at = Some(Utc::now().to_rfc3339());
-
-    // Save updated job info to database
-    let job_info_clone = job_info.clone();
-    with_database(move |db| db.save_job(&job_info_clone))
+    // Update database
+    job.updated_at = Some(Utc::now().to_rfc3339());
+    let job_clone = job.clone();
+    with_database(move |db| db.save_job(&job_clone))
         .map_err(|e| {
-            error_log!("[Job Completion] Failed to update job in database: {}", e);
-            anyhow!("Failed to update job in database: {}", e)
+            error_log!("[Job Completion] Failed to update database: {}", e);
+            anyhow!("Failed to update database: {}", e)
         })?;
 
-    progress_callback("Job completion automation finished - results synced from scratch");
-    info_log!("[Job Completion] Job completion finished successfully: {} (results synced from scratch)", clean_job_id);
-
-    Ok(job_info)
+    info_log!("[Job Completion] Job completion successful: {}", job_id);
+    Ok(())
 }
 
 #[cfg(test)]

@@ -71,7 +71,8 @@ pub struct GetAllJobsResult {
 #[derive(Debug, Serialize)]
 pub struct SyncJobsResult {
     pub success: bool,
-    pub jobs_updated: u32,
+    pub jobs: Vec<JobInfo>,        // Complete job list after sync
+    pub jobs_updated: u32,          // Number of jobs updated during sync
     pub errors: Vec<String>,
 }
 
