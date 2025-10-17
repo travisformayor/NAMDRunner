@@ -1,7 +1,7 @@
 # [Phase Milestone] Implementation Prompt
 
 ## Project Overview
-You are implementing **[Phase X.Y: Milestone Name]** for NAMDRunner, a desktop application for managing NAMD molecular dynamics simulations on SLURM HPC clusters. This is a **[new feature/enhancement/refactoring]** built with Tauri v2 (Rust backend) + Svelte (TypeScript frontend), using a proven Python/CustomTkinter implementation as reference.
+You are implementing **[Phase X.Y: Milestone Name]** for NAMDRunner, a desktop application for managing NAMD molecular dynamics simulations on SLURM HPC clusters. This is a **[new feature/enhancement/refactoring]** built with Tauri v2 (Rust backend) + Svelte (TypeScript frontend).
 
 ## Your Mission: [Implementation Goal]
 Implement **[specific functionality]** with core capabilities:
@@ -23,10 +23,10 @@ Implement **[specific functionality]** with core capabilities:
 - `docs/ARCHITECTURE.md` - Implementation progress tracker (update as you build)
 - `tasks/[specific-task].md` - Complete implementation requirements and constraints
 
-### 3. Reference Implementation Knowledge
+### 3. Cluster Integration Reference
 - `docs/reference/slurm-commands-reference.md` - **Working SLURM patterns** and command reference
 - `docs/reference/namd-commands-reference.md` - NAMD execution patterns and templates
-- `docs/reference/python-implementation-reference.md` - Comprehensive lessons from Python implementation
+- `docs/reference/alpine-cluster-reference.md` - Alpine cluster configuration and resource limits
 - `docs/DB.md` - Database schema and JSON metadata formats
 
 ### 4. Development Support
@@ -82,11 +82,11 @@ rg "[function-pattern]" src/[specific-file].rs -A 15
 
 **Expected Finding**: [What you should discover about current implementation]
 
-### 3. Reference-Driven Development
+### 3. Pattern-Driven Development
 - **Start with proven patterns** from `docs/reference/[specific-reference].md`
 - **Use established data formats** from `docs/DB.md`
-- **Learn from Python lessons** in `docs/reference/python-implementation-reference.md`
-- **Improve and modernize** with Tauri/Rust advantages
+- **Learn from documented patterns** in cluster integration reference docs
+- **Leverage Tauri/Rust advantages** for improved security and performance
 
 ### 4. Implementation Strategy Order
 **Step 1: [Foundation Work]**
@@ -175,7 +175,7 @@ npm run lint            # TypeScript/Svelte linting
 - **[Domain] questions** - Check `docs/reference/[specific-reference].md` first
 - **Data format questions** - See `docs/DB.md`
 - **Architecture decisions** - Review `docs/ARCHITECTURE.md` and ask for input
-- **Python implementation questions** - Look at `docs/reference/python-implementation-reference.md`
+- **Cluster integration patterns** - Review reference docs for proven approaches
 
 ### Communication Protocol
 - **Present your plan** before starting major implementation work

@@ -170,6 +170,40 @@ NAMDRunner integrates with SLURM workload managers for job submission and monito
 * **Maintainability**: typed boundaries (TS ↔ Rust), clear module seams, small binary.
 * **UI velocity**: Svelte's component model is simple, predictable, and testable.
 
+### Architectural Patterns
+
+**Manager Separation:**
+NAMDRunner maintains strict separation of concerns across subsystems:
+- **SSH/Connection Manager**: All remote operations and connection lifecycle
+- **Job Manager**: Job lifecycle, metadata, and SLURM interactions
+- **Database/Cache**: Local state persistence and offline capabilities
+
+**Benefits:**
+- Clean boundaries enable independent testing
+- Each subsystem can be mocked separately
+- Clear ownership prevents circular dependencies
+- Easy to reason about where functionality belongs
+
+**Offline-First Design:**
+Local SQLite database serves as source of truth for UI, with remote operations updating asynchronously.
+
+**Key benefits:**
+- UI remains responsive during network operations
+- Reduces unnecessary cluster queries
+- Works reliably on unstable connections
+- Simplifies state management
+
+**Sync pattern:** User-controlled explicit operations (not automatic background sync). Users understand and control when data moves between local and remote.
+
+**Mock Mode Development:**
+Development mode with simulated cluster responses is built into the core architecture:
+- Complete offline development without cluster access
+- UI work without SSH setup required
+- Consistent automated testing without network dependency
+- Demo mode for presentations and user evaluation
+
+**Implementation:** Abstract cluster interface enables swapping between real and mock implementations. All SSH operations go through a single interface that can be configured at startup.
+
 ### Database Architecture
 
 NAMDRunner uses SQLite for local data persistence with job lifecycle management and status tracking.

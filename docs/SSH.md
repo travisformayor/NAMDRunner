@@ -34,8 +34,6 @@
   - [Mock/Real Mode Switching](#mockreal-mode-switching)
 - [Testing & Development](#testing--development)
   - [SSH-Specific Testing Notes](#ssh-specific-testing-notes)
-- [Python Implementation Lessons](#python-implementation-lessons)
-  - [Key SSH/SFTP Insights Applied to Rust Implementation](#key-sshsftp-insights-applied-to-rust-implementation)
 - [Troubleshooting](#troubleshooting)
   - [SSH-Specific Issues](#ssh-specific-issues)
 
@@ -310,6 +308,31 @@ Connection state checking and recovery logic is in `src-tauri/src/ssh/manager.rs
 #### Reusing Connections
 Connection management and lifecycle is handled by the singleton ConnectionManager in `src-tauri/src/ssh/manager.rs`. Multiple operations reuse the same connection instance.
 
+**Connection reuse benefits:**
+- SSH connection establishment is expensive (~500ms per connection)
+- Reuse connections for multiple operations when possible
+- Limit concurrent connections (3 max recommended)
+- Batch related operations to minimize connection overhead
+
+**Performance impact:**
+- Individual connections: 10 operations × 500ms = 5 seconds
+- Reused connection: 10 operations × ~50ms = 500ms + 500ms initial = 1 second
+
+### Performance Bottlenecks
+
+**Common performance issues:**
+- **SFTP uploads**: Large files (>50MB) take minutes (limited by SSH protocol, not bandwidth)
+- **Network latency**: ~200ms overhead per SSH command minimum
+- **SLURM queries**: `sacct` can take 5-10 seconds when scheduler is busy
+- **Excessive queries**: Individual status checks scale poorly (N jobs = N SSH commands)
+
+**Optimization strategies:**
+- **Batch SLURM queries**: Single SSH command for multiple jobs (comma-separated IDs)
+- **Status caching**: 30-60 second TTL prevents redundant queries (see [slurm-commands-reference.md](reference/slurm-commands-reference.md#status-caching-strategy))
+- **Background operations**: Never block UI thread for network operations
+- **Progress indicators**: Show user feedback for long operations (uploads, sync)
+- **Connection reuse**: Establish once, use for multiple operations
+
 ### Async Patterns
 
 #### Async Operations with Blocking Libraries
@@ -338,8 +361,8 @@ SSH modules are organized in `src-tauri/src/ssh/` with connection, manager, comm
 
 ### TypeScript Integration
 
-#### Frontend SSH Service
-Frontend SSH service integration follows the IPC patterns defined in [`docs/API.md`](API.md) with proper error mapping between Rust and TypeScript.
+#### Frontend IPC Layer
+Frontend communicates with Rust SSH backend via Tauri IPC commands, following patterns defined in [`docs/API.md`](API.md) with proper error mapping between Rust and TypeScript.
 
 ### Demo/Real Mode Switching
 
@@ -354,18 +377,6 @@ Demo mode selection based on environment variables and build configuration is im
 - Mock SSH infrastructure is in `src-tauri/src/ssh/test_utils.rs`
 - Environment-based mock switching via `USE_MOCK_SSH=true`
 - Error classification testing focuses on business logic, not ssh2 library
-
-## Python Implementation Lessons
-
-> **For comprehensive lessons learned from 18 months of Python implementation**, see [`docs/reference/python-implementation-reference.md`](reference/python-implementation-reference.md).
-
-### Key SSH/SFTP Insights Applied to Rust Implementation
-
-1. **Manager Separation Pattern**: The Python `SSHManager` separation is maintained in Rust modules (`src-tauri/src/ssh/`)
-2. **Command Execution**: Critical pattern of `source /etc/profile && module load slurm/alpine` is implemented in `src-tauri/src/ssh/commands.rs`
-3. **Error Handling**: Retry patterns from Python experience inform `src-tauri/src/retry.rs`
-4. **Progress Reporting**: Chunked 32KB uploads with progress callbacks are in `src-tauri/src/ssh/sftp.rs`
-5. **Demo Mode**: Environment-based demo/real switching is implemented in `src-tauri/src/demo/mode.rs`
 
 ## Troubleshooting
 

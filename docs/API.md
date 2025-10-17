@@ -393,6 +393,18 @@ const VALIDATION_ERROR: NAMDRunnerError = {
 };
 ```
 
+### Best Practices
+
+**Error message quality:**
+Provide actionable error messages. Instead of "Job failed", show "Job failed: Out of memory. Requested 32GB, consider increasing to 64GB."
+
+**Retry behavior:**
+Use the `retryable` field to determine whether operations should be retried with exponential backoff or fail immediately.
+
+> **For retry implementation patterns**, see [`docs/SSH.md#retry-strategies`](SSH.md#retry-strategies)
+> **For SLURM error messages**, see [`docs/reference/slurm-commands-reference.md#error-handling`](reference/slurm-commands-reference.md#error-handling)
+> **For NAMD error messages**, see [`docs/reference/namd-commands-reference.md#error-handling`](reference/namd-commands-reference.md#error-handling)
+
 
 ## Rust Type Definitions
 

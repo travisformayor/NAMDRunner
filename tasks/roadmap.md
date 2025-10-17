@@ -13,7 +13,6 @@ Build a **single-job MVP first** that handles the core workflow: create job → 
 
 **Breaking Changes Policy**: Breaking changes are acceptable and expected during all development phases. Each phase can modify, improve, or completely rewrite previous implementations. No backwards compatibility is required with:
 - Previous development phases
-- Python reference implementation
 - Earlier iterations of schemas or interfaces
 - Test data or mock implementations
 

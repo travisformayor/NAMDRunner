@@ -239,7 +239,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 1. **Check workflow logs** in GitHub Actions tab
 2. **Download artifacts** from failed builds to inspect
 3. **Test locally** with same Node.js/Rust versions as CI
-4. **Compare with** the Python reference implementation patterns
+4. **Review** cluster integration patterns in reference docs
 
 ### Getting Help
 

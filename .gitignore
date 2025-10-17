@@ -2,7 +2,6 @@
 .DS_Store
 
 # Development
-docs/*/NAMDRun-python/
 
 # Dependencies
 node_modules

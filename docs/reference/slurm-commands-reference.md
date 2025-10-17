@@ -2,7 +2,6 @@
 
 > **📚 For cluster-specific details**, see [`alpine-cluster-reference.md`](alpine-cluster-reference.md)
 > **🔐 For SSH/SFTP patterns**, see [`../SSH.md`](../SSH.md)
-> **🔧 For implementation patterns**, see `python-implementation-reference.md`
 > **⚙️ For dynamic configuration**, see Phase 5 Settings Page architecture
 
 This document provides a complete reference of SLURM commands and patterns. **Note**: Starting in Phase 5, resource limits and partition information will be discoverable via the Settings page rather than hardcoded.
@@ -404,6 +403,70 @@ sacctmgr show qos format=name,priority,maxtres,maxwall --noheader
 # Module not found
 "bash: module: command not found"
 # Fix: source /etc/profile
+```
+
+### SLURM Error Messages and Solutions
+
+**User-friendly error mapping:**
+
+| SLURM Error | Category | User Message | Actionable Guidance |
+|-------------|----------|--------------|---------------------|
+| `Invalid partition name specified` | Configuration | Invalid partition selected | Check available partitions for your account |
+| `Requested node configuration not available` | Resources | Resource limits exceeded | Reduce cores or memory request |
+| `Job violates accounting/QOS policy` | Authorization | Quota or permission issue | Contact cluster administrator |
+| `Access denied` | Authentication | Authentication failure | Verify credentials and account status |
+| `sbatch: error: Batch job submission failed` | Submission | Job submission failed | Check SLURM script syntax and resource requests |
+
+**Retry behavior:**
+- **Retry with backoff**: Transient SLURM scheduler errors, temporary module loading failures
+- **Fail immediately**: Invalid partition names, insufficient resource quotas, authentication failures
+
+## SLURM Integration Best Practices
+
+### Command Execution Pattern
+
+All SLURM commands require proper environment initialization:
+
+```bash
+source /etc/profile && module load slurm/alpine && <command>
+```
+
+**Critical requirements:**
+- Always initialize environment (`source /etc/profile`)
+- Load required modules before every command
+- Parse both stdout AND stderr (errors may appear in either)
+- Handle command timeouts gracefully
+- Batch related commands when possible to reduce SSH round trips
+
+### Status Caching Strategy
+
+**Cache SLURM query results** to avoid excessive scheduler load:
+- Minimum cache TTL: 30-60 seconds
+- Cache active job status (`squeue` results)
+- Cache completed job status (`sacct` results)
+- Invalidate cache on explicit user refresh
+
+**Performance impact:**
+- Without caching: Every UI update queries SLURM (can be 10+ queries/second)
+- With caching: Queries limited to 1-2 per minute during normal operation
+- Reduces scheduler load and improves UI responsiveness
+
+**Implementation pattern:**
+```rust
+// Cache structure
+struct StatusCache {
+    last_update: Instant,
+    ttl: Duration,
+    cached_statuses: HashMap<String, JobStatus>,
+}
+
+// Check cache before querying
+if cache.is_valid() {
+    return cache.get(job_id);
+}
+// Query SLURM and update cache
+let status = query_slurm(job_id);
+cache.update(job_id, status);
 ```
 
 ## Directory Patterns

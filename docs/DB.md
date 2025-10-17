@@ -9,11 +9,9 @@ This document defines all data persistence patterns for NAMDRunner, including SQ
 - [SQLite Schema (Phase 1 Version)](#sqlite-schema-phase-1-version)
   - [Jobs Table](#jobs-table)
   - [Application Metadata Table](#application-metadata-table)
-  - [Python Implementation Reference](#python-implementation-reference)
 - [File Organization Requirements](#file-organization-requirements)
   - [Directory Structure](#directory-structure)
   - [File Naming Conventions](#file-naming-conventions)
-  - [Python Implementation Directory Pattern (Reference)](#python-implementation-directory-pattern-reference)
 - [Validation Rules](#validation-rules)
   - [Job ID Format](#job-id-format)
   - [File Path Validation](#file-path-validation)
@@ -159,19 +157,6 @@ INSERT OR IGNORE INTO app_metadata (key, value, updated_at)
 VALUES ('schema_version', '1.0', datetime('now'));
 ```
 
-### Python Implementation Reference
-
-The Python version used more complex schemas that inform our design choices:
-
-#### Job Groups (Future Implementation)
-Python used UUID-based group IDs and multi-stage workflows:
-```sql
--- Python implementation patterns (for reference)
--- job_groups table with UUID group IDs
--- job_stages table with stage_id, stage_number, stage_name
--- job_outputs table for cached SLURM stdout/stderr
-```
-
 #### Design Patterns
 - **Data Integrity**: Validate JSON before parsing, handle missing fields gracefully
 - **Status Values**: Use clear, descriptive status names
@@ -220,19 +205,6 @@ Python used UUID-based group IDs and multi-stage workflows:
 - **NAMD Log**: `namd_output.log`
 - **Trajectory**: `output.dcd`
 - **Restart files**: `restart.coor`, `restart.vel`, `restart.xsc`
-
-### Python Implementation Directory Pattern (Reference)
-The Python version used this structure (informational for future multi-stage support):
-```
-/projects/$USER/namdrunner_jobs/
-├── <job_group_name>/
-│   ├── job_group_info.json      # Multi-stage metadata
-│   ├── input_files/
-│   └── stage_1/
-       ├── config.namd
-       ├── job.sbatch
-       └── job_<id>.out
-```
 
 ## Validation Rules
 

@@ -81,7 +81,7 @@ new_function() // Purpose and integration point
 - **NAMDRunner patterns**: [Internal architecture/testing/security docs]
 - **Implementation files**: [Key source files and functions to modify/reference]
 - **Specific docs**: [What documentation from `docs/` to check first]
-- **Python reference (optional)**: [Proven patterns to adapt from reference implementation]
+- **Reference patterns**: [Proven cluster integration patterns from reference docs]
 
 ## Progress Log
 [Date] - [What was done, blockers, decisions made]

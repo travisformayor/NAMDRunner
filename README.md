@@ -4,7 +4,7 @@ A desktop application for managing NAMD molecular dynamics simulations on SLURM 
 
 ## What is NAMDRunner?
 
-NAMDRunner simplifies the process of running molecular dynamics simulations on remote computing clusters. It provides a user-friendly interface to:
+Desktop app for NAMD molecular dynamics on SLURM clusters. Built with Tauri v2 (Rust) + Svelte (TypeScript). NAMDRunner simplifies the process of running molecular dynamics simulations on remote computing clusters. It provides a user-friendly interface to:
 
 - Connect securely to your HPC cluster
 - Configure NAMD simulation parameters
@@ -36,6 +36,17 @@ chmod +x NAMDRunner-*.AppImage
 ```
 
 ## Quick Start
+
+### Setup
+```bash
+# Prerequisites: Node.js LTS, Rust toolchain
+git clone [repo]
+cd namdrunner
+npm install
+
+# Launch development app
+npm run tauri dev
+```
 
 1. **Launch NAMDRunner** from your applications menu or desktop
 2. **Connect to Cluster** - Enter your cluster hostname and credentials

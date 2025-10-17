@@ -755,6 +755,34 @@ npm run test:e2e        # Desktop E2E testing (Linux)
 ### Why This Works
 Scientists need reliability over performance. A desktop app that safely handles credentials and prevents security vulnerabilities is more valuable than one optimized for millisecond performance differences.
 
+**Most valuable testing insights:**
+- **Integration testing finds more bugs than unit tests** - SSH operations and cluster behavior have many edge cases
+- **Mock mode enables offline testing** - No cluster required for development
+- **Test error conditions explicitly** - Invalid input, network failures, etc.
+
+### Development Process Best Practices
+
+**Task discipline:**
+- **One task at a time** prevents scope creep
+- **Comprehensive documentation** helps with context switching
+- **Clear completion criteria** prevents "90% done" syndrome
+
+**Testing approach:**
+- Mock mode for offline development and automated testing
+- Periodic integration tests with real cluster
+- Focus on business logic, not external library internals
+
+**Documentation priorities:**
+- **Command reference docs** with exact syntax (most valuable)
+- **Cluster-specific quirks** and workarounds
+- **Working example** scripts that are proven to function
+- **Error message catalog** with solutions
+
+**Avoid:**
+- Excessive architecture diagrams (code is the truth)
+- Theoretical design patterns without clear benefit
+- Premature optimization documentation
+
 ### Mock Development Philosophy
 
 **Simple, predictable mocks for fast development feedback** - avoid random behavior and complex simulation in favor of deterministic responses that enable reliable debugging.

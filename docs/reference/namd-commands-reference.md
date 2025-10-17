@@ -1,7 +1,6 @@
 # NAMD Commands Reference
 
 > **📚 For cluster-specific details**, see [`alpine-cluster-reference.md`](alpine-cluster-reference.md)
-> **🔧 For implementation patterns**, see `python-implementation-reference.md`
 > **⚙️ For dynamic configuration**, see Phase 5 Settings Page architecture
 
 This document provides a complete reference of NAMD configuration patterns, command execution, and file management. **Note**: Starting in Phase 5, these patterns will be discoverable and configurable via the Settings page rather than hardcoded.
@@ -612,6 +611,28 @@ Stage 5: Production (k=0, no restraints)
 3. **Production runs**: 48 cores, 32GB, 24 hours
 4. **Large systems**: 64-128 cores, 64-128GB, extended walltime
 
+### Multi-Stage Job Management (Notes for Future)
+
+**Stage dependencies:**
+- Each stage uses the previous stage's restart files (.coor, .vel, .xsc)
+- Files must be kept together as a set (cannot mix files from different stages)
+- Timestep information is crucial for restart continuity
+
+**Restart file requirements:**
+- Always verify restart files exist before submitting continuation
+- Include timestep recovery logic in NAMD configs (see restart templates above)
+- Keep restart files in consistent locations (use relative paths in configs)
+
+**File organization for multi-stage workflows:**
+
+TBD
+
+**Stage progression workflow:**
+1. Complete stage N successfully
+2. Verify output files exist (.coor required, .vel/.xsc for dynamics)
+3. Enable submission of stage N+1
+4. Generate stage N+1 config using stage N outputs as restart source
+
 ## Error Handling
 
 ### Common NAMD Errors
@@ -657,6 +678,21 @@ Monitor NAMD log for these critical patterns:
 2. **For memory errors**: Increase memory allocation, reduce output frequency
 3. **For instability**: Reduce timestep, add restraints, check initial structure
 4. **For missing files**: Verify SFTP sync, check file paths
+
+### NAMD Error Message Mapping
+
+**User-friendly error messages for common NAMD failures:**
+
+| Error Pattern | Category | User Message | Recommended Action |
+|---------------|----------|--------------|-------------------|
+| `FATAL ERROR: ...` | Simulation | Simulation failed | Check NAMD output log for details |
+| `Periodic cell too small for original patch grid` | Configuration | System instability detected | Reduce timestep or check initial structure |
+| `Unable to read PDB file` | FileSystem | Input file not found | Verify file upload succeeded |
+| `Memory allocation failed` | Resources | Insufficient memory | Increase SLURM memory request (e.g., from 32GB to 64GB) |
+| `PME grid size X is not even` | Configuration | PME grid misconfigured | Manually set PME grid or adjust spacing |
+| `Warning: Atoms moving too fast` | Simulation | System instability | Reduce timestep, add restraints, or check initial conditions |
+
+**Best practice:** Provide actionable guidance. Instead of showing raw NAMD errors, map them to clear messages with next steps.
 
 ## Mock Data for Testing
 
@@ -785,4 +821,4 @@ pub fn estimate_resources(atom_count: u32, simulation_type: &str) -> ResourceAll
 }
 ```
 
-This reference provides the foundation for implementing NAMD configuration generation and job management in the Tauri NAMDRunner application, building on proven patterns from the Python implementation while adapting to Rust and the Alpine cluster environment.
+This reference provides the foundation for implementing NAMD configuration generation and job management in NAMDRunner with proven patterns for the Alpine cluster environment.

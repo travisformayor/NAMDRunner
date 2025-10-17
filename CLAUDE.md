@@ -1,13 +1,13 @@
 # CLAUDE.md - AI Assistant Guide for NAMDRunner
 
 ## Project Context
-NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters. **Tauri v2 (Rust) + Svelte (TypeScript)**. Reference Python implementation (`docs/reference/`) provides proven patterns to adapt.
+NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters built with Tauri v2 (Rust) + Svelte (TypeScript).
 
 ## Core Principles
 - **Security**: No credential persistence, password-only SSH, minimal attack surface
 - **Type Safety**: Strict TypeScript ↔ Rust contracts
 - **Reliability**: Scientists need stability over features
-- **Reference-Driven**: Adapt proven Python patterns
+- **Pattern-Driven**: Use proven architectural patterns and cluster integration approaches
 
 ## Context-Specific Reading Guide
 
@@ -29,22 +29,18 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters. **Tauri v
 - [`docs/AUTOMATIONS.md`](docs/AUTOMATIONS.md) - **Complete automation architecture** with all job lifecycle automation chains
 - [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - SLURM command patterns and job management
 - [`docs/API.md`](docs/API.md) - Job management IPC interfaces and command specifications
-- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - Proven job workflow patterns
 
 ### ⚡ Working on SLURM Integration?
 - [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - Complete job script template combining SLURM + Alpine + MPI + NAMD
 - [`docs/reference/alpine-cluster-reference.md`](docs/reference/alpine-cluster-reference.md) - Alpine-specific requirements (MPI, memory units, node calculation)
 - [`docs/reference/namd-commands-reference.md`](docs/reference/namd-commands-reference.md) - NAMD config templates and file naming requirements
-- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - Proven SLURM integration patterns
 
 ### 🧬 Working on NAMD?
 - [`docs/reference/namd-commands-reference.md`](docs/reference/namd-commands-reference.md) - NAMD config file templates (.namd) and file naming (use actual uploaded names!)
 - [`docs/reference/slurm-commands-reference.md`](docs/reference/slurm-commands-reference.md) - For complete job script with NAMD execution
-- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - NAMD workflow patterns
 
 ### 🔐 Working on SSH/SFTP?
 - [`docs/SSH.md`](docs/SSH.md) - Connection management, security patterns, and file operations
-- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - SSH integration lessons
 
 ### 🖥️ Making Cluster Allocation Decisions?
 - [`docs/reference/alpine-cluster-reference.md`](docs/reference/alpine-cluster-reference.md) - Resource limits, partitions, and QoS options
@@ -57,7 +53,6 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters. **Tauri v
 
 ### 🗄️ Working with Database/Data?
 - [`docs/DB.md`](docs/DB.md) - SQLite schemas and JSON metadata formats
-- [`docs/reference/python-implementation-reference.md`](docs/reference/python-implementation-reference.md) - Data format lessons
 
 ## Essential Documentation (Always Available)
 
@@ -90,7 +85,7 @@ After implementation and testing, before archiving:
 ### When You're Stuck
 - **Use the Context-Specific Reading Guide above** - Find docs relevant to your current task
 - Review `tasks/roadmap.md` for current development phase
-- **Ask specific questions** about the requested feature or Python implementation details
+- **Ask specific questions** about the requested feature or cluster integration details
 
 ## Quick Commands
 
@@ -98,11 +93,11 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 
 ## Critical Success Factors
 
-### Python Reference Usage
-- **SQLite schema** - Adapt Python patterns, improve and modernize as needed
+### Cluster Integration Patterns
+- **SQLite schema** - Simple and focused schema design (see `docs/DB.md`)
 - **JSON metadata format** - Serialized from Rust `JobInfo` struct (see `docs/DB.md`)
-- **Directory structure** - `/projects/$USER/namdrunner_jobs/` pattern worked well
-- **SLURM commands** - Use proven working patterns from Python as starting point
+- **Directory structure** - `/projects/$USER/namdrunner_jobs/` pattern for persistent storage
+- **SLURM commands** - Use proven working patterns (see `docs/reference/slurm-commands-reference.md`)
 
 ### Security Requirements (Non-Negotiable)  
 - **Never log credentials** - Mask passwords, clear memory on disconnect
@@ -118,15 +113,13 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 
 ## Common Pitfalls to Avoid
 
-### From Python Experience
+### Cluster Integration Pitfalls
 - **Don't hardcode module versions** - Make configurable (gcc/14.2.0, etc.)
 - **Don't skip error handling** - SSH operations WILL fail
 - **Don't block UI thread** - All SSH/SFTP operations must be async
-
-### Reference Implementation Specific
-- **Don't ignore working SLURM patterns** - Python version has proven integration approaches
-- **Don't reinvent solved problems** - Check reference docs before implementing from scratch
-- **Don't skip reference docs** - Python version has 9 completed tasks worth of learnings
+- **Don't ignore working SLURM patterns** - Check reference docs for proven approaches
+- **Don't reinvent solved problems** - Review reference docs before implementing from scratch
+- **Don't skip reference documentation** - Learn from documented patterns and pitfalls
 - **Don't work without task plan** - Complex application needs structured approach
 
 ### Code Completeness
@@ -142,9 +135,9 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 - **Reliability** - Works for months without maintenance
 
 ## When to Ask for Help
-- **SLURM integration questions** - Python patterns are proven starting points
-- **Data format questions** - Reference implementation design decisions
-- **Architecture decisions** - Get input before big design choices  
+- **SLURM integration questions** - Reference docs provide proven patterns
+- **Data format questions** - Architecture decisions need clarity
+- **Architecture decisions** - Get input before big design choices
 - **Task planning** - Break down complex work before starting
-- **Stuck on Python code** - Ask for specific clarification rather than guessing
-- **Streamlining opportunities** - When you see ways to improve on reference patterns
+- **Unclear cluster behavior** - Ask for specific clarification rather than guessing
+- **Streamlining opportunities** - When you see ways to improve existing patterns
