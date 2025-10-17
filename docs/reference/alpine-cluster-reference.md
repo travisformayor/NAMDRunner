@@ -252,6 +252,30 @@ mpiexec -np $SLURM_NTASKS <application>
 
 **Why not srun?** CURC recommends `mpirun`/`mpiexec` for simplicity and reliability. `srun` can have execution issues.
 
+### CPU Affinity with OpenMPI on Alpine
+
+Alpine allows using OpenMPI for MPI applications (including NAMD). OpenMPI automatically manages CPU affinity in coordination with SLURM's cgroup-based resource allocation.
+
+**For NAMD specifically:**
+- **Do NOT use** `+setcpuaffinity` or `+pemap` flags
+- These flags cause "CmiSetCPUAffinity failed" errors
+- OpenMPI + SLURM handle task placement automatically
+- Manual affinity conflicts with SLURM's CPU allocation
+
+**Correct NAMD execution:**
+```bash
+# Correct - let OpenMPI handle affinity
+mpirun -np $SLURM_NTASKS namd3 config.namd
+
+# WRONG - manual affinity causes conflicts
+mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-23 config.namd  # Will fail!
+```
+
+**When CPU affinity flags ARE appropriate:**
+- Non-MPI builds (ibverbs/native Charm++ builds only)
+- Full node allocation (all CPUs on node)
+- Never with OpenMPI-compiled applications on Alpine
+
 ### Infiniband Constraint
 
 **Always use `--constraint=ib`** to force jobs onto Infiniband-enabled nodes.

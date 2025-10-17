@@ -93,12 +93,12 @@ cd {{ working_dir }}
 
 # Execute NAMD with MPI
 # See: namd-commands-reference.md#command-execution
-mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) {{ namd_config }} > {{ namd_log }}
-#      │             │     │                   │                                │               │
-#      │             │     │                   │                                │               └─ NAMD output log
-#      │             │     │                   │                                └─ NAMD config file
-#      │             │     │                   └─ CPU affinity optimization (Alpine-specific)
-#      │             │     └─ NAMD 3.x binary
+# Do NOT use +setcpuaffinity with OpenMPI-compiled NAMD (Alpine uses OpenMPI)
+# OpenMPI handles CPU affinity automatically - manual affinity flags cause binding conflicts
+mpirun -np $SLURM_NTASKS namd3 {{ namd_config }} > {{ namd_log }}
+#      │             │     │               │
+#      │             │     │               └─ NAMD output log
+#      │             │     └─ NAMD config file
 #      │             └─ Number of MPI tasks (from SLURM)
 #      └─ MPI launcher (recommended over srun on Alpine)
 ```

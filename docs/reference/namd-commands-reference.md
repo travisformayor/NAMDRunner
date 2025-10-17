@@ -422,15 +422,24 @@ mpirun -np 1 namd3 --version 2>/dev/null && echo "MPI execution works"
 
 **Template Examples** (stored as configurable data):
 ```bash
-# NAMD 3.x with MPI + CPU affinity (Alpine pattern)
-mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) config.namd > namd_output.log
+# NAMD 3.x with MPI (Alpine pattern - OpenMPI compiled)
+# NOTE: Do NOT use +setcpuaffinity with OpenMPI-compiled NAMD
+# OpenMPI manages CPU affinity automatically; manual flags cause binding conflicts
+mpirun -np $SLURM_NTASKS namd3 config.namd > namd_output.log
 
 # NAMD 2.x alternative pattern (other clusters)
 mpirun -np $SLURM_NTASKS namd2 config.namd > namd_output.log
+
+# NAMD with ibverbs/native Charm++ (NOT MPI builds)
+# Only use +setcpuaffinity for non-MPI builds when allocating full nodes
+charmrun ++nodelist nodelist ++p $SLURM_NTASKS namd3 +setcpuaffinity config.namd > namd_output.log
 ```
 
 **Validation Notes**:
-- CPU affinity settings (`+setcpuaffinity +pemap`) improve performance but may not be supported on all clusters
+- `+setcpuaffinity` and `+pemap` flags are incompatible with OpenMPI-compiled NAMD
+- Alpine uses OpenMPI, so these flags should **NOT** be used
+- OpenMPI and SLURM handle CPU affinity automatically
+- Only use `+setcpuaffinity` with ibverbs/native Charm++ builds (not MPI)
 - Always redirect output to log file for debugging
 - Command patterns will be stored per cluster configuration, not hardcoded
 
@@ -441,21 +450,20 @@ mpirun -np $SLURM_NTASKS namd2 config.namd > namd_output.log
 The execution line that goes in your SLURM job script:
 
 ```bash
-# Execute NAMD with MPI and CPU affinity optimization
-mpirun -np $SLURM_NTASKS namd3 +setcpuaffinity +pemap 0-$(($SLURM_NTASKS-1)) config.namd > namd_output.log
+# Execute NAMD with MPI (OpenMPI version - Alpine cluster)
+mpirun -np $SLURM_NTASKS namd3 config.namd > namd_output.log
 ```
 
 **Command breakdown:**
 - `mpirun -np $SLURM_NTASKS` - Launch MPI with SLURM-allocated tasks
 - `namd3` - NAMD 3.x binary (from module load)
-- `+setcpuaffinity` - Enable CPU affinity for performance
-- `+pemap 0-$(($SLURM_NTASKS-1))` - Map tasks to cores 0 through N-1
 - `config.namd` - NAMD configuration file (see templates below)
 - `> namd_output.log` - Redirect output to log file
 
 **Alpine-specific notes:**
-- CPU affinity flags (`+setcpuaffinity +pemap`) are Alpine-optimized
-- Other clusters may not support these flags
+- Do NOT use `+setcpuaffinity` or `+pemap` flags with Alpine's OpenMPI-compiled NAMD
+- OpenMPI and SLURM automatically handle CPU affinity and task placement
+- Manual CPU affinity flags cause "CmiSetCPUAffinity failed" errors due to conflicts with SLURM cgroups
 - See [alpine-cluster-reference.md#mpi-execution-commands](alpine-cluster-reference.md#mpi-execution-commands) for cluster-specific MPI patterns
 
 ## File Organization
