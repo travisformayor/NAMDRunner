@@ -548,7 +548,7 @@ println!("[SLURM] Submitting job: {}", job_name);
 > **For SSH/SFTP service patterns and testing approaches**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
 
 ### 3. Path Management
-Use centralized path validation functions from `validation::paths` module. Never construct paths directly. See `src-tauri/src/validation.rs` for safe path utilities like `project_directory()`, `scratch_directory()`, and `job_script_path()`.
+Use centralized path validation functions from `validation::paths` module. Never construct paths directly. See `src-tauri/src/validation.rs` for safe path utilities like `project_directory()` and `scratch_directory()`. For job directory structure, use `ssh::JobDirectoryStructure` constants.
 
 ### 4. State Management
 Use state machines for complex state management with validated transitions.

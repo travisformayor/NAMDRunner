@@ -201,8 +201,8 @@ interface IJobCommands {
   // Delete job (local and optionally remote)
   deleteJob(job_id: JobId, delete_remote: boolean): Promise<DeleteJobResult>;
 
-  // Complete job and sync results from scratch directory
-  completeJob(job_id: JobId): Promise<CompleteJobResult>;
+  // Refetch SLURM logs from server (overwrites cached logs)
+  refetchSlurmLogs(job_id: JobId): Promise<RefetchLogsResult>;
 
   // Validate resource allocation for cluster constraints
   validate_resource_allocation(cores: number, memory: string, walltime: string, partition_id: string, qos_id: string): Promise<ValidationResult>;
@@ -301,9 +301,10 @@ interface DeleteJobResult {
   error?: string;
 }
 
-interface CompleteJobResult {
+interface RefetchLogsResult {
   success: boolean;
-  job_info?: JobInfo;  // Updated job information after completion
+  slurm_stdout?: string;  // Fetched SLURM stdout
+  slurm_stderr?: string;  // Fetched SLURM stderr
   error?: string;
 }
 ```
@@ -316,8 +317,11 @@ interface IFileCommands {
   // Upload files to job directory on cluster
   uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult>;
 
-  // Download job output file
-  downloadJobOutput(job_id: JobId, file_name: string): Promise<DownloadResult>;
+  // Download single job output file (shows native save dialog)
+  downloadJobOutput(job_id: JobId, file_path: string): Promise<DownloadResult>;
+
+  // Download all output files as ZIP archive (shows native save dialog)
+  downloadAllOutputs(job_id: JobId): Promise<DownloadResult>;
 
   // List files in job directory
   listJobFiles(job_id: JobId): Promise<ListFilesResult>;
@@ -339,14 +343,14 @@ interface UploadResult {
 
 interface DownloadResult {
   success: boolean;
-  content?: string;      // For text files
-  file_path?: string;    // Local path for downloaded file
+  saved_to?: string;     // Local path where file was saved (via native dialog)
   file_size?: number;
   error?: string;
 }
 
 interface RemoteFile {
-  name: string;
+  name: string;          // Display name (just filename)
+  path: string;          // Full relative path from job root (e.g., "outputs/sim.dcd")
   size: number;
   modified_at: Timestamp;
   file_type: 'input' | 'output' | 'config' | 'log';
@@ -386,7 +390,7 @@ const NETWORK_ERROR: NAMDRunnerError = {
 #### Validation Errors
 ```typescript
 const VALIDATION_ERROR: NAMDRunnerError = {
-  category: 'Validation', 
+  category: 'Validation',
   message: 'Invalid NAMD parameters',
   details: 'Temperature must be set and a number',
   retryable: false

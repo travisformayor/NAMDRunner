@@ -239,20 +239,23 @@ NAMDRunner uses SQLite for local data persistence with job lifecycle management 
 * **Single-writer rule**: The application writes JSON metadata; jobs write only inside their scratch/results directories
 
 #### Directory Structure
-```
-/projects/$USER/namdrunner_jobs/     # Persistent storage
-└── {job_id}/
-    ├── job_info.json               # Job metadata
-    ├── input_files/                # User input files
-    ├── config.namd                 # Generated NAMD config
-    └── job.sbatch                  # Generated SLURM script
 
-/scratch/alpine/$USER/namdrunner_jobs/  # Execution workspace
-└── {job_id}/                       # Working directory during execution
-    ├── [copied input files]
-    ├── output.dcd                  # Trajectory files
-    └── restart.*                   # Restart files
+Jobs use a standard three-subdirectory structure (`input_files/`, `scripts/`, `outputs/`) centrally defined in `ssh/directory_structure.rs`.
+
 ```
+{job_id}/
+├── job_info.json
+├── input_files/                # User-uploaded files
+├── scripts/                    # Generated job scripts
+├── outputs/                    # NAMD output files
+├── namd_output.log
+├── {job_name}_{slurm_id}.out
+└── {job_name}_{slurm_id}.err
+```
+
+**Locations:**
+- `/projects/$USER/namdrunner_jobs/{job_id}/` - Persistent storage
+- `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/` - Execution workspace (rsync mirrored)
 
 ### Automation Architecture
 

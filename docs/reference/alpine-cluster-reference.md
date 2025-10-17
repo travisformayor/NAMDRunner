@@ -188,12 +188,17 @@ Identify our jobs by working directory pattern:
 | SLURM State | NAMDRunner Status | Description |
 |-------------|-------------------|-------------|
 | `PD` | `PENDING` | Waiting for resources |
-| `R` | `RUNNING` | Executing on compute nodes |  
+| `R` | `RUNNING` | Executing on compute nodes |
 | `CG` | `RUNNING` | Completing (cleanup phase) |
 | `COMPLETED` | `COMPLETED` | Finished successfully |
 | `FAILED` | `FAILED` | Non-zero exit code |
 | `CANCELLED` | `CANCELLED` | User cancelled |
-| `TIMEOUT` | `FAILED` | Exceeded walltime limit |
+| `TIMEOUT` (`TO`) | `FAILED` | Exceeded walltime limit |
+| `OUT_OF_MEMORY` (`OOM`) | `FAILED` | Insufficient memory allocation |
+| `NODE_FAIL` (`NF`) | `FAILED` | Compute node failure |
+| `BOOT_FAIL` (`BF`) | `FAILED` | Node failed to boot |
+| `DEADLINE` (`DL`) | `FAILED` | Job deadline exceeded |
+| `PREEMPTED` (`PR`) | `FAILED` | Job preempted by higher priority |
 
 ## MPI Best Practices for Alpine
 
@@ -326,29 +331,25 @@ module load namd/3.0.1_cpu
 /projects/$USER/namdrunner_jobs/
 └── {job_id}/
     ├── job_info.json           # Job metadata
-    ├── input_files/
+    ├── input_files/            # User-uploaded input files
     │   ├── structure.pdb
     │   ├── structure.psf
     │   └── parameters.prm
-    ├── config.namd             # Generated NAMD config
-    ├── job.sbatch              # Generated SLURM script
-    └── outputs/                # After completion
-        ├── {job_name}_{slurm_job_id}.out
-        ├── {job_name}_{slurm_job_id}.err
-        └── namd_output.log
+    ├── scripts/                # Generated job scripts
+    │   ├── config.namd
+    │   └── job.sbatch
+    ├── outputs/                # NAMD output files (after job completion)
+    │   ├── sim.dcd             # Trajectory
+    │   ├── sim.coor            # Restart files
+    │   ├── sim.vel
+    │   └── sim.xsc
+    ├── namd_output.log         # NAMD console output
+    ├── {job_name}_{slurm_job_id}.out  # SLURM stdout
+    └── {job_name}_{slurm_job_id}.err  # SLURM stderr
 
 /scratch/alpine/$USER/namdrunner_jobs/
-└── {job_id}/                   # Working directory during execution
-    ├── config.namd
-    ├── job.sbatch
-    ├── structure.pdb
-    ├── structure.psf
-    ├── parameters.prm
-    ├── namd_output.log
-    ├── output.dcd              # Trajectory
-    ├── restart.coor            # Restart files
-    ├── restart.vel
-    └── restart.xsc
+└── {job_id}/                   # Working directory during execution (rsync mirror)
+    └── (same structure as project directory)
 ```
 
 ### Job Identification Pattern

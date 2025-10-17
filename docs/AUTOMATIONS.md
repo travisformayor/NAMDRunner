@@ -138,7 +138,7 @@ The `execute_job_creation_with_progress` function handles the complete job creat
 
 2. **Create Project Directory Structure**
    - Create: `/projects/$USER/namdrunner_jobs/{job_id}/`
-   - Create subdirectories using `paths::job_subdirectories()`
+   - Create subdirectories: `input_files/`, `scripts/`, `outputs/`
    - Only creates project directories (scratch directories created during submission)
 
 3. **Upload Input Files** (Integrated)
