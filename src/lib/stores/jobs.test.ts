@@ -140,7 +140,7 @@ describe('Jobs Store - Business Logic Tests', () => {
         if (!acc[status]) {
           acc[status] = [];
         }
-        acc[status]!.push(job);
+        acc[status].push(job);
         return acc;
       }, {} as Record<string, JobInfo[]>);
 
