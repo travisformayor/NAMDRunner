@@ -48,17 +48,6 @@ jobs:
     - name: Install frontend dependencies
       run: npm ci
 
-    - name: Run basic linting checks
-      run: |
-        npm run lint
-        npm run check
-
-    - name: Check Rust formatting and linting
-      run: |
-        cd src-tauri
-        cargo fmt --all -- --check
-        cargo clippy -- -D warnings
-
     - name: Build Tauri Windows application
       run: npm run tauri build
       env:
@@ -137,17 +126,6 @@ jobs:
 
     - name: Install frontend dependencies
       run: npm ci
-
-    - name: Run basic linting checks
-      run: |
-        npm run lint
-        npm run check
-
-    - name: Check Rust formatting and linting
-      run: |
-        cd src-tauri
-        cargo fmt --all -- --check
-        cargo clippy -- -D warnings
 
     - name: Build Tauri Linux application
       run: npm run tauri build

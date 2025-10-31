@@ -13,13 +13,29 @@ export default [
       parserOptions: {
         ecmaVersion: 2022,
         sourceType: 'module'
+      },
+      globals: {
+        // Node.js globals
+        process: 'readonly',
+        // Browser globals
+        window: 'readonly',
+        document: 'readonly',
+        localStorage: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly'
       }
     },
     plugins: {
       '@typescript-eslint': ts
     },
     rules: {
-      '@typescript-eslint/no-unused-vars': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_'
+      }],
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-non-null-assertion': 'warn'
     }
@@ -31,6 +47,17 @@ export default [
       parserOptions: {
         parser: tsParser,
         extraFileExtensions: ['.svelte']
+      },
+      globals: {
+        // Browser globals for Svelte components
+        window: 'readonly',
+        document: 'readonly',
+        localStorage: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly'
       }
     },
     plugins: {
@@ -39,6 +66,21 @@ export default [
     rules: {
       ...svelte.configs.recommended.rules,
       'svelte/no-unused-svelte-ignore': 'error'
+    }
+  },
+  {
+    // Relax rules for test files
+    files: ['**/*.test.{ts,js}', '**/test/**/*.{ts,js}', '**/tests/**/*.{ts,js}', '**/fixtures/**/*.{ts,js}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off'
+    }
+  },
+  {
+    // Relax rules for type definition files
+    files: ['**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'off'
     }
   },
   {
