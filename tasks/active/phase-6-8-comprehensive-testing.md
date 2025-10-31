@@ -1,4 +1,4 @@
-# Task: Phase 6.7 - Comprehensive Testing
+# Task: Phase 6.8 - Comprehensive Testing
 
 ## Objective
 Implement comprehensive testing coverage (>80%) with unit tests, interactive UI validation in demo mode, and automated test infrastructure to ensure production readiness of the NAMDRunner single-job MVP.

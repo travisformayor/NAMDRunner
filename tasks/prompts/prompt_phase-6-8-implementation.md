@@ -1,7 +1,7 @@
-# Phase 6.7 Comprehensive Testing Implementation Prompt
+# Phase 6.8 Comprehensive Testing Implementation Prompt
 
 ## Project Overview
-You are implementing **Phase 6.7: Comprehensive Testing** for NAMDRunner, a desktop application for managing NAMD molecular dynamics simulations on SLURM HPC clusters. This is a **testing and validation phase** built with Tauri v2 (Rust backend) + Svelte (TypeScript frontend), focusing on production readiness through comprehensive test coverage and autonomous UI validation.
+You are implementing **Phase 6.8: Comprehensive Testing** for NAMDRunner, a desktop application for managing NAMD molecular dynamics simulations on SLURM HPC clusters. This is a **testing and validation phase** built with Tauri v2 (Rust backend) + Svelte (TypeScript frontend), focusing on production readiness through comprehensive test coverage and autonomous UI validation.
 
 ## Your Mission: Achieve Production-Ready Testing Coverage
 Implement **comprehensive testing infrastructure** with core capabilities:
@@ -32,7 +32,7 @@ Implement **comprehensive testing infrastructure** with core capabilities:
 - `tasks/templates/task.md` - Use this template for task planning
 - `docs/reference/agent-development-tools.md` - Available tools and testing infrastructure
 
-## 🎯 Phase 6.7 Success Criteria
+## 🎯 Phase 6.8 Success Criteria
 
 ### Testing Infrastructure: Unit Test Coverage (Do This First)
 - [ ] Achieve >80% unit test coverage for `src-tauri/src/validation.rs` (security, shell safety, file validation)

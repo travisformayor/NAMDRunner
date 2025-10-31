@@ -401,7 +401,7 @@ if matches!(job_status, JobStatus::Pending | JobStatus::Running) {
 - [x] Trigger discovery automatically if database empty
 - [x] Return complete job list in `SyncJobsResult`
 - [x] Error handling (log but don't fail if discovery fails)
-- [ ] Remove frontend discovery trigger logic (Part 3)
+- [x] Remove frontend discovery trigger logic (Part 3)
 
 **Files changed**: `src-tauri/src/automations/job_sync.rs`, `src-tauri/src/commands/jobs.rs` (move logic)
 

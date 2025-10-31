@@ -221,24 +221,37 @@ See: [phase-6-4-frontend-backend-integration.md](tasks/completed/phase-6-4-front
 
 See: [phase-6-5-code-quality-infrastructure-cleanup.md](tasks/active/phase-6-5-code-quality-infrastructure-cleanup.md)
 
-### Milestone 6.6: Job Lifecycle Reliability & Bug Fixes
-- [ ] **Issue 0: Automatic scratch→project rsync** - ARCHITECTURE BUG: Job completion doesn't automatically rsync scratch to project, logs fetch from wrong directory
-- [ ] **Issue 1: Server metadata sync** - job_info.json not updating on server after status changes
-- [ ] **Issue 2: Failed job file copying** - Terminal state rsync handles this (fixed by Issue 0)
-- [ ] **Issue 3a: SLURM memory unit** - Append "GB" to memory parameter (--mem=64GB not --mem=64)
-- [ ] **Issue 3b: NAMD config file names** - Use actual uploaded file names instead of hardcoded structure.psf/pdb
-- [ ] **Issue 4: OpenMPI environment export** - Add SLURM_EXPORT_ENV=ALL before mpirun
-- [ ] **Issue 5: Explicit nodes flag** - Calculate and specify --nodes based on core count for optimal MPI performance
+### Milestone 6.6: Job Lifecycle Reliability & Bug Fixes ✅ COMPLETED
+- [x] **Issue 0: Automatic scratch→project rsync** - ARCHITECTURE BUG: Job completion doesn't automatically rsync scratch to project, logs fetch from wrong directory
+- [x] **Issue 1: Server metadata sync** - job_info.json not updating on server after status changes
+- [x] **Issue 2: Failed job file copying** - Terminal state rsync handles this (fixed by Issue 0)
+- [x] **Issue 3a: SLURM memory unit** - Append "GB" to memory parameter (--mem=64GB not --mem=64)
+- [x] **Issue 3b: NAMD config file names** - Use actual uploaded file names instead of hardcoded structure.psf/pdb
+- [x] **Issue 4: OpenMPI environment export** - Add SLURM_EXPORT_ENV=ALL before mpirun
+- [x] **Issue 5: Explicit nodes flag** - Calculate and specify --nodes based on core count for optimal MPI performance
 
-See: [phase-6-6-job-lifecycle-reliability-bug-fixes.md](tasks/active/phase-6-6-job-lifecycle-reliability-bug-fixes.md)
+See: [phase-6-6-job-lifecycle-reliability-bug-fixes.md](tasks/completed/phase-6-6-job-lifecycle-reliability-bug-fixes.md)
 
-### Milestone 6.7: Comprehensive Testing
+### Milestone 6.7: Template Type 2 NAMD Configuration Support
+- [ ] **CRITICAL: Missing cellBasisVector** - NAMD config never outputs cellBasisVector, causing "PME requires periodic boundaries" error on ALL PME jobs
+- [ ] **CRITICAL: Missing execution_mode** - Cannot run minimization stage (always generates "run", never "minimize")
+- [ ] **HIGH: Output frequency bug** - Uses dcd_freq for all outputs instead of separate values (xstFreq, outputEnergies, outputPressure wrong)
+- [ ] **HIGH: Extrabonds file support** - Add .exb/.enm.extra file type detection and config generation for DNA restraints
+- [ ] **MEDIUM: Make PME/NPT configurable** - Currently hardcoded to "on", need checkboxes for vacuum simulations and NVT ensemble
+- [ ] **MEDIUM: Configurable advanced parameters** - langevinDamping, margin, fullElectFrequency currently hardcoded
+
+**Goal**: Enable users to run DNA origami tutorial workflows (explicit solvent equilibration with restraints) on cluster
+
+See: [phase-6-7-template-type-2-namd-config-fixes.md](tasks/active/phase-6-7-template-type-2-namd-config-fixes.md)
+
+
+### Milestone 6.8: Comprehensive Testing
 - [ ] Unit test coverage >80% (including tests for Phase 6.5 and 6.6 fixes)
 - [ ] E2E test suite complete
 - [ ] Manual testing checklist
 - [ ] Performance optimization testing
 
-### Milestone 6.8: Production Readiness
+### Milestone 6.9: Production Readiness
 - [ ] Git Action x86 Windows executable build
 - [ ] Git Action x86 Linux executable build
 - [ ] Installation documentation
@@ -302,10 +315,11 @@ See: [phase-6-6-job-lifecycle-reliability-bug-fixes.md](tasks/active/phase-6-6-j
 - **Milestone 6.3**: ✅ Code quality improvements and refactoring complete (clean, maintainable codebase)
 - **Milestone 6.4**: ✅ Frontend-backend integration complete (stores architecture, backend automation chains, removed old code)
 - **Milestone 6.5**: Code quality and infrastructure cleanup (SLURM log caching, database simplification, UI polish)
-- **Milestone 6.6**: Job lifecycle reliability fixes (server metadata sync, failed job handling, SLURM/NAMD config bugs)
-- **Milestone 6.7**: All tests passing (>80% coverage) with comprehensive test suite validating final code
-- **Milestone 6.8**: Production-ready deployment with x86 Windows/Linux builds and documentation
-- **Single-job MVP ready for users with complete automation workflow and production-quality code**
+- **Milestone 6.6**: ✅ Job lifecycle reliability fixes (server metadata sync, failed job handling, SLURM/NAMD config bugs)
+- **Milestone 6.7**: ✅ Template Type 2 NAMD config support (cellBasisVector, execution_mode, extrabonds, configurable physics)
+- **Milestone 6.8**: All tests passing (>80% coverage) with comprehensive test suite validating final code
+- **Milestone 6.9**: Production-ready deployment with x86 Windows/Linux builds and documentation
+- **Single-job MVP ready for users to run DNA origami tutorial workflows on cluster**
 
 ## Phase 7: Production Hardening & Advanced Features
 
