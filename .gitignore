@@ -2,7 +2,6 @@
 .DS_Store
 
 # Development
-docs/reference/
 
 # Dependencies
 node_modules
@@ -13,6 +12,8 @@ node_modules
 /package
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+*.tar.gz
+*.db
 
 # Environment
 .env
@@ -23,3 +24,6 @@ vite.config.ts.timestamp-*
 tests/*/screenshots/
 tests/*/videos/
 tests/*/test-results/
+
+# Example Data
+examples/

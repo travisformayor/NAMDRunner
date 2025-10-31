@@ -1,18 +1,18 @@
 use serde::{Deserialize, Serialize};
 use super::core::*;
+use crate::security::SecurePassword;
 
 // Connection management command parameters and results
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ConnectParams {
     pub host: String,
     pub username: String,
-    pub password: String,
+    pub password: SecurePassword,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ConnectResult {
     pub success: bool,
-    #[serde(rename = "sessionInfo")]
     pub session_info: Option<SessionInfo>,
     pub error: Option<String>,
 }
@@ -26,37 +26,30 @@ pub struct DisconnectResult {
 #[derive(Debug, Serialize)]
 pub struct ConnectionStatusResult {
     pub state: ConnectionState,
-    #[serde(rename = "sessionInfo")]
     pub session_info: Option<SessionInfo>,
 }
 
 // Job management command parameters and results
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateJobParams {
-    #[serde(rename = "jobName")]
     pub job_name: String,
-    #[serde(rename = "namdConfig")]
     pub namd_config: NAMDConfig,
-    #[serde(rename = "slurmConfig")]
     pub slurm_config: SlurmConfig,
-    #[serde(rename = "inputFiles")]
     pub input_files: Vec<InputFile>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct CreateJobResult {
     pub success: bool,
-    #[serde(rename = "jobId")]
     pub job_id: Option<String>,
+    pub job: Option<JobInfo>,
     pub error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct SubmitJobResult {
     pub success: bool,
-    #[serde(rename = "slurmJobId")]
     pub slurm_job_id: Option<String>,
-    #[serde(rename = "submittedAt")]
     pub submitted_at: Option<String>,
     pub error: Option<String>,
 }
@@ -64,7 +57,6 @@ pub struct SubmitJobResult {
 #[derive(Debug, Serialize)]
 pub struct JobStatusResult {
     pub success: bool,
-    #[serde(rename = "jobInfo")]
     pub job_info: Option<JobInfo>,
     pub error: Option<String>,
 }
@@ -79,8 +71,8 @@ pub struct GetAllJobsResult {
 #[derive(Debug, Serialize)]
 pub struct SyncJobsResult {
     pub success: bool,
-    #[serde(rename = "jobsUpdated")]
-    pub jobs_updated: u32,
+    pub jobs: Vec<JobInfo>,        // Complete job list after sync
+    pub jobs_updated: u32,          // Number of jobs updated during sync
     pub errors: Vec<String>,
 }
 
@@ -90,19 +82,30 @@ pub struct DeleteJobResult {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct SyncJobStatusResult {
+    pub success: bool,
+    pub job_info: Option<JobInfo>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncAllJobsResult {
+    pub success: bool,
+    pub jobs_updated: u32,
+    pub errors: Vec<String>,
+}
+
 // File management command parameters and results
 #[derive(Debug, Serialize)]
 pub struct UploadResult {
     pub success: bool,
-    #[serde(rename = "uploadedFiles")]
     pub uploaded_files: Option<Vec<String>>,
-    #[serde(rename = "failedUploads")]
     pub failed_uploads: Option<Vec<FailedUpload>>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct FailedUpload {
-    #[serde(rename = "fileName")]
     pub file_name: String,
     pub error: String,
 }
@@ -110,10 +113,7 @@ pub struct FailedUpload {
 #[derive(Debug, Serialize)]
 pub struct DownloadResult {
     pub success: bool,
-    pub content: Option<String>,
-    #[serde(rename = "filePath")]
-    pub file_path: Option<String>,
-    #[serde(rename = "fileSize")]
+    pub saved_to: Option<String>,  // Local path where file was saved
     pub file_size: Option<u64>,
     pub error: Option<String>,
 }
@@ -123,4 +123,36 @@ pub struct ListFilesResult {
     pub success: bool,
     pub files: Option<Vec<RemoteFile>>,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AutoCompleteJobsResult {
+    pub success: bool,
+    pub processed_jobs: Option<Vec<String>>,
+    pub error: Option<String>,
+}
+
+// Job discovery result types
+#[derive(Debug, Serialize)]
+pub struct DiscoverJobsResult {
+    pub success: bool,
+    pub jobs_found: u32,
+    pub jobs_imported: u32,
+    pub error: Option<String>,
+}
+
+// Cluster configuration types
+#[derive(Debug, Serialize)]
+pub struct GetClusterCapabilitiesResult {
+    pub success: bool,
+    pub data: Option<crate::cluster::ClusterCapabilities>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ValidateResourceAllocationResult {
+    pub is_valid: bool,
+    pub issues: Vec<String>,
+    pub warnings: Vec<String>,
+    pub suggestions: Vec<String>,
 }

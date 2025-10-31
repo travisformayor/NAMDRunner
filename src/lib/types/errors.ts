@@ -10,7 +10,7 @@ export type ErrorCategory =
   | 'Unknown';
 
 // Base connection error interface
-export interface ConnectionError {
+export interface ConnectionError extends Error {
   category: ErrorCategory;
   code: string;
   message: string;
@@ -32,15 +32,6 @@ export interface ErrorContext {
   duration?: number;
 }
 
-// User-friendly error message
-export interface UserError {
-  title: string;
-  message: string;
-  suggestions: string[];
-  retryable: boolean;
-  actionLabel?: string;
-  actionCallback?: () => void;
-}
 
 // Error recovery strategy
 export interface ErrorRecoveryStrategy {
@@ -127,71 +118,6 @@ export const CONNECTION_ERRORS = {
     ],
     retryable: true
   },
-  
-  // Permission errors
-  PERMISSION_DENIED: {
-    code: 'PERM_001',
-    category: 'Permission' as ErrorCategory,
-    message: 'Permission denied',
-    suggestions: [
-      'Check you have access to this resource',
-      'Verify your user permissions',
-      'Contact system administrator for access'
-    ],
-    retryable: false
-  },
-  
-  DIRECTORY_ACCESS_DENIED: {
-    code: 'PERM_002',
-    category: 'Permission' as ErrorCategory,
-    message: 'Cannot access directory',
-    suggestions: [
-      'Check directory permissions',
-      'Verify the path exists',
-      'Ensure you have read/write access'
-    ],
-    retryable: false
-  },
-  
-  // File operation errors
-  FILE_NOT_FOUND: {
-    code: 'FILE_001',
-    category: 'FileOperation' as ErrorCategory,
-    message: 'File not found',
-    suggestions: [
-      'Verify the file path is correct',
-      'Check if the file has been moved or deleted',
-      'Ensure you have permission to access the file'
-    ],
-    retryable: false
-  },
-  
-  UPLOAD_FAILED: {
-    code: 'FILE_002',
-    category: 'FileOperation' as ErrorCategory,
-    message: 'File upload failed',
-    suggestions: [
-      'Check available disk space on cluster',
-      'Verify network connection stability',
-      'Try uploading smaller files',
-      'Check file permissions'
-    ],
-    retryable: true
-  },
-  
-  DOWNLOAD_FAILED: {
-    code: 'FILE_003',
-    category: 'FileOperation' as ErrorCategory,
-    message: 'File download failed',
-    suggestions: [
-      'Check available disk space locally',
-      'Verify the file exists on cluster',
-      'Check network connection stability',
-      'Try downloading again'
-    ],
-    retryable: true
-  },
-  
   // Configuration errors
   INVALID_CONFIG: {
     code: 'CFG_001',
@@ -204,32 +130,6 @@ export const CONNECTION_ERRORS = {
     ],
     retryable: false
   },
-  
-  MODULE_NOT_FOUND: {
-    code: 'CFG_002',
-    category: 'Configuration' as ErrorCategory,
-    message: 'Required module not found',
-    suggestions: [
-      'Check module name and version',
-      'Verify module is available on cluster',
-      'Contact administrator about module availability'
-    ],
-    retryable: false
-  },
-  
-  // Validation errors
-  VALIDATION_FAILED: {
-    code: 'VAL_001',
-    category: 'Validation' as ErrorCategory,
-    message: 'Validation failed',
-    suggestions: [
-      'Check input parameters',
-      'Review validation errors',
-      'Correct invalid fields and try again'
-    ],
-    retryable: false
-  },
-  
   // Generic/Unknown errors
   UNKNOWN_ERROR: {
     code: 'UNK_001',
@@ -248,55 +148,41 @@ export const CONNECTION_ERRORS = {
 export class ErrorBuilder {
   static create(
     template: typeof CONNECTION_ERRORS[keyof typeof CONNECTION_ERRORS],
-    details?: string,
+    customMessage?: string,
     context?: ErrorContext
   ): ConnectionError {
-    return {
-      category: template.category,
-      code: template.code,
-      message: template.message,
-      details,
-      retryable: template.retryable,
-      suggestions: template.suggestions,
-      timestamp: new Date().toISOString(),
-      context
-    };
+    const error = new Error(customMessage || template.message) as ConnectionError;
+    error.name = 'ConnectionError';
+    error.category = template.category;
+    error.code = template.code;
+    error.message = customMessage || template.message;
+    if (customMessage) {
+      error.details = template.message;
+    }
+    error.retryable = template.retryable;
+    error.suggestions = template.suggestions;
+    error.timestamp = new Date().toISOString();
+    if (context) {
+      error.context = context;
+    }
+    return error;
   }
   
   static fromError(error: Error, category: ErrorCategory = 'Unknown'): ConnectionError {
-    return {
-      category,
-      code: 'UNK_001',
-      message: error.message,
-      details: error.stack,
-      retryable: category !== 'Authentication' && category !== 'Permission',
-      suggestions: ['Check the error details', 'Try again'],
-      timestamp: new Date().toISOString()
-    };
+    const connError = error as ConnectionError;
+    connError.name = 'ConnectionError';
+    connError.category = category;
+    connError.code = 'UNK_001';
+    connError.message = error.message;
+    if (error.stack) {
+      connError.details = error.stack;
+    }
+    connError.retryable = category !== 'Authentication' && category !== 'Permission';
+    connError.suggestions = ['Check the error details', 'Try again'];
+    connError.timestamp = new Date().toISOString();
+    return connError;
   }
   
-  static toUserError(error: ConnectionError): UserError {
-    return {
-      title: this.getCategoryTitle(error.category),
-      message: error.message,
-      suggestions: error.suggestions || [],
-      retryable: error.retryable
-    };
-  }
-  
-  private static getCategoryTitle(category: ErrorCategory): string {
-    const titles: Record<ErrorCategory, string> = {
-      Network: 'Connection Problem',
-      Authentication: 'Authentication Failed',
-      Timeout: 'Operation Timed Out',
-      Permission: 'Access Denied',
-      Configuration: 'Configuration Error',
-      Validation: 'Validation Error',
-      FileOperation: 'File Operation Failed',
-      Unknown: 'Unexpected Error'
-    };
-    return titles[category];
-  }
 }
 
 // Default error recovery strategy

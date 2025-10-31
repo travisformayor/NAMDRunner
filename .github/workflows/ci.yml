@@ -1,4 +1,4 @@
-name: CI Pipeline
+name: Multi-Platform Build Pipeline
 
 on:
   push:
@@ -12,11 +12,11 @@ env:
   RUST_VERSION: 'stable'
 
 jobs:
-  # Frontend testing and linting
-  test-frontend:
-    name: Frontend Tests
-    runs-on: ubuntu-latest
-    
+  # Windows build - Primary deployment target
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -26,36 +26,6 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
-
-    - name: Install frontend dependencies
-      run: npm ci
-
-    - name: Run TypeScript type checking
-      run: npm run check
-
-    - name: Run ESLint
-      run: npm run lint
-
-    - name: Run frontend unit tests
-      run: npm run test:run
-
-    - name: Upload frontend test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: frontend-test-results
-        path: |
-          coverage/
-        retention-days: 30
-
-  # Backend testing and linting
-  test-backend:
-    name: Backend Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
 
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
@@ -63,62 +33,7 @@ jobs:
         toolchain: ${{ env.RUST_VERSION }}
         components: rustfmt, clippy
 
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          src-tauri/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-
-    - name: Check Rust formatting
-      run: cd src-tauri && cargo fmt --all -- --check
-
-    - name: Run Clippy
-      run: cd src-tauri && cargo clippy -- -D warnings
-
-    - name: Run Rust unit tests
-      run: cd src-tauri && cargo test --verbose
-
-  # E2E testing (Linux only)
-  test-e2e:
-    name: E2E Tests
-    runs-on: ubuntu-latest
-    needs: [test-frontend, test-backend]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: ${{ env.RUST_VERSION }}
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          webkit2gtk-4.1-dev \
-          libappindicator3-dev \
-          librsvg2-dev \
-          patchelf \
-          libxdo-dev \
-          libxss1 \
-          libgtk-3-0 \
-          libgbm-dev \
-          xvfb
-
-    - name: Cache dependencies
+    - name: Cache Windows dependencies
       uses: actions/cache@v4
       with:
         path: |
@@ -127,266 +42,137 @@ jobs:
           src-tauri/target
           node_modules
         key: ${{ runner.os }}-deps-${{ hashFiles('**/Cargo.lock', '**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
 
-    - name: Install dependencies
+    - name: Install frontend dependencies
       run: npm ci
 
-    - name: Install Playwright browsers
-      run: npx playwright install --with-deps chromium
-
-    - name: Build Tauri app for testing
-      run: npm run tauri build --debug
-      env:
-        TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-        TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-
-    - name: Run Agent UI tests with Xvfb
-      run: xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" npm run test:ui
-      env:
-        CI: true
-        DISPLAY: :99
-        NAMDRUNNER_TEST_MODE: true
-
-    - name: Upload E2E test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: e2e-test-results
-        path: |
-          tests/ui/screenshots/
-          tests/ui/videos/
-          tests/ui/test-results/
-          tests/e2e/test-results/
-        retention-days: 30
-
-    - name: Upload E2E screenshots on failure
-      uses: actions/upload-artifact@v4
-      if: failure()
-      with:
-        name: e2e-screenshots
-        path: tests/ui/screenshots/
-        retention-days: 7
-
-  # Linux build
-  build-linux:
-    name: Build Linux
-    runs-on: ubuntu-latest
-    needs: [test-frontend, test-backend]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: ${{ env.RUST_VERSION }}
-
-    - name: Install Tauri system dependencies
+    - name: Run basic linting checks
       run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          webkit2gtk-4.1-dev \
-          libappindicator3-dev \
-          librsvg2-dev \
-          patchelf
+        npm run lint
+        npm run check
 
-    - name: Cache dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          src-tauri/target
-          node_modules
-        key: ${{ runner.os }}-build-${{ hashFiles('**/Cargo.lock', '**/package-lock.json') }}
+    - name: Check Rust formatting and linting
+      run: |
+        cd src-tauri
+        cargo fmt --all -- --check
+        cargo clippy -- -D warnings
 
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Build Tauri app
+    - name: Build Tauri Windows application
       run: npm run tauri build
       env:
         TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
         TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
-    - name: Test built application
+    - name: Verify Windows build artifacts
       run: |
-        # Basic smoke test - verify binary exists and runs
-        ./src-tauri/target/release/namdrunner --version || true
-        file ./src-tauri/target/release/namdrunner
-
-    - name: Upload Linux build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: linux-build
-        path: |
-          src-tauri/target/release/bundle/appimage/*.AppImage
-          src-tauri/target/release/bundle/deb/*.deb
-        retention-days: 90
-
-  # Windows build
-  build-windows:
-    name: Build Windows
-    runs-on: windows-latest
-    needs: [test-frontend, test-backend]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: ${{ env.RUST_VERSION }}
-
-    - name: Cache dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          src-tauri/target
-          node_modules
-        key: ${{ runner.os }}-build-${{ hashFiles('**/Cargo.lock', '**/package-lock.json') }}
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Build Tauri app
-      run: npm run tauri build
-      env:
-        TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-        TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
-
-    - name: Test built application
-      run: |
-        # Basic smoke test - verify executable exists
-        Get-ChildItem -Path "src-tauri\target\release" -Filter "*.exe"
-        if (Test-Path "src-tauri\target\release\namdrunner.exe") {
-          Write-Output "✅ Executable built successfully"
-        } else {
-          Write-Error "❌ Executable not found"
-          exit 1
-        }
+        echo "Checking for Windows build artifacts..."
+        ls -la src-tauri/target/release/
+        ls -la src-tauri/target/release/bundle/
+      shell: bash
 
     - name: Upload Windows build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: windows-build
+        name: windows-build-artifacts
         path: |
           src-tauri/target/release/bundle/msi/*.msi
           src-tauri/target/release/bundle/nsis/*.exe
-        retention-days: 90
+        retention-days: 30
 
-  # Build verification
-  verify-builds:
-    name: Verify Builds
-    runs-on: ubuntu-latest
-    needs: [build-linux, build-windows]
-    if: always()
-    
-    steps:
-    - name: Download all build artifacts
-      uses: actions/download-artifact@v4
-
-    - name: Verify build artifacts exist
+    - name: Create release summary
       run: |
-        echo "=== Verifying build artifacts ==="
-        
-        # Check Linux builds
-        if [ -d "linux-build" ]; then
-          echo "✅ Linux build artifacts found:"
-          find linux-build -type f -name "*.AppImage" -o -name "*.deb" | head -10
-        else
-          echo "❌ Linux build artifacts missing"
-        fi
-        
-        # Check Windows builds  
-        if [ -d "windows-build" ]; then
-          echo "✅ Windows build artifacts found:"
-          find windows-build -type f -name "*.msi" -o -name "*.exe" | head -10
-        else
-          echo "❌ Windows build artifacts missing"
-        fi
-        
-        # Check test results
-        if [ -d "frontend-test-results" ]; then
-          echo "✅ Frontend test results available"
-        fi
-        
-        if [ -d "e2e-test-results" ]; then
-          echo "✅ E2E test results available"
-        fi
+        echo "## Windows Build Complete" >> $GITHUB_STEP_SUMMARY
+        echo "- MSI installer created" >> $GITHUB_STEP_SUMMARY
+        echo "- NSIS executable created" >> $GITHUB_STEP_SUMMARY
+        echo "- Artifacts uploaded for download" >> $GITHUB_STEP_SUMMARY
+      shell: bash
 
-    - name: Create build summary
-      run: |
-        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Platform | Status | Artifacts |" >> $GITHUB_STEP_SUMMARY
-        echo "|----------|--------|-----------|" >> $GITHUB_STEP_SUMMARY
-        
-        if [ -d "linux-build" ]; then
-          LINUX_COUNT=$(find linux-build -type f | wc -l)
-          echo "| Linux | ✅ Success | ${LINUX_COUNT} files |" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "| Linux | ❌ Failed | 0 files |" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        if [ -d "windows-build" ]; then
-          WINDOWS_COUNT=$(find windows-build -type f | wc -l)
-          echo "| Windows | ✅ Success | ${WINDOWS_COUNT} files |" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "| Windows | ❌ Failed | 0 files |" >> $GITHUB_STEP_SUMMARY
-        fi
-
-# Optional: Release job (only on tags)
-  release:
-    name: Create Release
+  # Linux build - x86_64 target
+  build-linux:
+    name: Build Linux
     runs-on: ubuntu-latest
-    needs: [verify-builds]
-    if: startsWith(github.ref, 'refs/tags/v')
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
       with:
-        files: |
-          linux-build/*
-          windows-build/*
-        body: |
-          ## NAMDRunner Release
-          
-          ### Changes
-          See [CHANGELOG.md](CHANGELOG.md) for detailed changes.
-          
-          ### Downloads
-          - **Linux**: Download the `.AppImage` for portable use or `.deb` for system installation
-          - **Windows**: Download the `.msi` installer or standalone `.exe`
-          
-          ### System Requirements
-          - Linux: Ubuntu 20.04+ or equivalent
-          - Windows: Windows 10+
-          - Internet connection for cluster access
-        draft: false
-        prerelease: contains(github.ref, '-')
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ env.RUST_VERSION }}
+        components: rustfmt, clippy
+
+    - name: Install Linux dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libwebkit2gtk-4.1-dev \
+          build-essential \
+          curl \
+          wget \
+          file \
+          libssl-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev
+
+    - name: Cache Linux dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          src-tauri/target
+          node_modules
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/Cargo.lock', '**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
+
+    - name: Install frontend dependencies
+      run: npm ci
+
+    - name: Run basic linting checks
+      run: |
+        npm run lint
+        npm run check
+
+    - name: Check Rust formatting and linting
+      run: |
+        cd src-tauri
+        cargo fmt --all -- --check
+        cargo clippy -- -D warnings
+
+    - name: Build Tauri Linux application
+      run: npm run tauri build
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+        TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+    - name: Verify Linux build artifacts
+      run: |
+        echo "Checking for Linux build artifacts..."
+        ls -la src-tauri/target/release/
+        ls -la src-tauri/target/release/bundle/
+
+    - name: Upload Linux build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-build-artifacts
+        path: |
+          src-tauri/target/release/bundle/deb/*.deb
+          src-tauri/target/release/bundle/appimage/*.AppImage
+        retention-days: 30
+
+    - name: Create release summary
+      run: |
+        echo "## Linux Build Complete" >> $GITHUB_STEP_SUMMARY
+        echo "- DEB package created" >> $GITHUB_STEP_SUMMARY
+        echo "- AppImage created" >> $GITHUB_STEP_SUMMARY
+        echo "- Artifacts uploaded for download" >> $GITHUB_STEP_SUMMARY

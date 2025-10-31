@@ -10,10 +10,13 @@ import type {
   GetAllJobsResult,
   SyncJobsResult,
   DeleteJobResult,
+  RefetchLogsResult,
   FileUpload,
   UploadResult,
   DownloadResult,
   ListFilesResult,
+  GetClusterCapabilitiesResult,
+  ValidateResourceAllocationResult,
   JobId,
 } from '../types/api';
 
@@ -27,40 +30,25 @@ export interface ICoreClient {
   disconnect(): Promise<DisconnectResult>;
   getConnectionStatus(): Promise<ConnectionStatusResult>;
 
+  // Cluster configuration and validation
+  getClusterCapabilities(): Promise<GetClusterCapabilitiesResult>;
+  validateResourceAllocation(cores: number, memory: string, walltime: string, partition_id: string, qos_id: string): Promise<ValidateResourceAllocationResult>;
+  suggestQosForPartition(walltime_hours: number, partition_id: string): Promise<string>;
+  estimateQueueTimeForJob(cores: number, partition_id: string): Promise<string>;
+  calculateJobCost(cores: number, walltime_hours: number, has_gpu: boolean, gpu_count: number): Promise<number>;
+
   // Job management
   createJob(params: CreateJobParams): Promise<CreateJobResult>;
-  submitJob(jobId: JobId): Promise<SubmitJobResult>;
-  getJobStatus(jobId: JobId): Promise<JobStatusResult>;
+  submitJob(job_id: JobId): Promise<SubmitJobResult>;
+  getJobStatus(job_id: JobId): Promise<JobStatusResult>;
   getAllJobs(): Promise<GetAllJobsResult>;
-  syncJobs(): Promise<SyncJobsResult>;
-  deleteJob(jobId: JobId, deleteRemote: boolean): Promise<DeleteJobResult>;
+  syncJobs(): Promise<SyncJobsResult>;  // Discovery happens automatically during sync if DB empty
+  deleteJob(job_id: JobId, delete_remote: boolean): Promise<DeleteJobResult>;
+  refetchSlurmLogs(job_id: JobId): Promise<RefetchLogsResult>;
 
   // File management
-  uploadJobFiles(jobId: JobId, files: FileUpload[]): Promise<UploadResult>;
-  downloadJobOutput(jobId: JobId, fileName: string): Promise<DownloadResult>;
-  listJobFiles(jobId: JobId): Promise<ListFilesResult>;
-}
-
-// Connection management commands interface
-export interface IConnectionCommands {
-  connect(host: string, username: string, password: string): Promise<ConnectResult>;
-  disconnect(): Promise<DisconnectResult>;
-  getConnectionStatus(): Promise<ConnectionStatusResult>;
-}
-
-// Job management commands interface
-export interface IJobCommands {
-  createJob(params: CreateJobParams): Promise<CreateJobResult>;
-  submitJob(jobId: JobId): Promise<SubmitJobResult>;
-  getJobStatus(jobId: JobId): Promise<JobStatusResult>;
-  getAllJobs(): Promise<GetAllJobsResult>;
-  syncJobs(): Promise<SyncJobsResult>;
-  deleteJob(jobId: JobId, deleteRemote: boolean): Promise<DeleteJobResult>;
-}
-
-// File management commands interface
-export interface IFileCommands {
-  uploadJobFiles(jobId: JobId, files: FileUpload[]): Promise<UploadResult>;
-  downloadJobOutput(jobId: JobId, fileName: string): Promise<DownloadResult>;
-  listJobFiles(jobId: JobId): Promise<ListFilesResult>;
+  uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult>;
+  downloadJobOutput(job_id: JobId, file_path: string): Promise<DownloadResult>;
+  downloadAllOutputs(job_id: JobId): Promise<DownloadResult>;
+  listJobFiles(job_id: JobId): Promise<ListFilesResult>;
 }

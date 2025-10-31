@@ -9,21 +9,28 @@ export type Timestamp = string;
 export interface SessionInfo {
   host: string;
   username: string;
-  connectedAt: Timestamp;
+  connected_at: Timestamp;
 }
 
 export interface JobInfo {
-  jobId: JobId;
-  jobName: string;
+  job_id: JobId;
+  job_name: string;
   status: JobStatus;
-  slurmJobId?: SlurmJobId;
-  createdAt: Timestamp;
-  updatedAt?: Timestamp;
-  submittedAt?: Timestamp;
-  completedAt?: Timestamp;
-  projectDir?: string;
-  scratchDir?: string;
-  errorInfo?: string;
+  slurm_job_id?: SlurmJobId;
+  created_at: Timestamp;
+  updated_at?: Timestamp;
+  submitted_at?: Timestamp;
+  completed_at?: Timestamp;
+  project_dir?: string;
+  scratch_dir?: string;
+  error_info?: string;
+  slurm_stdout?: string;
+  slurm_stderr?: string;
+  namd_config: NAMDConfig;
+  slurm_config: SlurmConfig;
+  input_files: InputFile[];
+  output_files?: OutputFile[];
+  remote_directory: string;
 }
 
 export interface NAMDConfig {
@@ -31,8 +38,8 @@ export interface NAMDConfig {
   temperature: number;
   timestep: number;
   outputname: string;
-  dcdFreq?: number;
-  restartFreq?: number;
+  dcd_freq?: number;
+  restart_freq?: number;
 }
 
 export interface SlurmConfig {
@@ -45,22 +52,30 @@ export interface SlurmConfig {
 
 export interface InputFile {
   name: string;
-  localPath: string;
-  remoteName?: string;
-  type?: 'pdb' | 'psf' | 'prm' | 'other';
-  fileType?: 'pdb' | 'psf' | 'prm' | 'other';
+  local_path: string;
+  remote_name?: string;
+  file_type?: 'pdb' | 'psf' | 'prm' | 'other';
+  size?: number;
+  uploaded_at?: string;
+}
+
+export interface OutputFile {
+  name: string;
+  size: number;
+  modified_at: string;
 }
 
 export interface FileUpload {
-  localPath: string;
-  remoteName: string;
+  local_path: string;
+  remote_name: string;
 }
 
 export interface RemoteFile {
-  name: string;
+  name: string;           // Display name (just filename)
+  path: string;           // Full relative path from job root (e.g., "outputs/sim.dcd")
   size: number;
-  modifiedAt: Timestamp;
-  fileType: 'input' | 'output' | 'config' | 'log';
+  modified_at: Timestamp;
+  file_type: 'input' | 'output' | 'config' | 'log';
 }
 
 // Command parameters and results
@@ -72,7 +87,7 @@ export interface ConnectParams {
 
 export interface ConnectResult {
   success: boolean;
-  sessionInfo?: SessionInfo;
+  session_info?: SessionInfo;
   error?: string;
 }
 
@@ -83,32 +98,33 @@ export interface DisconnectResult {
 
 export interface ConnectionStatusResult {
   state: ConnectionState;
-  sessionInfo: SessionInfo | undefined;
+  session_info: SessionInfo | undefined;
 }
 
 export interface CreateJobParams {
-  jobName: string;
-  namdConfig: NAMDConfig;
-  slurmConfig: SlurmConfig;
-  inputFiles: InputFile[];
+  job_name: string;
+  namd_config: NAMDConfig;
+  slurm_config: SlurmConfig;
+  input_files: InputFile[];
 }
 
 export interface CreateJobResult {
   success: boolean;
-  jobId?: JobId;
+  job_id?: JobId;
+  job?: JobInfo;
   error?: string;
 }
 
 export interface SubmitJobResult {
   success: boolean;
-  slurmJobId?: SlurmJobId;
-  submittedAt?: Timestamp;
+  slurm_job_id?: SlurmJobId;
+  submitted_at?: Timestamp;
   error?: string;
 }
 
 export interface JobStatusResult {
   success: boolean;
-  jobInfo?: JobInfo;
+  job_info?: JobInfo;
   error?: string;
 }
 
@@ -120,7 +136,8 @@ export interface GetAllJobsResult {
 
 export interface SyncJobsResult {
   success: boolean;
-  jobsUpdated: number;
+  jobs: JobInfo[];           // Complete job list after sync
+  jobs_updated: number;       // Number of jobs updated during sync
   errors: string[];
 }
 
@@ -129,20 +146,32 @@ export interface DeleteJobResult {
   error?: string;
 }
 
+export interface DiscoverJobsResult {
+  success: boolean;
+  jobs_found: number;
+  jobs_imported: number;
+  error?: string;
+}
+
+export interface RefetchLogsResult {
+  success: boolean;
+  job_info?: JobInfo;
+  error?: string;
+}
+
 export interface UploadResult {
   success: boolean;
-  uploadedFiles?: string[];
-  failedUploads?: Array<{
-    fileName: string;
+  uploaded_files?: string[];
+  failed_uploads?: Array<{
+    file_name: string;
     error: string;
   }>;
 }
 
 export interface DownloadResult {
   success: boolean;
-  content?: string;
-  filePath?: string;
-  fileSize?: number;
+  saved_to?: string;  // Local path where file was saved
+  file_size?: number;
   error?: string;
 }
 
@@ -150,6 +179,87 @@ export interface ListFilesResult {
   success: boolean;
   files?: RemoteFile[];
   error?: string;
+}
+
+// Cluster Capabilities (from backend)
+export type PartitionCategory = 'Compute' | 'GPU' | 'HighMemory' | 'Development' | 'Compile';
+export type QosPriority = 'High' | 'Normal' | 'Low';
+
+export interface PartitionSpec {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  nodes: string;
+  cores_per_node: string;
+  ram_per_core: string;
+  max_walltime: string;
+  gpu_type: string | null;
+  gpu_count: number | null;
+  category: PartitionCategory;
+  use_cases: string[];
+  is_standard: boolean;
+  is_default: boolean;
+}
+
+export interface QosSpec {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  max_walltime_hours: number;
+  max_jobs: number;
+  node_limit: number;
+  valid_partitions: string[];
+  requirements: string[];
+  priority: QosPriority;
+  is_default: boolean;
+}
+
+export interface JobPresetConfig {
+  cores: number;
+  memory: string;
+  wall_time: string;
+  partition: string;
+  qos: string;
+}
+
+export interface JobPreset {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  config: JobPresetConfig;
+  estimated_cost: string;
+  estimated_queue: string;
+  use_cases: string[];
+  requires_gpu: boolean;
+}
+
+export interface BillingRates {
+  cpu_cost_per_core_hour: number;
+  gpu_cost_per_gpu_hour: number;
+}
+
+export interface ClusterCapabilities {
+  partitions: PartitionSpec[];
+  qos_options: QosSpec[];
+  job_presets: JobPreset[];
+  billing_rates: BillingRates;
+}
+
+export interface GetClusterCapabilitiesResult {
+  success: boolean;
+  data?: ClusterCapabilities;
+  error?: string;
+}
+
+export interface ValidateResourceAllocationResult {
+  is_valid: boolean;
+  issues: string[];
+  warnings: string[];
+  suggestions: string[];
 }
 
 // Error handling

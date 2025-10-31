@@ -1,0 +1,123 @@
+{
+  "success": false,
+  "tests": [
+    {
+      "name": "Application loads successfully",
+      "status": "PASS",
+      "details": null
+    },
+    {
+      "name": "Sidebar/Navigation visible",
+      "status": "PASS",
+      "details": null
+    },
+    {
+      "name": "Connection status component visible",
+      "status": "PASS",
+      "details": null
+    },
+    {
+      "name": "Jobs navigation button visible",
+      "status": "PASS",
+      "details": null
+    },
+    {
+      "name": "Create job button visible",
+      "status": "PASS",
+      "details": null
+    },
+    {
+      "name": "Demo mode option available in dropdown",
+      "status": "FAIL",
+      "details": null
+    },
+    {
+      "name": "Demo mode connection workflow",
+      "status": "FAIL",
+      "details": "locator.isVisible: Error: strict mode violation: locator(':has-text(\"Connected\"), :has-text(\"Demo\"), .connected') resolved to 10 elements:\n    1) <html lang=\"en\">…</html> aka locator('html')\n    2) <body data-sveltekit-preload-data=\"hover\">…</body> aka locator('body')\n    3) <div>…</div> aka locator('div').filter({ hasText: '🧬 NAMDRunner Jobs 3 Create' }).first()\n    4) <div class=\"app-shell s-hJLaMyV4rp2Z\">…</div> aka getByText('🧬 NAMDRunner Jobs 3 Create Job Jobs Connected Jobs Create New Job Offline -')\n    5) <div class=\"main-content s-hJLaMyV4rp2Z\">…</div> aka getByText('Jobs Connected Jobs Create')\n    6) <header class=\"app-header s-UDxF8dk9P1qR\">…</header> aka getByText('Jobs Connected')\n    7) <div class=\"header-right s-UDxF8dk9P1qR\">…</div> aka locator('div').filter({ hasText: 'Connected' }).nth(3)\n    8) <div class=\"connection-dropdown s-myRn9GXd7vy1\">…</div> aka locator('div').filter({ hasText: 'Connected' }).nth(4)\n    9) <button data-testid=\"connection-status-button\" class=\"connection-trigger s-myRn9GXd7vy1\">…</button> aka getByTestId('connection-status-button')\n    10) <span class=\"status-label namd-connection-connected s-myRn9GXd7vy1\">Connected</span> aka getByTestId('connection-status-button')\n\nCall log:\n\u001b[2m    - checking visibility of locator(':has-text(\"Connected\"), :has-text(\"Demo\"), .connected')\u001b[22m\n"
+    },
+    {
+      "name": "Jobs table/list visible",
+      "status": "PASS",
+      "details": null
+    },
+    {
+      "name": "Mock job data present",
+      "status": "PASS",
+      "details": "Found 1 job entries"
+    },
+    {
+      "name": "Job details view opens",
+      "status": "FAIL",
+      "details": null
+    },
+    {
+      "name": "Job name field present",
+      "status": "FAIL",
+      "details": null
+    },
+    {
+      "name": "Temperature field present",
+      "status": "FAIL",
+      "details": null
+    },
+    {
+      "name": "Partition field present",
+      "status": "FAIL",
+      "details": null
+    },
+    {
+      "name": "Theme toggle functionality",
+      "status": "PASS",
+      "details": null
+    },
+    {
+      "name": "Mobile viewport rendering",
+      "status": "PASS",
+      "details": null
+    },
+    {
+      "name": "UI responsiveness testing",
+      "status": "FAIL",
+      "details": "locator.isVisible: Error: strict mode violation: locator('nav, .sidebar, .menu-button') resolved to 3 elements:\n    1) <nav class=\"sidebar s-YkOUTIwO2H66\">…</nav> aka getByText('🧬 NAMDRunner Jobs 3 Create')\n    2) <nav aria-label=\"Breadcrumb\" class=\"breadcrumbs s-UDxF8dk9P1qR\">…</nav> aka getByRole('navigation', { name: 'Breadcrumb' })\n    3) <nav class=\"namd-tabs-nav namd-tabs-nav--grid namd-tabs-nav--grid-4\">…</nav> aka getByText('ResourcesConfigurationFilesReview')\n\nCall log:\n\u001b[2m    - checking visibility of locator('nav, .sidebar, .menu-button')\u001b[22m\n"
+    },
+    {
+      "name": "Error handling testing",
+      "status": "FAIL",
+      "details": "locator.isVisible: Error: strict mode violation: locator('.error, .invalid, .validation-error, [role=\"alert\"]') resolved to 3 elements:\n    1) <div class=\"status-icon s-Cqy0NG_GAqkA invalid\">…</div> aka locator('.status-icon')\n    2) <li class=\"issue error s-Cqy0NG_GAqkA\">Cores (128) exceeds partition limit (64)</li> aka getByText('Cores (128) exceeds partition')\n    3) <li class=\"issue error s-Cqy0NG_GAqkA\">Memory (512GB) exceeds limit for 128 cores (480.0…</li> aka getByText('Memory (512GB) exceeds limit')\n\nCall log:\n\u001b[2m    - checking visibility of locator('.error, .invalid, .validation-error, [role=\"alert\"]')\u001b[22m\n"
+    }
+  ],
+  "screenshots": [
+    "demo-mode-01-app-loaded.png",
+    "demo-mode-02-initial-ui-state.png",
+    "demo-mode-03-connection-dropdown-opened.png",
+    "demo-mode-04-demo-connect-clicked.png",
+    "demo-mode-05-jobs-page-loaded.png",
+    "demo-mode-06-job-details-opened.png",
+    "demo-mode-07-create-job-page-loaded.png",
+    "demo-mode-08-create-job-form-filled.png",
+    "demo-mode-09-theme-toggled.png",
+    "demo-mode-10-mobile-viewport.png",
+    "demo-mode-11-empty-form-submission.png"
+  ],
+  "errors": [],
+  "consoleLogs": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting...",
+      "timestamp": "2025-09-18T19:12:44.847Z"
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected.",
+      "timestamp": "2025-09-18T19:12:44.860Z"
+    },
+    {
+      "type": "log",
+      "text": "🔧 Using demo mode (mock client) - User preference: auto",
+      "timestamp": "2025-09-18T19:12:45.057Z"
+    }
+  ],
+  "timestamp": "2025-09-18T19:12:44.337Z",
+  "testDuration": 9310
+}

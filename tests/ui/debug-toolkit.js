@@ -31,11 +31,17 @@ class AgentDebugger {
 
   async initialize() {
     console.log('🤖 Starting Agent Debug Session...\n');
-    
-    this.browser = await chromium.launch({ 
-      headless: false,
-      slowMo: 200
+
+    // Auto-detect if running in SSH/headless environment
+    const isHeadless = process.env.SSH_CLIENT || process.env.DISPLAY === ':99' || process.env.CI;
+
+    this.browser = await chromium.launch({
+      headless: isHeadless,
+      slowMo: isHeadless ? 50 : 200,
+      args: isHeadless ? ['--no-sandbox', '--disable-setuid-sandbox'] : []
     });
+
+    console.log(`   Running in ${isHeadless ? 'headless' : 'headed'} mode`);
     
     const context = await this.browser.newContext({
       viewport: { width: 1280, height: 720 },
@@ -80,9 +86,17 @@ class AgentDebugger {
 
   async connectToApp(url = 'http://localhost:1420/') {
     console.log(`🌐 Connecting to ${url}...`);
-    await this.page.goto(url, { waitUntil: 'networkidle' });
-    await this.screenshot('app-loaded');
-    console.log('✅ Connected to application');
+    console.log('   ⏳ Note: Vite dev server may take 1-3 minutes to start on first run');
+
+    try {
+      await this.page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+      await this.screenshot('app-loaded');
+      console.log('✅ Connected to application');
+    } catch (error) {
+      console.log('❌ Connection failed - server may still be starting');
+      console.log('   💡 Try: curl -s http://localhost:1420 to check if server is ready');
+      throw error;
+    }
   }
 
   async screenshot(name = null) {
