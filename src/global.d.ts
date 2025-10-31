@@ -1,9 +1,9 @@
 // Global type definitions for NAMDRunner
 
 interface SSHConsole {
-  addCommand: (_command: string) => void;
-  addOutput: (_output: string) => void;
-  addDebug: (_message: string) => void;
+  addCommand: (command: string) => void;
+  addOutput: (output: string) => void;
+  addDebug: (message: string) => void;
 }
 
 declare global {
