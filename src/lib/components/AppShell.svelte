@@ -6,9 +6,7 @@
   import JobsPage from './pages/JobsPage.svelte';
   import JobDetailPage from './pages/JobDetailPage.svelte';
   import CreateJobPage from './pages/CreateJobPage.svelte';
-  import { currentView, selectedJobId, consoleOpen, uiStore } from '../stores/ui';
-  import { jobsStore } from '../stores/jobs';
-  import { sessionActions } from '../stores/session';
+  import { currentView, selectedJobId, uiStore } from '../stores/ui';
   import { clusterConfig } from '../stores/clusterConfig';
 
   onMount(() => {

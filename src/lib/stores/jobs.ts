@@ -344,10 +344,12 @@ function createJobsStore() {
           }));
 
           // Add the returned job directly to the store (no second backend call)
-          update(state => ({
-            ...state,
-            jobs: [...state.jobs, result.job!]
-          }));
+          if (result.job) {
+            update(state => ({
+              ...state,
+              jobs: [...state.jobs, result.job as JobInfo]
+            }));
+          }
 
           return result;
         } else {
@@ -474,7 +476,7 @@ function createJobsStore() {
           // Update the specific job in local state
           update(state => ({
             ...state,
-            jobs: state.jobs.map(job => job.job_id === job_id ? result.job_info! : job)
+            jobs: state.jobs.map(job => job.job_id === job_id ? result.job_info as JobInfo : job)
           }));
         }
 

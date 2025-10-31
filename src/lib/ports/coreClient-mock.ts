@@ -135,7 +135,7 @@ export class MockCoreClient implements ICoreClient {
     if (!transitionResult.success) {
       return {
         success: false,
-        error: `Cannot connect: ${transitionResult.error!.message}`,
+        error: `Cannot connect: ${transitionResult.error?.message || 'Unknown error'}`,
       };
     }
 

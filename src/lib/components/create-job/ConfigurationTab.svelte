@@ -181,7 +181,7 @@
       <span class="field-hint">Required for explicit solvent simulations</span>
     </div>
 
-    {#if namdConfig.pme_enabled}
+    {#if namdConfig.pme_enabled && namdConfig.cell_basis_vector1 && namdConfig.cell_basis_vector2 && namdConfig.cell_basis_vector3}
       <p class="field-hint" style="margin-bottom: 1rem;">
         Cell basis vectors define the periodic boundary box. For solvated systems, these are typically found in the CRYST1 record of your PDB file or from the solvation process.
       </p>
@@ -193,7 +193,7 @@
               class="namd-input vector-input"
               type="number"
               placeholder="X"
-              bind:value={namdConfig.cell_basis_vector1!.x}
+              bind:value={namdConfig.cell_basis_vector1.x}
               step="0.1"
               required
             />
@@ -201,7 +201,7 @@
               class="namd-input vector-input"
               type="number"
               placeholder="Y"
-              bind:value={namdConfig.cell_basis_vector1!.y}
+              bind:value={namdConfig.cell_basis_vector1.y}
               step="0.1"
               required
             />
@@ -209,7 +209,7 @@
               class="namd-input vector-input"
               type="number"
               placeholder="Z"
-              bind:value={namdConfig.cell_basis_vector1!.z}
+              bind:value={namdConfig.cell_basis_vector1.z}
               step="0.1"
               required
             />
@@ -223,7 +223,7 @@
               class="namd-input vector-input"
               type="number"
               placeholder="X"
-              bind:value={namdConfig.cell_basis_vector2!.x}
+              bind:value={namdConfig.cell_basis_vector2.x}
               step="0.1"
               required
             />
@@ -231,7 +231,7 @@
               class="namd-input vector-input"
               type="number"
               placeholder="Y"
-              bind:value={namdConfig.cell_basis_vector2!.y}
+              bind:value={namdConfig.cell_basis_vector2.y}
               step="0.1"
               required
             />
@@ -239,7 +239,7 @@
               class="namd-input vector-input"
               type="number"
               placeholder="Z"
-              bind:value={namdConfig.cell_basis_vector2!.z}
+              bind:value={namdConfig.cell_basis_vector2.z}
               step="0.1"
               required
             />
@@ -253,7 +253,7 @@
               class="namd-input vector-input"
               type="number"
               placeholder="X"
-              bind:value={namdConfig.cell_basis_vector3!.x}
+              bind:value={namdConfig.cell_basis_vector3.x}
               step="0.1"
               required
             />
@@ -261,7 +261,7 @@
               class="namd-input vector-input"
               type="number"
               placeholder="Y"
-              bind:value={namdConfig.cell_basis_vector3!.y}
+              bind:value={namdConfig.cell_basis_vector3.y}
               step="0.1"
               required
             />
@@ -269,7 +269,7 @@
               class="namd-input vector-input"
               type="number"
               placeholder="Z"
-              bind:value={namdConfig.cell_basis_vector3!.z}
+              bind:value={namdConfig.cell_basis_vector3.z}
               step="0.1"
               required
             />
