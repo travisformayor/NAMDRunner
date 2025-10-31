@@ -1,7 +1,42 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { jobs, jobsByStatus, jobCounts, mockJobs } from './jobs';
-import type { JobInfo } from '../types/api';
+import type { JobInfo, NAMDConfig } from '../types/api';
+
+// Helper function to create a valid NAMDConfig for test data
+function createTestNAMDConfig(overrides: Partial<NAMDConfig> = {}): NAMDConfig {
+  const base: NAMDConfig = {
+    outputname: 'output',
+    temperature: 300,
+    timestep: 2.0,
+    execution_mode: 'run',
+    steps: 100000,
+    pme_enabled: false,
+    npt_enabled: false,
+    langevin_damping: 5.0,
+    xst_freq: 1200,
+    output_energies_freq: 1200,
+    dcd_freq: 1200,
+    restart_freq: 1200,
+    output_pressure_freq: 1200
+  };
+
+  // Merge overrides, excluding undefined values for optional properties
+  const result = { ...base, ...overrides };
+
+  // Only set optional properties if explicitly provided
+  if ('cell_basis_vector1' in overrides) {
+    result.cell_basis_vector1 = overrides.cell_basis_vector1;
+  }
+  if ('cell_basis_vector2' in overrides) {
+    result.cell_basis_vector2 = overrides.cell_basis_vector2;
+  }
+  if ('cell_basis_vector3' in overrides) {
+    result.cell_basis_vector3 = overrides.cell_basis_vector3;
+  }
+
+  return result;
+}
 
 // Mock CoreClientFactory to avoid external dependencies
 vi.mock('../ports/clientFactory', () => ({
@@ -56,14 +91,14 @@ describe('Jobs Store - Business Logic Tests', () => {
           status: 'RUNNING',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
-          namd_config: {
+          namd_config: createTestNAMDConfig({
             steps: 1000,
             temperature: 300,
             timestep: 2.0,
             outputname: 'test1',
             dcd_freq: 100,
             restart_freq: 100
-          },
+          }),
           slurm_config: {
             cores: 4,
             memory: '8GB',
@@ -80,14 +115,14 @@ describe('Jobs Store - Business Logic Tests', () => {
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T01:00:00Z',
           completed_at: '2024-01-01T01:00:00Z',
-          namd_config: {
+          namd_config: createTestNAMDConfig({
             steps: 1000,
             temperature: 300,
             timestep: 2.0,
             outputname: 'test2',
             dcd_freq: 100,
             restart_freq: 100
-          },
+          }),
           slurm_config: {
             cores: 4,
             memory: '8GB',

@@ -9,6 +9,22 @@ use std::fs;
 use std::path::Path;
 use tauri::AppHandle;
 
+/// Detect NAMD file type from filename
+/// Returns the detected file type (pdb, psf, prm, exb, or other)
+#[tauri::command(rename_all = "snake_case")]
+pub fn detect_file_type(filename: String) -> String {
+    let file_type = NAMDFileType::from_filename(&filename);
+
+    // Serialize to lowercase string matching frontend expectations
+    match file_type {
+        NAMDFileType::Pdb => "pdb".to_string(),
+        NAMDFileType::Psf => "psf".to_string(),
+        NAMDFileType::Prm => "prm".to_string(),
+        NAMDFileType::Exb => "exb".to_string(),
+        NAMDFileType::Other => "other".to_string(),
+    }
+}
+
 /// Open a file dialog to select NAMD input files
 /// Returns list of selected file paths with metadata
 #[tauri::command(rename_all = "snake_case")]
@@ -16,7 +32,7 @@ pub async fn select_input_files(_app: AppHandle) -> Result<Vec<SelectedFile>, St
     use rfd::FileDialog;
 
     let files = FileDialog::new()
-        .add_filter("NAMD Files", &["pdb", "psf", "prm"])
+        .add_filter("NAMD Files", &["pdb", "psf", "prm", "exb"])
         .set_title("Select NAMD Input Files")
         .pick_files();
 
@@ -801,12 +817,22 @@ mod tests {
             "test_job_001".to_string(),
             "Test Job".to_string(),
             NAMDConfig {
-                steps: 1000,
+                outputname: "test_output".to_string(),
                 temperature: 300.0,
                 timestep: 2.0,
-                outputname: "test_output".to_string(),
-                dcd_freq: Some(100),
-                restart_freq: Some(500),
+                execution_mode: ExecutionMode::Run,
+                steps: 1000,
+                cell_basis_vector1: None,
+                cell_basis_vector2: None,
+                cell_basis_vector3: None,
+                pme_enabled: false,
+                npt_enabled: false,
+                langevin_damping: 5.0,
+                xst_freq: 100,
+                output_energies_freq: 100,
+                dcd_freq: 100,
+                restart_freq: 500,
+                output_pressure_freq: 100,
             },
             SlurmConfig {
                 cores: 4,

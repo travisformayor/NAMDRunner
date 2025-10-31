@@ -441,6 +441,21 @@ export class MockCoreClient implements ICoreClient {
   }
 
   // File management
+  async detectFileType(filename: string): Promise<string> {
+    // Mock implementation matching backend logic
+    const lower = filename.toLowerCase();
+    const ext = lower.split('.').pop() || '';
+
+    if (ext === 'pdb') return 'pdb';
+    if (ext === 'psf') return 'psf';
+    if (ext === 'prm') return 'prm';
+    if (ext === 'exb') return 'exb';
+    if (lower.endsWith('.enm.extra')) return 'exb';
+    if (lower.includes('extrabonds')) return 'exb';
+
+    return 'other';
+  }
+
   async uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult> {
 
     const job = this.jobs.get(job_id);

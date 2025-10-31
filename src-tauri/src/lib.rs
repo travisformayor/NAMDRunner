@@ -70,6 +70,7 @@ pub fn run() {
             commands::jobs::refetch_slurm_logs,
             commands::jobs::discover_jobs_from_server,
             // File management
+            commands::files::detect_file_type,
             commands::files::select_input_files,
             commands::files::upload_job_files,
             commands::files::download_job_output,

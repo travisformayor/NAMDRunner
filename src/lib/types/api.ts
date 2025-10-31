@@ -34,12 +34,39 @@ export interface JobInfo {
 }
 
 export interface NAMDConfig {
-  steps: number;
+  // Basic simulation parameters
+  outputname: string;
   temperature: number;
   timestep: number;
-  outputname: string;
-  dcd_freq?: number;
-  restart_freq?: number;
+
+  // Execution mode and steps
+  execution_mode: 'minimize' | 'run';
+  steps: number;
+
+  // Periodic boundary conditions (required for PME)
+  cell_basis_vector1?: CellBasisVector;
+  cell_basis_vector2?: CellBasisVector;
+  cell_basis_vector3?: CellBasisVector;
+
+  // Electrostatics and ensemble
+  pme_enabled: boolean;
+  npt_enabled: boolean;
+
+  // Langevin dynamics parameters
+  langevin_damping: number;
+
+  // Output frequencies (all required)
+  xst_freq: number;
+  output_energies_freq: number;
+  dcd_freq: number;
+  restart_freq: number;
+  output_pressure_freq: number;
+}
+
+export interface CellBasisVector {
+  x: number;
+  y: number;
+  z: number;
 }
 
 export interface SlurmConfig {
@@ -54,7 +81,7 @@ export interface InputFile {
   name: string;
   local_path: string;
   remote_name?: string;
-  file_type?: 'pdb' | 'psf' | 'prm' | 'other';
+  file_type?: 'pdb' | 'psf' | 'prm' | 'exb' | 'other';
   size?: number;
   uploaded_at?: string;
 }

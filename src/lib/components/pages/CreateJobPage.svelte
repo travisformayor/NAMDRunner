@@ -12,9 +12,10 @@
   import { jobsStore } from '../../stores/jobs';
   import { isConnected } from '../../stores/session';
   import { isLoaded, loadError, partitions, allQosOptions } from '../../stores/clusterConfig';
-  import type { CreateJobParams } from '../../types/api';
+  import type { CreateJobParams, NAMDConfig } from '../../types/api';
   import CreateJobTabs from '../create-job/CreateJobTabs.svelte';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
+  import { CoreClientFactory } from '../../ports/clientFactory';
 
   if (typeof window !== 'undefined' && window.sshConsole) {
     window.sshConsole.addDebug('[CreateJobPage] Imports complete');
@@ -72,13 +73,20 @@
   let job_name = "";
 
   // NAMD configuration (matches backend NAMDConfig type)
-  let namdConfig = {
-    steps: 1000000,
+  let namdConfig: NAMDConfig = {
+    outputname: "",
     temperature: 310,
     timestep: 2,
-    outputname: "",
-    dcd_freq: 5000,
-    restart_freq: 10000
+    execution_mode: 'run',
+    steps: 1000000,
+    pme_enabled: false,  // Default to false since cell basis vectors are not set
+    npt_enabled: false,  // Default to false for vacuum simulations
+    langevin_damping: 5.0,
+    xst_freq: 1200,
+    output_energies_freq: 1200,
+    dcd_freq: 1200,
+    restart_freq: 1200,
+    output_pressure_freq: 1200
   };
 
   let errors: Record<string, string> = {};
@@ -88,11 +96,14 @@
   let createError: string = '';
   let uploadProgress: Map<string, { percentage: number }> = new Map();
 
-  function detectFileType(filename: string): 'pdb' | 'psf' | 'prm' | 'other' {
-    const ext = filename.toLowerCase().split('.').pop();
-    if (ext === 'pdb') return 'pdb';
-    if (ext === 'psf') return 'psf';
-    if (ext === 'prm') return 'prm';
+  // File type detection now calls backend for source of truth
+  async function detectFileType(filename: string): Promise<'pdb' | 'psf' | 'prm' | 'exb' | 'other'> {
+    const coreClient = CoreClientFactory.getClient();
+    const result = await coreClient.detectFileType(filename);
+    // Ensure the result matches our literal type
+    if (result === 'pdb' || result === 'psf' || result === 'prm' || result === 'exb' || result === 'other') {
+      return result;
+    }
     return 'other';
   }
 
@@ -123,12 +134,12 @@
           partition: resourceConfig.partition,
           qos: resourceConfig.qos,
         },
-        input_files: uploadedFiles.map(file => ({
+        input_files: await Promise.all(uploadedFiles.map(async file => ({
           name: file.name,
           local_path: file.path,  // Use absolute path from Tauri dialog
           remote_name: file.name,
-          file_type: detectFileType(file.name),
-        })),
+          file_type: await detectFileType(file.name),
+        }))),
       };
 
       // Call backend to create job (includes file upload and directory creation)

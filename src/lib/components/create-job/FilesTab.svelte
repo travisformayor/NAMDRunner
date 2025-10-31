@@ -8,7 +8,7 @@
   // File upload functionality
   let isDragOver = false;
 
-  const acceptedExtensions = [".pdb", ".psf", ".prm"];
+  const acceptedExtensions = [".pdb", ".psf", ".prm", ".exb", ".enm.extra"];
 
   function handleDrop(event: DragEvent) {
     event.preventDefault();

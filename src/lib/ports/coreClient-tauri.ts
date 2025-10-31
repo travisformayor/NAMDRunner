@@ -97,6 +97,10 @@ export class TauriCoreClient implements ICoreClient {
   }
 
   // File management
+  async detectFileType(filename: string): Promise<string> {
+    return invoke('detect_file_type', { filename });
+  }
+
   async uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult> {
     return invoke('upload_job_files', { job_id, files });
   }
