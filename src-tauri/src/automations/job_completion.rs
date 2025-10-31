@@ -96,7 +96,7 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{JobInfo, JobStatus, NAMDConfig, SlurmConfig};
+    use crate::types::{JobInfo, JobStatus, NAMDConfig, SlurmConfig, ExecutionMode};
     use chrono::Utc;
 
     fn create_test_job_info() -> JobInfo {
@@ -114,12 +114,22 @@ mod tests {
             scratch_dir: Some("/scratch/alpine/testuser/namdrunner_jobs/test_job_001".to_string()),
             error_info: None,
             namd_config: NAMDConfig {
-                steps: 1000,
+                outputname: "output".to_string(),
                 temperature: 300.0,
                 timestep: 2.0,
-                outputname: "output".to_string(),
-                dcd_freq: Some(100),
-                restart_freq: Some(500),
+                execution_mode: ExecutionMode::Run,
+                steps: 1000,
+                cell_basis_vector1: None,
+                cell_basis_vector2: None,
+                cell_basis_vector3: None,
+                pme_enabled: false,
+                npt_enabled: false,
+                langevin_damping: 5.0,
+                xst_freq: 100,
+                output_energies_freq: 100,
+                dcd_freq: 100,
+                restart_freq: 500,
+                output_pressure_freq: 100,
             },
             slurm_config: SlurmConfig {
                 cores: 4,

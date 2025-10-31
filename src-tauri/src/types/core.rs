@@ -86,8 +86,28 @@ pub enum NAMDFileType {
     Psf,
     #[serde(rename = "prm")]
     Prm,
+    #[serde(rename = "exb")]
+    Exb,
     #[serde(rename = "other")]
     Other,
+}
+
+impl NAMDFileType {
+    /// Detect file type from filename (source of truth for type detection)
+    pub fn from_filename(filename: &str) -> Self {
+        let lower = filename.to_lowercase();
+        let ext = lower.split('.').last().unwrap_or("");
+
+        match ext {
+            "pdb" => Self::Pdb,
+            "psf" => Self::Psf,
+            "prm" => Self::Prm,
+            "exb" => Self::Exb,
+            _ if lower.ends_with(".enm.extra") => Self::Exb,
+            _ if lower.contains("extrabonds") => Self::Exb,
+            _ => Self::Other,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,12 +174,49 @@ impl JobInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NAMDConfig {
-    pub steps: u32,
+    // Basic simulation parameters
+    pub outputname: String,
     pub temperature: f64,
     pub timestep: f64,
-    pub outputname: String,
-    pub dcd_freq: Option<u32>,
-    pub restart_freq: Option<u32>,
+
+    // Execution mode and steps
+    pub execution_mode: ExecutionMode,  // minimize or run
+    pub steps: u32,  // minimize steps or run steps depending on mode
+
+    // Periodic boundary conditions (required for PME)
+    pub cell_basis_vector1: Option<CellBasisVector>,
+    pub cell_basis_vector2: Option<CellBasisVector>,
+    pub cell_basis_vector3: Option<CellBasisVector>,
+
+    // Electrostatics and ensemble
+    pub pme_enabled: bool,
+    pub npt_enabled: bool,
+
+    // Langevin dynamics parameters
+    pub langevin_damping: f64,
+
+    // Output frequencies (all required, no Option)
+    pub xst_freq: u32,
+    pub output_energies_freq: u32,
+    pub dcd_freq: u32,
+    pub restart_freq: u32,
+    pub output_pressure_freq: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ExecutionMode {
+    #[serde(rename = "minimize")]
+    Minimize,
+    #[serde(rename = "run")]
+    Run,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CellBasisVector {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,12 +232,22 @@ pub struct SlurmConfig {
 impl Default for NAMDConfig {
     fn default() -> Self {
         Self {
-            steps: 10000,
+            outputname: "output".to_string(),
             temperature: 300.0,
             timestep: 2.0,
-            outputname: "output".to_string(),
-            dcd_freq: Some(1000),
-            restart_freq: Some(5000),
+            execution_mode: ExecutionMode::Run,
+            steps: 10000,
+            cell_basis_vector1: None,
+            cell_basis_vector2: None,
+            cell_basis_vector3: None,
+            pme_enabled: false,
+            npt_enabled: false,
+            langevin_damping: 5.0,
+            xst_freq: 1200,
+            output_energies_freq: 1200,
+            dcd_freq: 1200,
+            restart_freq: 1200,
+            output_pressure_freq: 1200,
         }
     }
 }
@@ -271,4 +338,41 @@ pub struct FileUploadProgress {
     pub total_bytes: u64,
     pub percentage: f32,
     pub transfer_rate_mbps: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_namd_file_type_detection() {
+        // Standard extensions
+        assert_eq!(NAMDFileType::from_filename("structure.pdb"), NAMDFileType::Pdb);
+        assert_eq!(NAMDFileType::from_filename("structure.psf"), NAMDFileType::Psf);
+        assert_eq!(NAMDFileType::from_filename("parameters.prm"), NAMDFileType::Prm);
+        assert_eq!(NAMDFileType::from_filename("restraints.exb"), NAMDFileType::Exb);
+
+        // Case insensitive
+        assert_eq!(NAMDFileType::from_filename("STRUCTURE.PDB"), NAMDFileType::Pdb);
+        assert_eq!(NAMDFileType::from_filename("Structure.Psf"), NAMDFileType::Psf);
+
+        // Special extrabonds patterns
+        assert_eq!(
+            NAMDFileType::from_filename("hextube_MGHH_WI_k0.5.enm.extra"),
+            NAMDFileType::Exb
+        );
+        assert_eq!(
+            NAMDFileType::from_filename("mghh_extrabonds"),
+            NAMDFileType::Exb
+        );
+        assert_eq!(
+            NAMDFileType::from_filename("my_extrabonds_file.txt"),
+            NAMDFileType::Exb
+        );
+
+        // Unknown extensions
+        assert_eq!(NAMDFileType::from_filename("data.txt"), NAMDFileType::Other);
+        assert_eq!(NAMDFileType::from_filename("config.conf"), NAMDFileType::Other);
+        assert_eq!(NAMDFileType::from_filename("noextension"), NAMDFileType::Other);
+    }
 }

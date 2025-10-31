@@ -1,7 +1,42 @@
 import { writable, derived } from 'svelte/store';
-import type { JobInfo, JobStatus, CreateJobParams } from '../types/api';
+import type { JobInfo, JobStatus, CreateJobParams, NAMDConfig } from '../types/api';
 import { CoreClientFactory } from '../ports/clientFactory';
 import { listen } from '@tauri-apps/api/event';
+
+// Helper function to create a valid NAMDConfig for mock data
+function createMockNAMDConfig(overrides: Partial<NAMDConfig> = {}): NAMDConfig {
+  const base: NAMDConfig = {
+    outputname: 'output',
+    temperature: 300,
+    timestep: 2.0,
+    execution_mode: 'run',
+    steps: 100000,
+    pme_enabled: false,
+    npt_enabled: false,
+    langevin_damping: 5.0,
+    xst_freq: 1200,
+    output_energies_freq: 1200,
+    dcd_freq: 1200,
+    restart_freq: 1200,
+    output_pressure_freq: 1200
+  };
+
+  // Merge overrides, excluding undefined values for optional properties
+  const result = { ...base, ...overrides };
+
+  // Only set optional properties if explicitly provided
+  if ('cell_basis_vector1' in overrides) {
+    result.cell_basis_vector1 = overrides.cell_basis_vector1;
+  }
+  if ('cell_basis_vector2' in overrides) {
+    result.cell_basis_vector2 = overrides.cell_basis_vector2;
+  }
+  if ('cell_basis_vector3' in overrides) {
+    result.cell_basis_vector3 = overrides.cell_basis_vector3;
+  }
+
+  return result;
+}
 
 // Mock job data for UI development and testing - one example of each status
 export const mockJobs: JobInfo[] = [
@@ -13,14 +48,12 @@ export const mockJobs: JobInfo[] = [
     created_at: '2024-01-15T09:30:00Z',
     updated_at: '2024-01-15T09:35:00Z',
     submitted_at: '2024-01-15T09:35:00Z',
-    namd_config: {
+    namd_config: createMockNAMDConfig({
       steps: 100000,
-      temperature: 300,
-      timestep: 2.0,
       outputname: 'protein_output',
       dcd_freq: 1000,
       restart_freq: 1000
-    },
+    }),
     slurm_config: {
       cores: 24,
       memory: '16GB',
@@ -43,14 +76,14 @@ export const mockJobs: JobInfo[] = [
     updated_at: '2024-01-14T18:50:00Z',
     submitted_at: '2024-01-14T14:25:00Z',
     completed_at: '2024-01-14T18:50:00Z',
-    namd_config: {
+    namd_config: createMockNAMDConfig({
       steps: 200000,
       temperature: 310,
       timestep: 2.0,
       outputname: 'membrane_output',
       dcd_freq: 1000,
       restart_freq: 1000
-    },
+    }),
     slurm_config: {
       cores: 48,
       memory: '32GB',
@@ -71,14 +104,14 @@ export const mockJobs: JobInfo[] = [
     created_at: '2024-01-15T11:45:00Z',
     updated_at: '2024-01-15T11:50:00Z',
     submitted_at: '2024-01-15T11:50:00Z',
-    namd_config: {
+    namd_config: createMockNAMDConfig({
       steps: 500000,
       temperature: 300,
       timestep: 1.0,
       outputname: 'drug_analysis',
       dcd_freq: 2000,
       restart_freq: 2000
-    },
+    }),
     slurm_config: {
       cores: 96,
       memory: '64GB',
@@ -98,14 +131,14 @@ export const mockJobs: JobInfo[] = [
     status: 'CREATED',
     created_at: '2024-01-15T14:30:00Z',
     updated_at: '2024-01-15T14:30:00Z',
-    namd_config: {
+    namd_config: createMockNAMDConfig({
       steps: 75000,
       temperature: 310,
       timestep: 2.0,
       outputname: 'enzyme_output',
       dcd_freq: 1000,
       restart_freq: 1000
-    },
+    }),
     slurm_config: {
       cores: 16,
       memory: '12GB',
@@ -127,14 +160,14 @@ export const mockJobs: JobInfo[] = [
     updated_at: '2024-01-14T11:45:00Z',
     submitted_at: '2024-01-14T10:20:00Z',
     error_info: 'Job failed during execution',
-    namd_config: {
+    namd_config: createMockNAMDConfig({
       steps: 300000,
       temperature: 300,
       timestep: 2.5,
       outputname: 'lipid_output',
       dcd_freq: 1500,
       restart_freq: 1500
-    },
+    }),
     slurm_config: {
       cores: 32,
       memory: '24GB',
@@ -155,14 +188,14 @@ export const mockJobs: JobInfo[] = [
     created_at: '2024-01-15T08:00:00Z',
     updated_at: '2024-01-15T08:15:00Z',
     submitted_at: '2024-01-15T08:05:00Z',
-    namd_config: {
+    namd_config: createMockNAMDConfig({
       steps: 50000,
       temperature: 298,
       timestep: 1.5,
       outputname: 'test_output',
       dcd_freq: 500,
       restart_freq: 500
-    },
+    }),
     slurm_config: {
       cores: 8,
       memory: '8GB',

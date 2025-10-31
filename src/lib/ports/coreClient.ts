@@ -47,6 +47,7 @@ export interface ICoreClient {
   refetchSlurmLogs(job_id: JobId): Promise<RefetchLogsResult>;
 
   // File management
+  detectFileType(filename: string): Promise<string>;
   uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult>;
   downloadJobOutput(job_id: JobId, file_path: string): Promise<DownloadResult>;
   downloadAllOutputs(job_id: JobId): Promise<DownloadResult>;
