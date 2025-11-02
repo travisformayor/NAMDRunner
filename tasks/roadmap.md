@@ -325,9 +325,33 @@ See: [phase-6-8-pragmatic-testing.md](tasks/completed/phase-6-8-pragmatic-testin
 - **Milestone 6.9**: Production-ready deployment with x86 Windows/Linux builds and documentation
 - **Single-job MVP ready for users to run DNA origami tutorial workflows on cluster**
 
-## Phase 7: Production Hardening & Advanced Features
+## Phase 7: Template System & Production Hardening
 
-### Milestone 7.1: Request Rate Limiting & Queue Management
+### Milestone 7.1: Template System Refactor ⏳ IN PROGRESS
+
+**Goal**: Replace hardcoded NAMD configuration with flexible template system where templates are stored in database and users can create/edit simulation templates via UI.
+
+**Current State**: NAMDConfig struct with hardcoded fields, file type auto-detection, ConfigurationTab with hardcoded form fields
+
+**Implementation**:
+- [ ] **Database Foundation**: Templates table, modified jobs table (template_id + template_values)
+- [ ] **Data Structures**: Template, VariableDefinition, VariableType (Number, Text, Boolean, FileUpload)
+- [ ] **Template Renderer**: Handlebars/string replacement for `{{variable}}` substitution
+- [ ] **JobInfo Refactor**: Remove NAMDConfig struct entirely, remove demo mode entirely
+- [ ] **Default Templates**: vacuum_optimization_v1.json, explicit_solvent_npt_v1.json
+- [ ] **Template IPC Commands**: list, get, create, update, delete, validate
+- [ ] **Templates Page UI**: New sidebar section for template management
+- [ ] **Template Editor UI**: Create/edit templates with variable definitions
+- [ ] **Dynamic Job Form**: Replaces ConfigurationTab, files as form fields
+- [ ] **Validation & Integration**: End-to-end testing with real cluster submission
+
+**Why**: Hardcoded NAMDConfig prevents supporting different simulation types without code changes. Template-as-data enables runtime modification and user extensibility.
+
+**No Backwards Compatibility**: All existing jobs are test data - will delete old database before running new app. No migration code.
+
+See: [phase-7-template-system-refactor.md](tasks/active/phase-7-template-system-refactor.md)
+
+### Milestone 7.2: Request Rate Limiting & Queue Management
 
 **Goal:** Prevent cluster abuse and provide graceful degradation under load
 
@@ -368,75 +392,26 @@ pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Resu
 **Why:**
 - Prevents accidental bugs from DOS'ing cluster, but we dont want that event to silently fail so report it in the SSH Console.
 
-### Milestone 7.2: Job Restart Feature
-*Job continuation functionality for single-job model*
+### Milestone 7.3: Job Chaining (Future)
 
-- [ ] **Restart Data Model**
-  - [ ] Add RestartInfo struct to JobInfo (single-job model extension)
-  - [ ] Database schema update for restart_info field
-  - [ ] Restart job creation and validation logic
-- [ ] **Checkpoint File Management**
-  - [ ] Checkpoint file detection in completed/failed jobs
-  - [ ] File copying from original job to restart job scratch directory
-  - [ ] Restart file validation and error handling
-- [ ] **Restart Template System**
-  - [ ] Restart-specific NAMD config template with checkpoint loading
-  - [ ] Template variable injection for restart context
-  - [ ] Step calculation logic (completed vs remaining steps)
-- [ ] **Restart UI & UX**
-  - [ ] "Restart Job" button and workflow
-  - [ ] Resource allocation interface for restart (allow different resources)
-  - [ ] Restart job lineage display and tracking
+**Note**: Job chaining design is in progress. See [tasks/planning/MultiJob_And_Templates.md](tasks/planning/MultiJob_And_Templates.md) for current design exploration.
 
-### Milestone 7.3: Advanced Restart Features
-- [ ] **Automatic Restart Configuration**
-  - [ ] Automatic restart configuration generation
-  - [ ] Intelligent checkpoint interval recommendations
-  - [ ] Resource optimization for restart jobs
+**Core Concept**: "Restart after timeout" and "next equilibration stage" are the same mechanism - creating new job that continues from parent job's outputs. Jobs are self-contained islands (each copies necessary files from parent).
 
-## Post-MVP Enhancement Roadmap
-*Future features beyond single-job restart functionality*
-
-### UI/UX Enhancements
-1. **Multi-stage job groups** - Expandable table rows with aggregate status
-2. **Bulk operations** - Multi-select job management
-3. **Advanced filtering/search** - Job filtering by status, date, resources
-4. **Job templates** - Reusable job configuration templates
-5. **Settings/preferences** - User customization and defaults
-
-### Advanced Features
-- **Job restart functionality** with checkpoint detection and restart wizard interface
-- **Multi-Stage Job Groups** - Expandable table rows will support job groups with aggregate status display and individual stage management
-  - [ ] Resource optimization for restart jobs
-- [ ] **Checkpoint Management**
-  - [ ] Checkpoint file validation and integrity checks
-  - [ ] Checkpoint cleanup and retention policies
-  - [ ] Checkpoint size estimation and warnings
-
-### Milestone 7.3: Restart Testing & Integration
-- [ ] Comprehensive restart functionality testing
-- [ ] Integration with existing single-job workflow
-- [ ] Error handling for restart failures
-- [ ] Performance validation for checkpoint operations
-
-### Milestone 7.4: Restart Documentation & Polish
-- [ ] User guide updates for restart functionality
-- [ ] Developer documentation for restart architecture
-- [ ] Final restart feature cleanup and optimization
+**Not Yet Finalized**: Specific implementation details, data model, UI patterns. Will be designed in detail when we reach this milestone.
 
 ### Phase 7 Complete When:
-- Job restart functionality working reliably
-- Automatic restart configuration generation working
-- Restart lineage tracking implemented
-- Documentation updated for restart workflows
-- **Single-job MVP with restart ready for users**
+- Template system operational (users can create/edit templates via UI)
+- Rate limiting prevents cluster abuse
+- **Template-based job creation ready for users**
+- Job chaining design finalized (implementation in future phase)
 
-## Phase 8: Dynamic Configuration & Templates
-*Multi-cluster support with configurable settings and templates*
+## Phase 8: Multi-Cluster & Settings
+*Settings page and multi-cluster support*
 
 ### Milestone 8.1: Settings Page Infrastructure
 - [ ] **Settings Database & UI**
-  - [ ] Settings database schema for cluster configs, templates, and job types
+  - [ ] Settings database schema for cluster configs and user preferences
   - [ ] Settings page UI with forms for configuration
   - [ ] User preferences (default values, UI behavior)
   - [ ] Export/import settings functionality
@@ -444,11 +419,11 @@ pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Resu
     - [ ] "Delete Local Cache" button to clear local job database
     - [ ] Works when connected or disconnected to server
     - [ ] Only deletes local DB, never touches server metadata
-    - [ ] After deletion, clicking "Sync Now" rebuilds cache from server metadata (uses Phase 6.4 job discovery)
+    - [ ] After deletion, clicking "Sync Now" rebuilds cache from server metadata
     - [ ] Warning dialog: "This will delete all local job data. Server metadata will not be affected. Click Sync to restore from server."
     - [ ] Useful for troubleshooting database corruption or starting fresh
 - [ ] **Cluster Configuration Management**
-  - [ ] User-editable cluster configuration (builds on Phase 6.4 cluster_config.rs Rust constants)
+  - [ ] User-editable cluster configuration (builds on cluster_config.rs Rust constants)
   - [ ] Configurable cluster connection settings (login server, port)
   - [ ] Customizable SLURM partitions list
   - [ ] Configurable QOS options
@@ -466,29 +441,7 @@ pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Resu
   - [ ] MPI execution pattern detection
   - [ ] Dynamic resource limit detection per cluster
 
-### Milestone 8.3: Template Management System
-- [ ] **Template Infrastructure**
-  - [ ] Template storage and management system
-  - [ ] Template editor with syntax highlighting and validation
-  - [ ] Variable definition language with `{{var_name}}` syntax
-  - [ ] Variable rendering engine with type safety
-- [ ] **Template Features**
-  - [ ] Template comment syntax for variable metadata
-  - [ ] Variable tooltips, descriptions, and validation rules
-  - [ ] Default values and suggestions
-  - [ ] Template library with common NAMD workflows
-  - [ ] Template dropdown selector in Create Job page
-  - [ ] Auto-population of form fields from template variables
-  - [ ] File upload mapping to template variables
-  - [ ] Template versioning and sharing capabilities
-  - [ ] Preview of generated NAMD configuration
-  - [ ] Export/import templates
-- [ ] **Migration & Integration**
-  - [ ] Migration from hardcoded Alpine configuration
-  - [ ] Cluster-specific template associations
-  - [ ] Job type configuration management (not hardcoded)
-
-### Milestone 8.4: Automation Builder Foundation
+### Milestone 8.3: Automation Builder Foundation
 - [ ] **Serializable Automation System**
   - [ ] Implement serialization for automation steps (builds on Phase 6 automation framework)
   - [ ] Automation template database schema and persistence
@@ -503,153 +456,49 @@ pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Resu
 ### Phase 8 Complete When:
 - Settings page functional with cluster configuration
 - Dynamic cluster detection working
-- Template management system operational
 - Multiple cluster profiles supported
 - Automation template system foundation ready
-- **Multi-cluster support with templates and automation foundation ready**
+- **Multi-cluster support with settings and automation foundation ready**
 
-## Phase 9: Multi-Stage Job Workflows
-*Architecture evolution for complex simulation workflows*
+## Phase 9: Job Chaining Implementation
+*Job continuation and multi-stage workflows*
 
-### Milestone 9.1: Job Workflow Architecture
-- [ ] **Job Group Data Model** (Breaking changes acceptable - no backwards compatibility required)
-  - [ ] Multi-stage job persistence schema
-  - [ ] Job group concept with multiple dependent stages
-  - [ ] Stage dependency management and sequencing
-  - [ ] Migration strategy from single jobs to job groups
-- [ ] **File Propagation System**
-  - [ ] Automatic output-to-input file transfer between stages
-  - [ ] Stage-specific template rendering with previous stage context
-  - [ ] Restart file management across workflow stages
-  - [ ] Stage-specific parameter configuration
+**Note**: Design in progress at [tasks/planning/MultiJob_And_Templates.md](tasks/planning/MultiJob_And_Templates.md). This section is a placeholder - specific implementation details will be finalized before starting this phase.
 
-### Milestone 9.2: Workflow Templates & UI
-- [ ] **Multi-Stage Template System**
-  - [ ] DNA origami equilibration workflow templates
-  - [ ] Stage progression templates (minimization → k=0.5 → k=0.1 → k=0.01 → production)
-  - [ ] Structure optimization with restraint files
-  - [ ] Multi-stage equilibration workflows
-  - [ ] Workflow validation and dependency checking
-- [ ] **Stage Management UI**
-  - [ ] Progress tracking across multiple stages
-  - [ ] Individual stage monitoring and control
-  - [ ] Workflow restart and recovery capabilities
-  - [ ] Visual workflow designer/editor
+### Milestone 9.1: Job Chaining Core (TBD)
+- Details to be determined based on finalized design
+- Job chain data model (parent-child relationships)
+- File propagation system (parent outputs → child inputs)
+- Jobs as self-contained islands (copy files, not reference)
 
-### Milestone 9.3: Advanced Workflow Features
-- [ ] **Workflow Automation**
-  - [ ] Conditional stage execution based on results
-  - [ ] Automatic parameter adjustments between stages
-  - [ ] Workflow branching and merging
-- [ ] **Workflow Management**
-  - [ ] Workflow templates library
-  - [ ] Workflow sharing and versioning
-  - [ ] Workflow performance analytics
+### Milestone 9.2: Chaining UI & Workflows (TBD)
+- Details to be determined based on finalized design
+- Job continuation interface
+- Chain visualization and management
+- Template integration with job chaining
 
 ### Phase 9 Complete When:
-- Multi-stage workflow architecture implemented
-- Workflow templates functional for common use cases
-- Stage progression tracking and management working
-- File propagation between stages automatic
-- **Full workflow MVP ready for scientific users**
+- Job chaining implementation complete per finalized design
+- **Multi-stage workflows functional**
 
-## Phase 10: Visual Automation Builder & Advanced Workflows
-*Complete automation builder with visual workflow designer*
+## Post-MVP Enhancement Roadmap
+*Future features beyond core functionality*
 
-### Milestone 10.1: Visual Automation Builder
-- [ ] **Visual Workflow Designer**
-  - [ ] Drag-and-drop automation step composer
-  - [ ] Visual connection lines showing workflow dependencies
-  - [ ] Step parameter editing with inline forms
-  - [ ] Real-time workflow validation and error highlighting
-  - [ ] Workflow preview and execution planning
-- [ ] **Advanced Automation Features**
-  - [ ] Conditional logic and branching based on step results
-  - [ ] Loop constructs for parameter sweeps and batch operations
-  - [ ] Variable passing between automation steps
-  - [ ] Custom automation step creation and sharing
-  - [ ] Automation debugging and step-by-step execution
-- [ ] **Workflow Templates & Community**
-  - [ ] Community automation template marketplace
-  - [ ] Template rating and review system
-  - [ ] Version control for automation workflows
-  - [ ] Collaboration features for shared workflow development
+### UI/UX Enhancements
+1. **Bulk operations** - Multi-select job management
+2. **Advanced filtering/search** - Job filtering by status, date, resources
+3. **Settings/preferences** - User customization and defaults
 
-### Milestone 10.2: Advanced Workflow Patterns
-- [ ] **Multi-Job Workflows**
-  - [ ] Parameter sweep automation (multiple jobs with varying parameters)
-  - [ ] Ensemble simulation management
-  - [ ] Dependency-based job scheduling and execution
-  - [ ] Batch result analysis and comparison
-- [ ] **Scientific Workflow Templates**
-  - [ ] DNA origami equilibration workflows (multi-stage with restraints)
-  - [ ] Protein folding simulation pipelines
-  - [ ] Drug discovery computational workflows
-  - [ ] Materials science simulation templates
-
-### Milestone 10.3: Automation Performance & Monitoring
-- [ ] **Workflow Execution Monitoring**
-  - [ ] Real-time workflow progress tracking across multiple jobs
-  - [ ] Automation performance analytics and optimization suggestions
-  - [ ] Workflow execution history and audit trails
-  - [ ] Automated error recovery and retry strategies
-- [ ] **Resource Management**
-  - [ ] Intelligent resource allocation across workflow steps
-  - [ ] Queue time optimization and scheduling strategies
-  - [ ] Cost estimation and optimization for automation workflows
-  - [ ] Cluster utilization monitoring and recommendations
-
-### Phase 10 Complete When:
-- Visual automation builder functional with drag-and-drop interface
-- Advanced workflow patterns support scientific use cases
-- Community template system operational
-- Automation performance monitoring implemented
-- **Full automation platform ready for scientific computing workflows**
-
-## Phase 11: Monitoring & Management
-*Performance monitoring and batch operations*
-
-### Milestone 11.1: Performance Monitoring
-- [ ] **Resource Usage Tracking**
-  - [ ] Performance metrics and SU usage tracking
-  - [ ] Storage usage monitoring and alerts
-  - [ ] Job efficiency analysis and recommendations
-  - [ ] Resource utilization reports
-- [ ] **System Monitoring**
-  - [ ] Cluster health monitoring integration
-  - [ ] Queue time predictions
-  - [ ] Resource availability forecasting
-
-### Milestone 11.2: Batch Operations & Management
-- [ ] **Bulk Job Operations**
-  - [ ] Batch processing for large job sets
-  - [ ] Bulk status updates and filtering
-  - [ ] Mass job submission with parameter sweeps
-  - [ ] Batch job cancellation and cleanup
-- [ ] **Advanced File Management**
-  - [ ] Advanced file management and cleanup utilities
-  - [ ] Automated archival of completed jobs
-  - [ ] Disk space optimization tools
-
-### Milestone 11.3: Enhanced Recovery & Reliability
-- [ ] **Error Recovery**
-  - [ ] Enhanced error recovery workflows
-  - [ ] Automatic job resubmission on transient failures
-  - [ ] Smart retry strategies based on failure patterns
-- [ ] **Reliability Features**
-  - [ ] Health checks and system diagnostics
-  - [ ] Automated backup and recovery
-  - [ ] Data integrity validation
-
-### Phase 11 Complete When:
-- Performance monitoring and alerting functional
-- Batch operations working for large-scale usage
-- Enhanced error recovery implemented
-- System reliability and monitoring operational
+### Advanced Features (Future)
+- Visual automation builder with drag-and-drop workflow designer
+- Parameter sweep automation
+- Advanced workflow patterns for scientific computing
+- Community template marketplace
 
 ## Risk Mitigation
 
 1. **MVP Focus**: Get single-job workflow working before adding complexity
-2. **Future-Ready Architecture**: Design data models to support job groups later
-3. **Security**: Regular security audits, never log credentials
+2. **No Backwards Compatibility**: Breaking changes acceptable during all development phases
+3. **Security**: Regular security audits, never log credentials, path validation
 4. **Windows Compatibility**: Test early and often on Windows
+5. **Design Before Code**: Finalize designs (like job chaining) before implementation to avoid rework
