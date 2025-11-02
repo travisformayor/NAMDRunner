@@ -138,6 +138,33 @@ Clean up and commit all current uncommitted work to establish a stable foundatio
   - [x] Update API.md - removed completeJob, updated file interfaces
   - [x] Update ARCHITECTURE.md with corrected directory structure
 
+### Additional Cleanup from Code Review Validation (Nov 2024)
+
+- [x] **Extract hardcoded "namdrunner_jobs" constant**
+  - [x] Create constant in `src-tauri/src/ssh/directory_structure.rs::JOB_BASE_DIRECTORY`
+  - [x] Replace 128 occurrences across 36 files
+  - [x] Update documentation references (comments and doc strings)
+
+- [x] **Consolidate duplicate CommandResult struct**
+  - [x] Keep `ssh/commands.rs` version (5 fields with execution metrics)
+  - [x] Delete `types/core.rs` version (3 fields)
+  - [x] Verify no code used the types/core.rs version
+
+- [x] **Remove duplicate formatFileSize() function**
+  - [x] Delete duplicate in `src/lib/components/pages/CreateJobPage.svelte:203-209`
+  - [x] Add import from `src/lib/utils/file-helpers.ts`
+  - [x] Verify CreateJobPage still works
+
+- [x] **Fix build warnings**
+  - [x] Remove unused CSS selector `.sync-button` from `src/lib/components/pages/JobDetailPage.svelte:221`
+  - [x] Fix 4 a11y warnings in `src/lib/components/create-job/ConfigurationTab.svelte` (changed to fieldset/legend with aria-labels)
+  - [x] Ensure `npm run check` runs cleanly (0 errors, 0 warnings)
+
+- [x] **Final verification**
+  - [x] Run `npm run check` - no TypeScript errors or warnings
+  - [x] Run `cargo check` - compiles successfully
+  - [x] All code quality issues resolved
+
 ## Success Criteria
 
 ### Functional Success

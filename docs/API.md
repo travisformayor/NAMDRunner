@@ -192,11 +192,8 @@ interface IJobCommands {
   // Get all jobs from local cache
   getAllJobs(): Promise<GetAllJobsResult>;
 
-  // Sync job statuses with cluster
+  // Sync job statuses with cluster (includes automatic discovery if database empty)
   syncJobs(): Promise<SyncJobsResult>;
-
-  // Discover jobs from server and import to local database
-  discoverJobs(): Promise<DiscoverJobsResult>;
 
   // Delete job (local and optionally remote)
   deleteJob(job_id: JobId, delete_remote: boolean): Promise<DeleteJobResult>;
@@ -210,6 +207,17 @@ interface IJobCommands {
 ```
 
 **Note**: Command names use `snake_case` per Rust convention. The TypeScript client should maintain this naming.
+
+**Job Discovery Integration:**
+
+The `syncJobs()` command automatically handles job discovery when the local database is empty (e.g., first connection after database reset). This eliminates the need for separate discovery commands and multi-step frontend orchestration.
+
+**Workflow:**
+1. Query SLURM for active job status updates
+2. If database is empty, automatically discover jobs from `/projects/$USER/namdrunner_jobs/`
+3. Return complete job list (including discovered and synced jobs)
+
+Frontend receives complete state in a single call. See [`AUTOMATIONS.md`](AUTOMATIONS.md#3-status-synchronization-automation-chain) for implementation details.
 
 ### Request/Response Types
 ```typescript
@@ -285,15 +293,9 @@ interface GetAllJobsResult {
 
 interface SyncJobsResult {
   success: boolean;
-  jobs_updated: number;
+  jobs: JobInfo[];           // Complete job list (discovery + sync results)
+  jobs_updated: number;       // Count of jobs that had status updates
   errors: string[];
-}
-
-interface DiscoverJobsResult {
-  success: boolean;
-  jobs_found: number;
-  jobs_imported: number;
-  error?: string;
 }
 
 interface DeleteJobResult {

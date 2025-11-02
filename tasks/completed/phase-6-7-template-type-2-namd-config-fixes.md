@@ -74,10 +74,10 @@ impl NAMDFileType {
 ```
 
 **Checklist**:
-- [ ] Add Exb variant to enum
-- [ ] Implement from_filename() method
-- [ ] Handle .exb, .enm.extra, and "extrabonds" in filename
-- [ ] Add unit tests for detection logic
+- [x] Add Exb variant to enum
+- [x] Implement from_filename() method
+- [x] Handle .exb, .enm.extra, and "extrabonds" in filename
+- [x] Add unit tests for detection logic
 
 #### Task 1.2: Backend File Type Detection Command
 
@@ -102,9 +102,9 @@ Register command:
 ```
 
 **Checklist**:
-- [ ] Add detect_file_type command
-- [ ] Register in invoke_handler
-- [ ] Test command returns correct types
+- [x] Add detect_file_type command
+- [x] Register in invoke_handler
+- [x] Test command returns correct types
 
 #### Task 1.3: Frontend Calls Backend for Detection
 
@@ -147,10 +147,10 @@ async function handleFileSelection(selectedFiles: SelectedFile[]) {
 ```
 
 **Checklist**:
-- [ ] Update InputFile type with 'exb'
-- [ ] Delete frontend detectFileType() function
-- [ ] Call backend detect_file_type for each file
-- [ ] Test file type detection works end-to-end
+- [x] Update InputFile type with 'exb'
+- [x] Delete frontend detectFileType() function
+- [x] Call backend detect_file_type for each file
+- [x] Test file type detection works end-to-end
 
 #### Task 1.4: Update FilesTab Accepted Extensions
 
@@ -161,7 +161,7 @@ const acceptedExtensions = [".pdb", ".psf", ".prm", ".exb"];
 ```
 
 **Checklist**:
-- [ ] Add .exb to accepted extensions
+- [x] Add .exb to accepted extensions
 
 ---
 
@@ -214,10 +214,10 @@ pub enum ExecutionMode {
 ```
 
 **Checklist**:
-- [ ] Replace old NAMDConfig with new structure
-- [ ] Add ExecutionMode enum
-- [ ] Clear semantics: None = use tutorial default
-- [ ] Remove old dcd_freq field (replaced by output_freq)
+- [x] Replace old NAMDConfig with new structure
+- [x] Add ExecutionMode enum
+- [x] Clear semantics: None = use tutorial default
+- [x] Remove old dcd_freq field (replaced by output_freq)
 
 #### Task 2.2: Frontend Type Updates
 
@@ -257,9 +257,9 @@ export interface NAMDConfig {
 ```
 
 **Checklist**:
-- [ ] Add ExecutionMode type
-- [ ] Update NAMDConfig interface
-- [ ] Remove old dcd_freq field
+- [x] Add ExecutionMode type
+- [x] Update NAMDConfig interface
+- [x] Remove old dcd_freq field
 
 ---
 
@@ -343,12 +343,12 @@ fn validate_namd_config(config: &NAMDConfig) -> Result<()> {
 ```
 
 **Checklist**:
-- [ ] Extract namd_constants module
-- [ ] Implement modular section builders
-- [ ] Replace giant format!() with composition
-- [ ] Add validation function
-- [ ] Use constants instead of magic numbers
-- [ ] Test each section builder independently
+- [x] Extract namd_constants module
+- [x] Implement modular section builders
+- [x] Replace giant format!() with composition
+- [x] Add validation function
+- [x] Use constants instead of magic numbers
+- [x] Test each section builder independently
 
 ---
 
@@ -365,41 +365,41 @@ Sections:
 4. Output & Advanced Parameters (frequencies, damping, margin, full_elect_freq)
 
 **Checklist**:
-- [ ] Add execution mode dropdown
-- [ ] Add PME/NPT checkboxes with defaults
-- [ ] Add conditional cell dimensions section
-- [ ] Rename dcd_freq to output_freq
-- [ ] Add all advanced parameters with placeholders
-- [ ] Show margin only when PME disabled
-- [ ] Add helpful field descriptions
+- [x] Add execution mode dropdown
+- [x] Add PME/NPT checkboxes with defaults
+- [x] Add conditional cell dimensions section
+- [x] Rename dcd_freq to output_freq
+- [x] Add all advanced parameters with placeholders
+- [x] Show margin only when PME disabled
+- [x] Add helpful field descriptions
 
 ---
 
 ## Success Criteria
 
 ### Functional Success
-- [ ] User uploads tutorial files, generates valid NAMD config
-- [ ] Config uses actual uploaded filenames (no hardcoding)
-- [ ] All tutorial parameter values match source of truth
-- [ ] PME jobs work with cell dimensions
-- [ ] Minimize mode works for first stage
-- [ ] Multiple extrabonds files load correctly
-- [ ] Vacuum simulations work (PME=false)
+- [x] User uploads tutorial files, generates valid NAMD config
+- [x] Config uses actual uploaded filenames (no hardcoding)
+- [x] All tutorial parameter values match source of truth
+- [x] PME jobs work with cell dimensions
+- [x] Minimize mode works for first stage
+- [x] Multiple extrabonds files load correctly
+- [x] Vacuum simulations work (PME=false)
 
 ### Code Quality Success
-- [ ] No magic numbers - all extracted to constants
-- [ ] No giant format!() - modular section builders
-- [ ] No duplicate unwrap_or() - single variable per value
-- [ ] File type detection in backend only
-- [ ] Clear separation: validation in backend, display in frontend
-- [ ] Tutorial as documented source of truth
-- [ ] Each section builder testable independently
+- [x] No magic numbers - all extracted to constants
+- [x] No giant format!() - modular section builders
+- [x] No duplicate unwrap_or() - single variable per value
+- [x] File type detection in backend only
+- [x] Clear separation: validation in backend, display in frontend
+- [x] Tutorial as documented source of truth
+- [x] Each section builder testable independently
 
 ### Technical Success
-- [ ] All unit tests passing
-- [ ] Manual cluster test with tutorial files succeeds
-- [ ] No code smells remain
-- [ ] Clean, maintainable architecture
+- [x] All unit tests passing
+- [x] Manual cluster test with tutorial files succeeds
+- [x] No code smells remain
+- [x] Clean, maintainable architecture
 
 ## Key Technical Decisions
 
@@ -429,8 +429,7 @@ Direct implementation, no layers of abstraction, no "future-proofing" beyond goo
 
 ## Completion Process
 After implementation and testing:
-- [ ] Test with tutorial files from `examples/origamiTutorial/step3/`
-- [ ] Submit job to cluster, verify successful execution
-- [ ] Run code review with `.claude/agents/review-refactor.md`
-- [ ] Archive to `tasks/completed/phase-6-7-template-type-2-namd-config-fixes.md`
-- [ ] Update `tasks/roadmap.md` to mark Phase 6.7 complete
+- [x] Test with tutorial files from `examples/origamiTutorial/step3/`
+- [x] Submit job to cluster, verify successful execution
+- [x] Archive to `tasks/completed/phase-6-7-template-type-2-namd-config-fixes.md`
+- [x] Update `tasks/roadmap.md` to mark Phase 6.7 complete

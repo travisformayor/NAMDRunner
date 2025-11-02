@@ -277,11 +277,30 @@ NAMDRunner implements a comprehensive job lifecycle automation system that orche
 - **Atomic Operations** - Complete success or clean failure for each step
 - **Workflow Separation** - Clear boundaries between automation stages
 - **Security Validation** - Input sanitization and path safety throughout
+- **Metadata-at-Boundaries** - Server metadata updated only at lifecycle boundaries (creation, submission, completion), not during execution
+
+#### Metadata-at-Boundaries Principle
+
+NAMDRunner updates server metadata (`job_info.json`) only at job lifecycle boundaries, not during execution:
+
+- **Job Creation**: Metadata written to project directory (job parameters, initial status)
+- **Job Submission**: Metadata updated with SLURM job ID and submission timestamp
+- **During Execution**: Local database updated only (metadata remains at submission state)
+- **Job Completion**: Rsync scratch→project FIRST, then metadata updated with final status
+
+**Rationale:**
+- Prevents rsync conflicts during job execution
+- Keeps metadata updates predictable and atomic
+- Metadata snapshot represents job configuration at submission time
+- Final metadata update after rsync ensures consistency
+
+**Implementation:** Server metadata updates restricted to `job_creation.rs`, `job_submission.rs`, and `job_completion.rs` automation modules.
 
 **Implementation Pattern:**
 - Simple async functions with progress callbacks
 - Consistent `Result<T>` error handling
 - Direct integration with Tauri command system
+- Backend-owned workflows (single backend call per user action)
 
 > **For complete automation implementation details, patterns, and integration examples**, see [`docs/AUTOMATIONS.md`](AUTOMATIONS.md)
 
@@ -423,9 +442,10 @@ NAMDRunner implements a backend-first architecture where all business logic, val
 > **For frontend state management patterns and component implementation details**, see [`docs/CONTRIBUTING.md#frontend-development-standards`](CONTRIBUTING.md#frontend-development-standards)
 
 **Key Architecture Principles:**
-- **Stores as pure caches** - No business logic, only reactive state management
-- **Backend is source of truth** - All validation and calculations happen in Rust
+- **Stores as pure caches** - No business logic, workflow orchestration, or validation. Stores receive complete state from backend and reactively update UI.
+- **Backend is source of truth** - All validation, calculations, and workflow orchestration happen in Rust. Frontend makes single backend calls.
 - **Type-safe IPC boundary** - Consistent snake_case contracts between TypeScript and Rust
+- **Single backend calls** - No multi-step orchestration (e.g., sync returns complete job list including discovered jobs)
 - **Presentational components** - UI components handle display logic only
 
 **Frontend Responsibilities:**
@@ -433,12 +453,15 @@ NAMDRunner implements a backend-first architecture where all business logic, val
 - UI presentation and user interaction
 - Progress event handling from backend
 - Display formatting (status badges, file icons, etc.)
+- **Single backend call pattern** - One IPC call per user action (no orchestration)
 
 **Frontend Does NOT:**
 - Validate user inputs (backend validates)
 - Implement business logic (backend owns all rules)
 - Perform calculations (backend is source of truth)
 - Execute file operations directly (backend handles SSH/SFTP)
+- **Orchestrate multi-step workflows** (backend returns complete results)
+- **Make business decisions** (e.g., when to trigger discovery)
 
 ## Data Models & Interfaces
 

@@ -222,10 +222,9 @@ nodes = ceiling(cores / cores_per_node)
 - 96 cores → `--nodes=2` (multi-node, 96/64 = 1.5, round up)
 - 128 cores → `--nodes=2` on amilan OR `--nodes=1` on amilan128c
 
-**For NAMDRunner (single-node MVP):**
-- Always use `--nodes=1` for Phase 6
+**For NAMDRunner (single-node app):**
+- Always use `--nodes=1`
 - Core count limited to 64 (one full amilan node)
-- Multi-node support deferred to Phase 7+
 
 ### OpenMPI Requirements
 

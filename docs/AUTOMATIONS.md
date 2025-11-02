@@ -235,11 +235,11 @@ The `execute_job_submission_with_progress` function handles the complete job sub
 
 **Trigger**: User clicks "Sync Status" button or automatic periodic sync (if implemented)
 **Purpose**: Query SLURM for current job status, update local database, trigger job discovery if needed, and return complete job list
-**Status**: 🔨 **REFACTORING IN PROGRESS** (Phase 6.6) - Current implementation has architecture violations
+**Status**: ✅ **IMPLEMENTED** (Phase 6.6) - Complete backend-owned workflow with automatic job discovery
 
-**Planned Architecture** (Backend-Owned Workflow):
+**Implementation** (Backend-Owned Workflow):
 
-The `sync_all_jobs()` function will handle complete synchronization workflow, including automatic job discovery:
+The `sync_all_jobs()` function handles complete synchronization workflow, including automatic job discovery:
 
 1. **Validate Connection**:
    - Verify SSH connection is active
@@ -277,10 +277,10 @@ The `sync_all_jobs()` function will handle complete synchronization workflow, in
 
 6. **Return Complete Job List**:
    - Load all jobs from database (includes discovered + synced jobs)
-   - Return complete list to frontend
+   - Return `SyncJobsResult` with complete job list to frontend
    - Frontend simply caches the result (no orchestration logic)
 
-**Architecture Principle (Metadata-at-Boundaries)**:
+**Architecture Principle: Metadata-at-Boundaries**
 Server metadata (`job_info.json`) is only updated at lifecycle boundaries, not during execution:
 - **Job Creation**: Update project metadata (job created)
 - **Job Submission**: Update project metadata (slurm_job_id, submitted_at added)
@@ -299,26 +299,19 @@ jobsStore.set(syncResult.jobs);
 
 **Result**: Jobs display current SLURM status with accurate timestamps. Terminal state jobs automatically trigger completion chain. Database-empty scenario handled automatically. Frontend makes single backend call with no orchestration logic.
 
-**Known Issues (To Be Fixed in Phase 6.6)**:
-- ❌ Current: Frontend orchestrates discovery (3 backend calls)
-- ❌ Current: Server metadata updated during execution (violates Metadata-at-Boundaries)
-- ❌ Current: Rsync scratch→project missing on completion
-- ❌ Current: Logs fetched from scratch instead of project
-- ✅ Planned: Backend handles all workflows, frontend is pure caching
-
 ---
 
 ### 4. Job Completion and Results Retrieval Automation Chain
 
 **Trigger**: Automatic when job status transitions to terminal state (COMPLETED, FAILED, CANCELLED, TIMEOUT, OUT_OF_MEMORY) during status synchronization
 **Purpose**: Mirror scratch directory back to project directory to preserve all job results, then cache SLURM logs for offline viewing
-**Status**: 🔨 **REFACTORING IN PROGRESS** (Phase 6.6) - Rsync missing, logs fetched from wrong location (scratch instead of project)
+**Status**: ✅ **IMPLEMENTED** (Phase 6.6) - Automatic rsync on completion with correct log fetching from project directory
 
 **Architecture Principle**: Scratch directory is for SLURM execution only. NAMDRunner app only interacts with project directory. Rsync keeps them in sync at job submission (project→scratch) and completion (scratch→project).
 
-**Planned Implementation** (Correct Order):
+**Implementation** (Correct Order):
 
-When job status changes to terminal state during `sync_job_status()`:
+When job status changes to terminal state during `sync_all_jobs()`, the `execute_job_completion_internal()` function automatically triggers:
 
 1. **Automatic Rsync Scratch→Project** (FIRST AND CRITICAL):
    - Triggered immediately when terminal state detected in status sync
@@ -366,12 +359,6 @@ Terminal State Detected
 ```
 
 **Result**: All job data automatically syncs from scratch to project when job finishes. SLURM logs cached in database for offline viewing. All file operations (downloads, listings) use project directory. Users can download individual output files or bulk download all outputs as a zip. No manual sync button needed.
-
-**Known Issues (To Be Fixed in Phase 6.6)**:
-- ❌ Current: Rsync scratch→project never happens
-- ❌ Current: Logs fetched from scratch directory (wrong location)
-- ❌ Current: Discovered jobs fetch logs from scratch (before rsync)
-- ✅ Planned: Rsync FIRST, then logs from project, then metadata update
 
 ---
 
