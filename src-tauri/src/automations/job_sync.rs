@@ -389,8 +389,9 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<(u32, u32)
 
     let connection_manager = get_connection_manager();
 
-    // Construct remote jobs directory path
-    let remote_jobs_dir = format!("/projects/{}/namdrunner_jobs", username);
+    // Construct remote jobs directory path using centralized function
+    use crate::ssh::directory_structure::JobDirectoryStructure;
+    let remote_jobs_dir = JobDirectoryStructure::project_base(username);
     debug_log!("[Job Discovery] Scanning directory: {}", remote_jobs_dir);
 
     // List directories in the jobs folder
@@ -468,18 +469,22 @@ mod tests {
     use crate::types::{JobInfo, JobStatus, NAMDConfig, SlurmConfig, ExecutionMode};
 
     fn create_test_job(job_id: &str, status: JobStatus) -> JobInfo {
+        let now = chrono::Utc::now().to_rfc3339();
+
         JobInfo {
             job_id: job_id.to_string(),
             job_name: "test_job".to_string(),
             status,
             slurm_job_id: Some("12345".to_string()),
-            created_at: chrono::Utc::now().to_rfc3339(),
+            created_at: now,
             updated_at: None,
             submitted_at: None,
             completed_at: None,
             project_dir: Some("/projects/user/job".to_string()),
             scratch_dir: Some("/scratch/user/job".to_string()),
             error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
             namd_config: NAMDConfig {
                 outputname: "output".to_string(),
                 temperature: 300.0,
@@ -508,8 +513,6 @@ mod tests {
             input_files: Vec::new(),
             output_files: None,
             remote_directory: "/projects/user/job".to_string(),
-            slurm_stdout: None,
-            slurm_stderr: None,
         }
     }
 

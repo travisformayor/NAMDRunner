@@ -77,8 +77,8 @@
       <h3 class="namd-section-title">Simulation Parameters</h3>
     </div>
     <div class="config-grid">
-      <div class="field-group">
-        <label class="namd-label">Execution Mode *</label>
+      <fieldset class="field-group">
+        <legend class="namd-label">Execution Mode *</legend>
         <div class="radio-group">
           <label class="radio-label">
             <input
@@ -97,7 +97,7 @@
             Run (MD)
           </label>
         </div>
-      </div>
+      </fieldset>
 
       <div class="field-group">
         <label class="namd-label" for="simulationSteps">
@@ -186,8 +186,8 @@
         Cell basis vectors define the periodic boundary box. For solvated systems, these are typically found in the CRYST1 record of your PDB file or from the solvation process.
       </p>
       <div class="config-grid cell-basis-grid">
-        <div class="field-group">
-          <label class="namd-label">Cell Basis Vector 1 (Å) *</label>
+        <fieldset class="field-group">
+          <legend class="namd-label">Cell Basis Vector 1 (Å) *</legend>
           <div class="vector-inputs">
             <input
               class="namd-input vector-input"
@@ -196,6 +196,7 @@
               bind:value={namdConfig.cell_basis_vector1.x}
               step="0.1"
               required
+              aria-label="Vector 1 X component"
             />
             <input
               class="namd-input vector-input"
@@ -204,6 +205,7 @@
               bind:value={namdConfig.cell_basis_vector1.y}
               step="0.1"
               required
+              aria-label="Vector 1 Y component"
             />
             <input
               class="namd-input vector-input"
@@ -212,12 +214,13 @@
               bind:value={namdConfig.cell_basis_vector1.z}
               step="0.1"
               required
+              aria-label="Vector 1 Z component"
             />
           </div>
-        </div>
+        </fieldset>
 
-        <div class="field-group">
-          <label class="namd-label">Cell Basis Vector 2 (Å) *</label>
+        <fieldset class="field-group">
+          <legend class="namd-label">Cell Basis Vector 2 (Å) *</legend>
           <div class="vector-inputs">
             <input
               class="namd-input vector-input"
@@ -226,6 +229,7 @@
               bind:value={namdConfig.cell_basis_vector2.x}
               step="0.1"
               required
+              aria-label="Vector 2 X component"
             />
             <input
               class="namd-input vector-input"
@@ -234,6 +238,7 @@
               bind:value={namdConfig.cell_basis_vector2.y}
               step="0.1"
               required
+              aria-label="Vector 2 Y component"
             />
             <input
               class="namd-input vector-input"
@@ -242,12 +247,13 @@
               bind:value={namdConfig.cell_basis_vector2.z}
               step="0.1"
               required
+              aria-label="Vector 2 Z component"
             />
           </div>
-        </div>
+        </fieldset>
 
-        <div class="field-group">
-          <label class="namd-label">Cell Basis Vector 3 (Å) *</label>
+        <fieldset class="field-group">
+          <legend class="namd-label">Cell Basis Vector 3 (Å) *</legend>
           <div class="vector-inputs">
             <input
               class="namd-input vector-input"
@@ -256,6 +262,7 @@
               bind:value={namdConfig.cell_basis_vector3.x}
               step="0.1"
               required
+              aria-label="Vector 3 X component"
             />
             <input
               class="namd-input vector-input"
@@ -264,6 +271,7 @@
               bind:value={namdConfig.cell_basis_vector3.y}
               step="0.1"
               required
+              aria-label="Vector 3 Y component"
             />
             <input
               class="namd-input vector-input"
@@ -272,9 +280,10 @@
               bind:value={namdConfig.cell_basis_vector3.z}
               step="0.1"
               required
+              aria-label="Vector 3 Z component"
             />
           </div>
-        </div>
+        </fieldset>
       </div>
     {/if}
 
@@ -396,14 +405,20 @@
   .field-group {
     display: flex;
     flex-direction: column;
+    border: none;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
   }
 
-  .namd-label {
+  .namd-label,
+  legend.namd-label {
     display: block;
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--namd-text-primary);
+    padding: 0;
   }
 
   .namd-input {

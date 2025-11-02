@@ -359,14 +359,19 @@ mod security_integration_tests {
                 username, job_id);
         }
 
-        // Test that valid inputs create expected paths
+        // Test that valid inputs create expected paths using centralized path generation
+        use crate::ssh::directory_structure::JobDirectoryStructure;
         let valid_result = paths::project_directory("testuser", "job_001");
         assert!(valid_result.is_ok());
-        assert_eq!(valid_result.unwrap(), "/projects/testuser/namdrunner_jobs/job_001");
+        // Should match centralized path generation
+        let expected_project = JobDirectoryStructure::project_dir("testuser", "job_001");
+        assert_eq!(valid_result.unwrap(), expected_project);
 
         let valid_scratch = paths::scratch_directory("testuser", "job_001");
         assert!(valid_scratch.is_ok());
-        assert_eq!(valid_scratch.unwrap(), "/scratch/alpine/testuser/namdrunner_jobs/job_001");
+        // Should match centralized path generation
+        let expected_scratch = JobDirectoryStructure::scratch_dir("testuser", "job_001");
+        assert_eq!(valid_scratch.unwrap(), expected_scratch);
     }
 
     /// Test shell command escaping

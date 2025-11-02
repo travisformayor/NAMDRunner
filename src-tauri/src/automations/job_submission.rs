@@ -155,7 +155,12 @@ mod tests {
     use chrono::Utc;
 
     fn create_test_job_info() -> JobInfo {
+        use crate::ssh::directory_structure::JobDirectoryStructure;
+
+        // Use centralized path generation for test jobs
+        let project_dir = JobDirectoryStructure::project_dir("testuser", "test_job_001");
         let now = Utc::now().to_rfc3339();
+
         JobInfo {
             job_id: "test_job_001".to_string(),
             job_name: "test_simulation".to_string(),
@@ -165,9 +170,11 @@ mod tests {
             updated_at: Some(now),
             submitted_at: None,
             completed_at: None,
-            project_dir: Some("/projects/testuser/namdrunner_jobs/test_job_001".to_string()),
+            project_dir: Some(project_dir.clone()),
             scratch_dir: None,
             error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
             namd_config: NAMDConfig {
                 outputname: "output".to_string(),
                 temperature: 300.0,
@@ -204,9 +211,7 @@ mod tests {
                 }
             ],
             output_files: None,
-            remote_directory: "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),
-            slurm_stdout: None,
-            slurm_stderr: None,
+            remote_directory: project_dir,
         }
     }
 
@@ -307,8 +312,9 @@ mod tests {
         assert!(job.slurm_job_id.is_none());
         assert!(job.submitted_at.is_none());
 
-        // Simulate successful submission state changes
-        job.scratch_dir = Some("/scratch/alpine/testuser/namdrunner_jobs/test_job_001".to_string());
+        // Simulate successful submission state changes using centralized path generation
+        use crate::ssh::directory_structure::JobDirectoryStructure;
+        job.scratch_dir = Some(JobDirectoryStructure::scratch_dir("testuser", "test_job_001"));
         job.slurm_job_id = Some("12345678".to_string());
         job.submitted_at = Some(Utc::now().to_rfc3339());
         job.status = JobStatus::Pending;
@@ -326,12 +332,13 @@ mod tests {
     fn test_file_copy_command_generation() {
         // Test shell command generation for file operations (business logic only)
         use crate::validation::shell;
+        use crate::ssh::directory_structure::JobDirectoryStructure;
 
-        let project_dir = "/projects/testuser/namdrunner_jobs/test_job_001";
-        let scratch_dir = "/scratch/alpine/testuser/namdrunner_jobs/test_job_001";
+        let project_dir = JobDirectoryStructure::project_dir("testuser", "test_job_001");
+        let scratch_dir = JobDirectoryStructure::scratch_dir("testuser", "test_job_001");
         let filename = "structure.pdb";
 
-        let source = format!("{}/{}", project_dir, crate::ssh::JobDirectoryStructure::input_path(filename));
+        let source = format!("{}/{}", project_dir, JobDirectoryStructure::input_path(filename));
         let dest = format!("{}/input/{}", scratch_dir, filename);
 
         let copy_cmd = shell::safe_cp(&source, &dest);

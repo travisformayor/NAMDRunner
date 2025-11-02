@@ -142,7 +142,7 @@ pub mod input {
         // Check for absolute paths (should be relative to user directories)
         if path_obj.is_absolute() {
             // For our use case, absolute paths are actually expected
-            // (e.g., /projects/user/namdrunner_jobs/job_001)
+            // (e.g., /projects/user/{JOB_BASE_DIRECTORY}/job_001)
             // So we validate against allowed prefixes instead
         }
 
@@ -386,6 +386,7 @@ pub mod files {
 /// Directory path utilities for NAMDRunner
 pub mod paths {
     use super::*;
+    use crate::ssh::directory_structure::JobDirectoryStructure;
 
     /// Generate a safe project directory path for a user and job
     pub fn project_directory(username: &str, job_id: &str) -> Result<String> {
@@ -393,11 +394,12 @@ pub mod paths {
         let clean_job_id = super::input::sanitize_job_id(job_id)?;
 
         let (path, allowed_prefixes) = if cfg!(windows) {
-            let path = format!("C:\\Users\\{}\\namdrunner_jobs\\{}", clean_username, clean_job_id);
+            let path = format!("C:\\Users\\{}\\{}\\{}", clean_username, crate::ssh::directory_structure::JOB_BASE_DIRECTORY, clean_job_id);
             (path, vec!["C:\\Users\\"])
         } else {
-            let path = format!("/projects/{}/namdrunner_jobs/{}", clean_username, clean_job_id);
-            (path, vec!["/projects/"])
+            // Use centralized function for consistent path generation
+            let path = JobDirectoryStructure::project_dir(&clean_username, &clean_job_id);
+            (path, JobDirectoryStructure::project_allowed_prefixes())
         };
 
         // Validate the path is within allowed directories
@@ -412,11 +414,12 @@ pub mod paths {
         let clean_job_id = super::input::sanitize_job_id(job_id)?;
 
         let (path, allowed_prefixes) = if cfg!(windows) {
-            let path = format!("C:\\scratch\\{}\\namdrunner_jobs\\{}", clean_username, clean_job_id);
+            let path = format!("C:\\scratch\\{}\\{}\\{}", clean_username, crate::ssh::directory_structure::JOB_BASE_DIRECTORY, clean_job_id);
             (path, vec!["C:\\scratch\\"])
         } else {
-            let path = format!("/scratch/alpine/{}/namdrunner_jobs/{}", clean_username, clean_job_id);
-            (path, vec!["/scratch/"])
+            // Use centralized function for consistent path generation
+            let path = JobDirectoryStructure::scratch_dir(&clean_username, &clean_job_id);
+            (path, JobDirectoryStructure::scratch_allowed_prefixes())
         };
 
         // Validate the path is within allowed directories
@@ -504,13 +507,17 @@ mod tests {
 
         #[test]
         fn test_path_validation() {
+            use crate::ssh::directory_structure::JobDirectoryStructure;
             // Valid paths - cross-platform
             if cfg!(windows) {
-                assert!(input::validate_path_safety("C:\\Users\\user\\namdrunner_jobs\\job_001", &["C:\\Users\\"]).is_ok());
-                assert!(input::validate_path_safety("C:\\scratch\\user\\namdrunner_jobs\\job_001", &["C:\\scratch\\"]).is_ok());
+                assert!(input::validate_path_safety(&format!("C:\\Users\\user\\{}\\job_001", crate::ssh::directory_structure::JOB_BASE_DIRECTORY), &["C:\\Users\\"]).is_ok());
+                assert!(input::validate_path_safety(&format!("C:\\scratch\\user\\{}\\job_001", crate::ssh::directory_structure::JOB_BASE_DIRECTORY), &["C:\\scratch\\"]).is_ok());
             } else {
-                assert!(input::validate_path_safety("/projects/user/namdrunner_jobs/job_001", &["/projects/"]).is_ok());
-                assert!(input::validate_path_safety("/scratch/alpine/user/namdrunner_jobs/job_001", &["/scratch/"]).is_ok());
+                // Use centralized path generation for consistent testing
+                let project_path = JobDirectoryStructure::project_dir("user", "job_001");
+                let scratch_path = JobDirectoryStructure::scratch_dir("user", "job_001");
+                assert!(input::validate_path_safety(&project_path, &JobDirectoryStructure::project_allowed_prefixes()).is_ok());
+                assert!(input::validate_path_safety(&scratch_path, &JobDirectoryStructure::scratch_allowed_prefixes()).is_ok());
             }
 
             // Invalid paths (if they could be resolved)
@@ -535,21 +542,27 @@ mod tests {
 
         #[test]
         fn test_project_directory_generation() {
+            use crate::ssh::directory_structure::JobDirectoryStructure;
             let result = paths::project_directory("testuser", "job_001").unwrap();
             if cfg!(windows) {
-                assert_eq!(result, "C:\\Users\\testuser\\namdrunner_jobs\\job_001");
+                assert_eq!(result, format!("C:\\Users\\testuser\\{}\\job_001", crate::ssh::directory_structure::JOB_BASE_DIRECTORY));
             } else {
-                assert_eq!(result, "/projects/testuser/namdrunner_jobs/job_001");
+                // Should match centralized path generation
+                let expected = JobDirectoryStructure::project_dir("testuser", "job_001");
+                assert_eq!(result, expected);
             }
         }
 
         #[test]
         fn test_scratch_directory_generation() {
+            use crate::ssh::directory_structure::JobDirectoryStructure;
             let result = paths::scratch_directory("testuser", "job_001").unwrap();
             if cfg!(windows) {
-                assert_eq!(result, "C:\\scratch\\testuser\\namdrunner_jobs\\job_001");
+                assert_eq!(result, format!("C:\\scratch\\testuser\\{}\\job_001", crate::ssh::directory_structure::JOB_BASE_DIRECTORY));
             } else {
-                assert_eq!(result, "/scratch/alpine/testuser/namdrunner_jobs/job_001");
+                // Should match centralized path generation
+                let expected = JobDirectoryStructure::scratch_dir("testuser", "job_001");
+                assert_eq!(result, expected);
             }
         }
 

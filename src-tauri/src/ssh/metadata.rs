@@ -12,7 +12,7 @@ use tempfile::NamedTempFile;
 /// # Arguments
 /// * `connection` - Active SSH connection manager
 /// * `job` - JobInfo to serialize and upload
-/// * `project_dir` - Project directory path (e.g., `/projects/user/namdrunner_jobs/job_001`)
+/// * `project_dir` - Project directory path (e.g., `/projects/user/{JOB_BASE_DIRECTORY}/job_001`)
 /// * `log_context` - Context string for logging (e.g., "Job Creation", "Job Sync")
 ///
 /// # Returns

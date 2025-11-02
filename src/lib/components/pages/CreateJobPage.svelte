@@ -16,6 +16,7 @@
   import CreateJobTabs from '../create-job/CreateJobTabs.svelte';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import { CoreClientFactory } from '../../ports/clientFactory';
+  import { formatFileSize } from '../../utils/file-helpers';
 
   if (typeof window !== 'undefined' && window.sshConsole) {
     window.sshConsole.addDebug('[CreateJobPage] Imports complete');
@@ -169,9 +170,10 @@
 
 
   async function handleFileSelect() {
-    // Call backend to show file dialog and get selected files
+    // Call backend to show file dialog and get selected files via client abstraction
     try {
-      const selected = await invoke('select_input_files');
+      const client = CoreClientFactory.getClient();
+      const selected = await client.selectInputFiles();
 
       if (!selected || !Array.isArray(selected) || selected.length === 0) {
         return; // User cancelled or no files selected
@@ -198,14 +200,6 @@
 
   function removeFile(index: number) {
     uploadedFiles = uploadedFiles.filter((_, i) => i !== index);
-  }
-
-  function formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
   function handlePresetSelect(preset: any) {

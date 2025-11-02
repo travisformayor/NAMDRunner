@@ -491,9 +491,24 @@ mod tests {
     use super::*;
 
     fn create_test_job() -> JobInfo {
+        let project_dir = crate::ssh::directory_structure::JobDirectoryStructure::project_dir("testuser", "test_job_001");
+        let scratch_dir = crate::ssh::directory_structure::JobDirectoryStructure::scratch_dir("testuser", "test_job_001");
+        let now = chrono::Utc::now().to_rfc3339();
+
         JobInfo {
             job_id: "test_job_001".to_string(),
             job_name: "Test NAMD Job".to_string(),
+            status: JobStatus::Created,
+            slurm_job_id: None,
+            created_at: now,
+            updated_at: None,
+            submitted_at: None,
+            completed_at: None,
+            project_dir: Some(project_dir.clone()),
+            scratch_dir: Some(scratch_dir),
+            error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
             namd_config: NAMDConfig {
                 outputname: "test_output".to_string(),
                 temperature: 300.0,
@@ -554,18 +569,7 @@ mod tests {
                 },
             ],
             output_files: None,
-            project_dir: Some("/projects/testuser/namdrunner_jobs/test_job_001".to_string()),
-            scratch_dir: Some("/scratch/alpine/testuser/namdrunner_jobs/test_job_001".to_string()),
-            status: JobStatus::Created,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: None,
-            submitted_at: None,
-            completed_at: None,
-            slurm_job_id: None,
-            error_info: None,
-            slurm_stdout: None,
-            slurm_stderr: None,
-            remote_directory: "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),
+            remote_directory: project_dir,
         }
     }
 
@@ -592,8 +596,9 @@ mod tests {
         assert!(!script.contains("+setcpuaffinity"));
         assert!(script.contains("scripts/config.namd > namd_output.log"));
 
-        // Verify working directory
-        assert!(script.contains("cd /scratch/alpine/testuser/namdrunner_jobs/test_job_001"));
+        // Verify working directory using centralized path generation
+        let expected_scratch = crate::ssh::directory_structure::JobDirectoryStructure::scratch_dir("testuser", "test_job_001");
+        assert!(script.contains(&format!("cd {}", expected_scratch)));
     }
 
     #[test]
@@ -719,5 +724,58 @@ mod tests {
         let result = SlurmScriptGenerator::generate_namd_script(&job);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("64"));
+    }
+
+    #[test]
+    fn test_openmpi_export_statement() {
+        let job = create_test_job();
+        let script = SlurmScriptGenerator::generate_namd_script(&job).unwrap();
+
+        // Verify OpenMPI environment export is present
+        assert!(script.contains("export SLURM_EXPORT_ENV=ALL"));
+
+        // Verify it comes BEFORE module loading (after source /etc/profile)
+        let export_pos = script.find("export SLURM_EXPORT_ENV=ALL").expect("Export statement not found");
+        let module_pos = script.find("module load namd").expect("Module load not found");
+        assert!(export_pos < module_pos, "Export should come before module loading");
+
+        // Verify it comes after source /etc/profile
+        let profile_pos = script.find("source /etc/profile").expect("Profile source not found");
+        assert!(export_pos > profile_pos, "Export should come after source /etc/profile");
+    }
+
+    #[test]
+    fn test_node_calculation() {
+        let mut job = create_test_job();
+
+        // Test cores within single node limit
+        job.slurm_config.cores = 32;
+        let script = SlurmScriptGenerator::generate_namd_script(&job).unwrap();
+        assert!(script.contains("#SBATCH --nodes=1"));
+
+        // Test cores at single node limit
+        job.slurm_config.cores = 64;
+        let script = SlurmScriptGenerator::generate_namd_script(&job).unwrap();
+        assert!(script.contains("#SBATCH --nodes=1"));
+    }
+
+    #[test]
+    fn test_actual_uploaded_file_names() {
+        let job = create_test_job();
+        let config = SlurmScriptGenerator::generate_namd_config(&job).unwrap();
+
+        // Verify script uses actual uploaded file names from InputFile, not hardcoded names
+        assert!(config.contains("structure          input_files/structure.psf"));
+        assert!(config.contains("coordinates        input_files/structure.pdb"));
+        assert!(config.contains("extraBondsFile     input_files/restraints.exb"));
+
+        // File names should match what's in input_files
+        let psf_file = job.input_files.iter().find(|f| f.file_type == Some(NAMDFileType::Psf)).unwrap();
+        let pdb_file = job.input_files.iter().find(|f| f.file_type == Some(NAMDFileType::Pdb)).unwrap();
+        let exb_file = job.input_files.iter().find(|f| f.file_type == Some(NAMDFileType::Exb)).unwrap();
+
+        assert!(config.contains(&psf_file.name));
+        assert!(config.contains(&pdb_file.name));
+        assert!(config.contains(&exb_file.name));
     }
 }

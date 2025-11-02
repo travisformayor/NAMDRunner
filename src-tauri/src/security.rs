@@ -68,29 +68,6 @@ impl<'de> Deserialize<'de> for SecurePassword {
     }
 }
 
-/// Utility functions for secure memory operations
-pub mod memory {
-    /// Clear a string's memory by overwriting with zeros
-    #[allow(dead_code)]
-    pub fn clear_string(s: &mut String) {
-        // Convert to bytes and zero them
-        unsafe {
-            let bytes = s.as_bytes_mut();
-            for byte in bytes.iter_mut() {
-                *byte = 0;
-            }
-        }
-        s.clear();
-    }
-
-    /// Clear a vector's memory by overwriting with zeros
-    #[allow(dead_code)]
-    pub fn clear_bytes(bytes: &mut [u8]) {
-        for byte in bytes.iter_mut() {
-            *byte = 0;
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -123,21 +100,6 @@ mod tests {
         assert!(!debug_str.contains("secret"));
     }
 
-    #[test]
-    fn test_memory_clear_string() {
-        let mut test_string = "sensitive_data".to_string();
-        memory::clear_string(&mut test_string);
-
-        assert!(test_string.is_empty());
-    }
-
-    #[test]
-    fn test_memory_clear_bytes() {
-        let mut test_bytes = b"sensitive".to_vec();
-        memory::clear_bytes(&mut test_bytes);
-
-        assert!(test_bytes.iter().all(|&b| b == 0));
-    }
 
     #[test]
     fn test_secure_password_never_logged() {

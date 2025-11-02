@@ -59,20 +59,25 @@ async fn create_job_demo(params: CreateJobParams) -> CreateJobResult {
     with_demo_state(|state| {
         state.job_counter += 1;
         let job_id = format!("job_{:03}", state.job_counter);
-        let _now = Utc::now().to_rfc3339();
 
-        let mut job_info = JobInfo::new(
+        // Use factory function to create job with proper initialization
+        // Use centralized path generation for consistency
+        use crate::ssh::directory_structure::JobDirectoryStructure;
+        let project_dir = JobDirectoryStructure::project_dir("mockuser", &job_id);
+        let scratch_dir = JobDirectoryStructure::scratch_dir("mockuser", &job_id);
+
+        let mut job_info = crate::automations::job_creation::create_job_info(
             job_id.clone(),
             params.job_name.clone(),
             params.namd_config.clone(),
             params.slurm_config.clone(),
             params.input_files.clone(),
-            format!("/projects/mockuser/namdrunner_jobs/{}", job_id),
+            project_dir.clone(),
         );
 
         // Set the directory paths after creation
-        job_info.project_dir = Some(format!("/projects/mockuser/namdrunner_jobs/{}", job_id));
-        job_info.scratch_dir = Some(format!("/scratch/alpine/mockuser/namdrunner_jobs/{}", job_id));
+        job_info.project_dir = Some(project_dir);
+        job_info.scratch_dir = Some(scratch_dir);
 
         state.jobs.insert(job_id.clone(), job_info.clone());
 
@@ -514,7 +519,7 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
         // Safely delete directories with validation
         for (dir_type, dir_path) in directories_to_delete {
             // Safety check: ensure the path is within expected NAMDRunner directories
-            if !dir_path.contains("namdrunner_jobs") {
+            if !dir_path.contains(crate::ssh::directory_structure::JOB_BASE_DIRECTORY) {
                 return DeleteJobResult {
                     success: false,
                     error: Some(format!("Refusing to delete directory '{}' - not a NAMDRunner job directory", dir_path)),
@@ -705,8 +710,9 @@ async fn discover_jobs_real(_app_handle: tauri::AppHandle) -> DiscoverJobsResult
         }
     };
 
-    // Construct remote jobs directory path
-    let remote_jobs_dir = format!("/projects/{}/namdrunner_jobs", username);
+    // Construct remote jobs directory path using centralized function
+    use crate::ssh::directory_structure::JobDirectoryStructure;
+    let remote_jobs_dir = JobDirectoryStructure::project_base(&username);
 
     info_log!("[JOB DISCOVERY] Scanning remote directory: {}", remote_jobs_dir);
 

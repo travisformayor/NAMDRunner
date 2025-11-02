@@ -441,6 +441,31 @@ export class MockCoreClient implements ICoreClient {
   }
 
   // File management
+  async selectInputFiles(): Promise<any[]> {
+    // Mock file selection - return simulated selected files
+    // Return mock selected files (simulating user selecting 3 files)
+    return [
+      {
+        name: 'structure.pdb',
+        path: '/mock/path/structure.pdb',
+        size: 2048,
+        file_type: 'pdb'
+      },
+      {
+        name: 'structure.psf',
+        path: '/mock/path/structure.psf',
+        size: 4096,
+        file_type: 'psf'
+      },
+      {
+        name: 'parameters.prm',
+        path: '/mock/path/parameters.prm',
+        size: 1024,
+        file_type: 'prm'
+      }
+    ];
+  }
+
   async detectFileType(filename: string): Promise<string> {
     // Mock implementation matching backend logic
     const lower = filename.toLowerCase();

@@ -814,10 +814,28 @@ mod tests {
     }
 
     fn create_test_job() -> JobInfo {
-        let mut job = JobInfo::new(
-            "test_job_001".to_string(),
-            "Test Job".to_string(),
-            NAMDConfig {
+        use crate::ssh::directory_structure::JobDirectoryStructure;
+
+        // Use centralized path generation for test jobs
+        let project_dir = JobDirectoryStructure::project_dir("testuser", "test_job_001");
+        let scratch_dir = JobDirectoryStructure::scratch_dir("testuser", "test_job_001");
+        let now = chrono::Utc::now().to_rfc3339();
+
+        JobInfo {
+            job_id: "test_job_001".to_string(),
+            job_name: "Test Job".to_string(),
+            status: JobStatus::Created,
+            created_at: now.clone(),
+            updated_at: Some(now),
+            submitted_at: None,
+            completed_at: None,
+            slurm_job_id: None,
+            project_dir: Some(project_dir.clone()),
+            scratch_dir: Some(scratch_dir),
+            error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
+            namd_config: NAMDConfig {
                 outputname: "test_output".to_string(),
                 temperature: 300.0,
                 timestep: 2.0,
@@ -835,14 +853,14 @@ mod tests {
                 restart_freq: 500,
                 output_pressure_freq: 100,
             },
-            SlurmConfig {
+            slurm_config: SlurmConfig {
                 cores: 4,
                 memory: "4GB".to_string(),
                 walltime: "01:00:00".to_string(),
                 partition: Some("compute".to_string()),
                 qos: None,
             },
-            vec![
+            input_files: vec![
                 InputFile {
                     name: "test.pdb".to_string(),
                     local_path: "/local/test.pdb".to_string(),
@@ -852,14 +870,9 @@ mod tests {
                     uploaded_at: Some(chrono::Utc::now().to_rfc3339()),
                 },
             ],
-            "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),
-        );
-
-        // Set the directories needed for the tests
-        job.project_dir = Some("/projects/testuser/namdrunner_jobs/test_job_001".to_string());
-        job.scratch_dir = Some("/scratch/testuser/test_job_001".to_string());
-
-        job
+            output_files: None,
+            remote_directory: project_dir,
+        }
     }
 
     // Security validation tests

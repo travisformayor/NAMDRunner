@@ -167,44 +167,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_progress_info_creation() {
+    fn test_percentage_calculation() {
+        // Test business logic: percentage calculation formula
         let progress = ProgressInfo::new("Testing", 2, 5);
-        assert_eq!(progress.step, "Testing");
-        assert_eq!(progress.current_step, 2);
-        assert_eq!(progress.total_steps, 5);
         assert_eq!(progress.percentage, 20.0); // (2-1)/5 * 100
+
+        let progress_first = ProgressInfo::new("Start", 1, 4);
+        assert_eq!(progress_first.percentage, 0.0); // (1-1)/4 * 100
+
+        let progress_last = ProgressInfo::new("End", 4, 4);
+        assert_eq!(progress_last.percentage, 75.0); // (4-1)/4 * 100
     }
 
     #[test]
-    fn test_progress_info_with_message() {
+    fn test_display_string_formatting() {
+        // Test business logic: string formatting with message
         let progress = ProgressInfo::with_message("Uploading", 1, 3, "file.pdb");
-        assert_eq!(progress.message, Some("file.pdb".to_string()));
         assert_eq!(progress.to_display_string(), "Step 1/3: Uploading (0%) - file.pdb");
+
+        // Test business logic: string formatting with sub-progress
+        let progress_sub = ProgressInfo::with_sub_progress("Copying", 2, 4, 75.0);
+        assert_eq!(progress_sub.to_display_string(), "Step 2/4: Copying (25%) - 75%");
     }
 
     #[test]
-    fn test_progress_info_with_sub_progress() {
-        let progress = ProgressInfo::with_sub_progress("Copying", 2, 4, 75.0);
-        assert_eq!(progress.sub_progress, Some(75.0));
-        assert_eq!(progress.to_display_string(), "Step 2/4: Copying (25%) - 75%");
-    }
-
-    #[test]
-    fn test_progress_tracker() {
+    fn test_progress_tracker_percentage_progression() {
+        // Test business logic: percentage increases correctly as steps progress
         let mut tracker = ProgressTracker::new(3);
 
         let step1 = tracker.next_step("Initialize");
-        assert_eq!(step1.current_step, 1);
         assert_eq!(step1.percentage, 0.0);
 
         let step2 = tracker.next_step("Process");
-        assert_eq!(step2.current_step, 2);
         assert!((step2.percentage - 33.333333).abs() < 0.001, "Step 2 percentage should be ~33.33%, got {}", step2.percentage);
 
         let step3 = tracker.next_step("Complete");
-        assert_eq!(step3.current_step, 3);
         assert!((step3.percentage - 66.666667).abs() < 0.001, "Step 3 percentage should be ~66.67%, got {}", step3.percentage);
 
+        // Test business logic: tracker knows when all steps are complete
         assert!(tracker.is_complete());
     }
 

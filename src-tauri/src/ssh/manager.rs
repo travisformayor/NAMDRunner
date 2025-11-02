@@ -397,12 +397,12 @@ impl ConnectionManager {
     /// * `destination` - Destination directory path
     ///
     /// # Example
-    /// ```rust
-    /// // Mirror project to scratch
-    /// sync_directory_rsync(
-    ///     "/projects/user/namdrunner_jobs/job_123/",
-    ///     "/scratch/alpine/user/namdrunner_jobs/job_123/"
-    /// ).await?;
+    /// ```ignore
+    /// use crate::ssh::directory_structure::JobDirectoryStructure;
+    /// // Mirror project to scratch using centralized path generation
+    /// let source = format!("{}/", JobDirectoryStructure::project_dir("user", "job_123"));
+    /// let dest = JobDirectoryStructure::scratch_dir("user", "job_123");
+    /// manager.sync_directory_rsync(&source, &dest).await?;
     /// ```
     pub async fn sync_directory_rsync(&self, source: &str, destination: &str) -> Result<CommandResult> {
         info_log!("[SSH] Syncing directory: {} -> {}", source, destination);

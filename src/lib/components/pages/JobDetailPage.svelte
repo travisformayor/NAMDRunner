@@ -218,7 +218,6 @@ This action cannot be undone."
   }
 
   .submit-button,
-  .sync-button,
   .delete-button {
     display: flex;
     align-items: center;

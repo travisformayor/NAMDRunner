@@ -2,11 +2,44 @@ use anyhow::{Result, anyhow};
 use tauri::AppHandle;
 use std::path::Path;
 
-use crate::types::{CreateJobParams, JobInfo, InputFile};
+use crate::types::{CreateJobParams, JobInfo, InputFile, JobStatus, NAMDConfig, SlurmConfig};
 use crate::validation::{input, paths, files};
 use crate::ssh::get_connection_manager;
 use crate::database::with_database;
 use crate::{info_log, debug_log, error_log};
+
+/// Factory function to create a new JobInfo with business logic (status, timestamps)
+///
+/// This is the correct way to create new jobs with proper initial state.
+pub fn create_job_info(
+    job_id: String,
+    job_name: String,
+    namd_config: NAMDConfig,
+    slurm_config: SlurmConfig,
+    input_files: Vec<InputFile>,
+    remote_directory: String,
+) -> JobInfo {
+    JobInfo {
+        job_id,
+        job_name,
+        status: JobStatus::Created,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        updated_at: None,
+        submitted_at: None,
+        completed_at: None,
+        slurm_job_id: None,
+        project_dir: None,
+        scratch_dir: None,
+        error_info: None,
+        slurm_stdout: None,
+        slurm_stderr: None,
+        namd_config,
+        slurm_config,
+        input_files,
+        output_files: None,
+        remote_directory,
+    }
+}
 
 /// Simplified job creation automation that follows NAMDRunner's direct function patterns
 /// This replaces the complex AutomationStep trait system with a simple async function
@@ -154,9 +187,9 @@ pub async fn execute_job_creation_with_progress(
 
     progress_callback("Creating job metadata...");
 
-    // Create JobInfo with ONLY project directory set
+    // Create JobInfo using factory function (sets Created status and timestamp)
     // scratch_dir remains None until job submission
-    let mut job_info = JobInfo::new(
+    let mut job_info = create_job_info(
         job_id.clone(),
         clean_job_name,
         params.namd_config,

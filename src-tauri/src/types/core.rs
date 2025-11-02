@@ -139,38 +139,9 @@ pub struct JobInfo {
     pub remote_directory: String,
 }
 
-impl JobInfo {
-    /// Create a new JobInfo with default timestamps
-    pub fn new(
-        job_id: String,
-        job_name: String,
-        namd_config: NAMDConfig,
-        slurm_config: SlurmConfig,
-        input_files: Vec<InputFile>,
-        remote_directory: String,
-    ) -> Self {
-        Self {
-            job_id,
-            job_name,
-            status: JobStatus::Created,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: None,
-            submitted_at: None,
-            completed_at: None,
-            slurm_job_id: None,
-            project_dir: None,
-            scratch_dir: None,
-            error_info: None,
-            slurm_stdout: None,
-            slurm_stderr: None,
-            namd_config,
-            slurm_config,
-            input_files,
-            output_files: None,
-            remote_directory,
-        }
-    }
-}
+// JobInfo has no custom constructor - construct directly using struct literal syntax
+// or let serde handle deserialization from JSON/database
+// For creating new jobs with business logic, use `crate::automations::job_creation::create_job_info()`
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NAMDConfig {
@@ -226,6 +197,67 @@ pub struct SlurmConfig {
     pub walltime: String,
     pub partition: Option<String>,
     pub qos: Option<String>,
+}
+
+impl SlurmConfig {
+    /// Parse memory string to GB (e.g., "16GB", "32", "2048MB")
+    pub fn parse_memory_gb(&self) -> anyhow::Result<f64> {
+        let clean = self.memory.trim().to_lowercase();
+
+        if clean.is_empty() {
+            return Err(anyhow::anyhow!("Memory value is required"));
+        }
+
+        // Try to extract number and unit
+        let re = regex::Regex::new(r"^(\d+(?:\.\d+)?)\s*(gb|g|mb|m)?$").unwrap();
+
+        if let Some(captures) = re.captures(&clean) {
+            let value: f64 = captures.get(1)
+                .ok_or_else(|| anyhow::anyhow!("Invalid memory format"))?
+                .as_str()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Invalid memory number"))?;
+
+            let unit = captures.get(2).map(|m| m.as_str()).unwrap_or("gb");
+
+            match unit {
+                "gb" | "g" | "" => Ok(value),
+                "mb" | "m" => Ok(value / 1024.0),
+                _ => Err(anyhow::anyhow!("Unsupported memory unit: {}", unit)),
+            }
+        } else {
+            Err(anyhow::anyhow!("Invalid memory format: {}. Use format like '16GB', '32', or '2048MB'", self.memory))
+        }
+    }
+
+    /// Parse walltime string to hours (e.g., "24:00:00", "04:30:00")
+    pub fn parse_walltime_hours(&self) -> anyhow::Result<f64> {
+        if self.walltime.trim().is_empty() {
+            return Err(anyhow::anyhow!("Walltime is required"));
+        }
+
+        let parts: Vec<&str> = self.walltime.split(':').collect();
+
+        if parts.len() != 3 {
+            return Err(anyhow::anyhow!("Walltime must be in HH:MM:SS format (e.g., '24:00:00')"));
+        }
+
+        let hours: u32 = parts[0].parse()
+            .map_err(|_| anyhow::anyhow!("Invalid hours in walltime"))?;
+        let minutes: u32 = parts[1].parse()
+            .map_err(|_| anyhow::anyhow!("Invalid minutes in walltime"))?;
+        let seconds: u32 = parts[2].parse()
+            .map_err(|_| anyhow::anyhow!("Invalid seconds in walltime"))?;
+
+        if minutes >= 60 {
+            return Err(anyhow::anyhow!("Minutes must be less than 60"));
+        }
+        if seconds >= 60 {
+            return Err(anyhow::anyhow!("Seconds must be less than 60"));
+        }
+
+        Ok(hours as f64 + (minutes as f64 / 60.0) + (seconds as f64 / 3600.0))
+    }
 }
 
 // Default configuration constants for database persistence
@@ -302,14 +334,6 @@ pub struct RemoteFile {
     pub size: u64,
     pub modified_at: String,
     pub file_type: FileType,
-}
-
-/// Command execution result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommandResult {
-    pub stdout: String,
-    pub stderr: String,
-    pub exit_code: i32,
 }
 
 /// Connection status response

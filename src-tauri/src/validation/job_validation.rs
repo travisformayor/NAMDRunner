@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::anyhow;
 use crate::cluster::{get_partition_limits, get_qos_for_partition};
 
 /// Business logic validation for job operations
@@ -41,70 +41,9 @@ impl ValidationResult {
     }
 }
 
-/// Parse memory string to GB (e.g., "16GB", "32", "2048MB")
-fn parse_memory_gb(memory: &str) -> Result<f64> {
-    let clean = memory.trim().to_lowercase();
-
-    if clean.is_empty() {
-        return Err(anyhow!("Memory value is required"));
-    }
-
-    // Try to extract number and unit
-    let re = regex::Regex::new(r"^(\d+(?:\.\d+)?)\s*(gb|g|mb|m)?$").unwrap();
-
-    if let Some(captures) = re.captures(&clean) {
-        let value: f64 = captures.get(1)
-            .ok_or_else(|| anyhow!("Invalid memory format"))?
-            .as_str()
-            .parse()
-            .map_err(|_| anyhow!("Invalid memory number"))?;
-
-        let unit = captures.get(2).map(|m| m.as_str()).unwrap_or("gb");
-
-        match unit {
-            "gb" | "g" | "" => Ok(value),
-            "mb" | "m" => Ok(value / 1024.0),
-            _ => Err(anyhow!("Unsupported memory unit: {}", unit)),
-        }
-    } else {
-        Err(anyhow!("Invalid memory format: {}. Use format like '16GB', '32', or '2048MB'", memory))
-    }
-}
-
-/// Parse walltime string to hours (e.g., "24:00:00", "04:30:00")
-fn parse_walltime_hours(walltime: &str) -> Result<f64> {
-    if walltime.trim().is_empty() {
-        return Err(anyhow!("Walltime is required"));
-    }
-
-    let parts: Vec<&str> = walltime.split(':').collect();
-
-    if parts.len() != 3 {
-        return Err(anyhow!("Walltime must be in HH:MM:SS format (e.g., '24:00:00')"));
-    }
-
-    let hours: u32 = parts[0].parse()
-        .map_err(|_| anyhow!("Invalid hours in walltime"))?;
-    let minutes: u32 = parts[1].parse()
-        .map_err(|_| anyhow!("Invalid minutes in walltime"))?;
-    let seconds: u32 = parts[2].parse()
-        .map_err(|_| anyhow!("Invalid seconds in walltime"))?;
-
-    if minutes >= 60 {
-        return Err(anyhow!("Minutes must be less than 60"));
-    }
-    if seconds >= 60 {
-        return Err(anyhow!("Seconds must be less than 60"));
-    }
-
-    Ok(hours as f64 + (minutes as f64 / 60.0) + (seconds as f64 / 3600.0))
-}
-
 /// Validate resource allocation against cluster limits
 pub fn validate_resource_allocation(
-    cores: u32,
-    memory: &str,
-    walltime: &str,
+    config: &crate::types::core::SlurmConfig,
     partition_id: &str,
     qos_id: &str,
 ) -> ValidationResult {
@@ -113,35 +52,37 @@ pub fn validate_resource_allocation(
     let mut suggestions = Vec::new();
 
     // Validate cores
-    if cores == 0 {
+    if config.cores == 0 {
         issues.push("Cores must be greater than 0".to_string());
     }
 
-    // Parse memory
-    let memory_gb = match parse_memory_gb(memory) {
-        Ok(gb) => gb,
+    // Parse and validate memory
+    let memory_gb = match config.parse_memory_gb() {
+        Ok(gb) => {
+            if gb <= 0.0 {
+                issues.push("Memory must be greater than 0".to_string());
+            }
+            gb
+        }
         Err(e) => {
             issues.push(format!("Memory: {}", e));
-            return ValidationResult { is_valid: false, issues, warnings, suggestions };
+            0.0  // Continue validation with default to collect all issues
         }
     };
 
-    if memory_gb <= 0.0 {
-        issues.push("Memory must be greater than 0".to_string());
-    }
-
-    // Parse walltime
-    let walltime_hours = match parse_walltime_hours(walltime) {
-        Ok(hours) => hours,
+    // Parse and validate walltime
+    let walltime_hours = match config.parse_walltime_hours() {
+        Ok(hours) => {
+            if hours <= 0.0 {
+                issues.push("Walltime must be greater than 0".to_string());
+            }
+            hours
+        }
         Err(e) => {
             issues.push(format!("Walltime: {}", e));
-            return ValidationResult { is_valid: false, issues, warnings, suggestions };
+            0.0  // Continue validation with default to collect all issues
         }
     };
-
-    if walltime_hours <= 0.0 {
-        issues.push("Walltime must be greater than 0".to_string());
-    }
 
     // Get partition limits
     let limits = match get_partition_limits(partition_id) {
@@ -153,19 +94,19 @@ pub fn validate_resource_allocation(
     };
 
     // Validate cores against partition limit
-    if cores > limits.max_cores {
+    if config.cores > limits.max_cores {
         issues.push(format!(
             "Cores ({}) exceeds partition '{}' limit ({})",
-            cores, partition_id, limits.max_cores
+            config.cores, partition_id, limits.max_cores
         ));
     }
 
     // Validate memory against partition limit
-    let max_memory = cores as f64 * limits.max_memory_per_core;
+    let max_memory = config.cores as f64 * limits.max_memory_per_core;
     if memory_gb > max_memory {
         issues.push(format!(
             "Memory ({:.1}GB) exceeds limit for {} cores on partition '{}' ({:.1}GB)",
-            memory_gb, cores, partition_id, max_memory
+            memory_gb, config.cores, partition_id, max_memory
         ));
     }
 
@@ -192,11 +133,11 @@ pub fn validate_resource_allocation(
     }
 
     // Efficiency warnings
-    if cores < 16 {
+    if config.cores < 16 {
         warnings.push("Small core count may have longer queue times".to_string());
     }
 
-    if partition_id == "amilan128c" && cores < 64 {
+    if partition_id == "amilan128c" && config.cores < 64 {
         warnings.push("Consider 'amilan' partition for jobs under 64 cores".to_string());
     }
 
@@ -205,7 +146,7 @@ pub fn validate_resource_allocation(
     }
 
     // Memory optimization suggestions
-    let recommended_memory = cores as f64 * 2.0; // 2GB per core is often efficient
+    let recommended_memory = config.cores as f64 * 2.0; // 2GB per core is often efficient
     if memory_gb > recommended_memory * 2.0 {
         suggestions.push(format!(
             "Consider reducing memory to ~{:.0}GB for better efficiency",
