@@ -27,7 +27,7 @@ NAMDRunner is a desktop application for managing NAMD molecular dynamics simulat
 │           │                                                 │
 │           │                                                 │
 │           │─────────────────────────────────────────────────│
-│           │ [SSH Console - Collapsed by default]            │
+│           │ [Logs Panel - Collapsed by default]             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -203,14 +203,14 @@ Uploaded Files:
 └────────────────────────┘
 ```
 
-### SSH Console (Footer)
+### Logs Panel (Footer)
 
-**Collapsed**: Single line showing `[↑ SSH Console]`
+**Collapsed**: Single line showing `[↑ Logs]`
 
 **Expanded** (overlays bottom 1/3 of screen):
 ```
 ┌─────────────────────────────────────────────┐
-│ SSH Console     [Copy All] [Clear] [↓ Hide] │
+│ Logs            [Copy All] [Clear] [↓ Hide] │
 │─────────────────────────────────────────────│
 │ $ module load slurm/alpine                  │
 │ $ squeue -u <username> --format=...         │

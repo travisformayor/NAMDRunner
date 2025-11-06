@@ -43,6 +43,17 @@ CREATE TABLE IF NOT EXISTS jobs (
 -- Index on status for filtering (uses JSON extraction)
 CREATE INDEX IF NOT EXISTS idx_jobs_status
 ON jobs(json_extract(data, '$.status'));
+
+-- Template storage for NAMD simulation templates
+CREATE TABLE IF NOT EXISTS templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    namd_config_template TEXT NOT NULL,  -- NAMD config with {{variable}} placeholders
+    variables TEXT NOT NULL,               -- JSON: variable definitions
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ```
 
 ### Why This Works
@@ -65,6 +76,13 @@ let jobs = db.load_all_jobs()?;
 
 // Delete job
 db.delete_job("job_001")?;
+
+// Template operations
+db.save_template(&template)?;
+let template = db.load_template("vacuum_optimization_v1")?;
+let all_templates = db.list_templates()?;
+db.delete_template("custom_template_v1")?;
+let count = db.count_jobs_using_template("vacuum_optimization_v1")?;
 ```
 
 **That's it.** No manual serialization, no column lists, no migrations.
@@ -89,13 +107,28 @@ This file is created in each job directory on the cluster and contains all job m
   "error_info": null,
   "slurm_stdout": null,
   "slurm_stderr": null,
-  "namd_config": {
-    "steps": 50000,
-    "temperature": 310.0,
+  "template_id": "explicit_solvent_npt_v1",
+  "template_values": {
+    "structure_file": "hextube.psf",
+    "coordinates_file": "hextube.pdb",
+    "parameters_file": "par_all36_na.prm",
+    "extrabonds_file": "hextube.exb",
+    "output_name": "npt_equilibration",
+    "temperature": 300.0,
     "timestep": 2.0,
-    "outputname": "output",
-    "dcd_freq": 1000,
-    "restart_freq": 5000
+    "cell_x": 124.0,
+    "cell_y": 114.0,
+    "cell_z": 323.0,
+    "pme_grid_spacing": 1.5,
+    "langevin_damping": 5.0,
+    "langevin_piston_target": 1.01325,
+    "xst_freq": 1200,
+    "output_energies_freq": 1200,
+    "dcd_freq": 1200,
+    "restart_freq": 1200,
+    "output_pressure_freq": 1200,
+    "execution_command": "minimize",
+    "steps": 4800
   },
   "slurm_config": {
     "cores": 24,
@@ -104,32 +137,6 @@ This file is created in each job directory on the cluster and contains all job m
     "partition": "amilan",
     "qos": "normal"
   },
-  "input_files": [
-    {
-      "name": "hextube.pdb",
-      "local_path": "/home/user/Documents/hextube.pdb",
-      "remote_name": "hextube.pdb",
-      "file_type": "pdb",
-      "size": 2209942,
-      "uploaded_at": "2025-01-15T10:32:00Z"
-    },
-    {
-      "name": "hextube.psf",
-      "local_path": "/home/user/Documents/hextube.psf",
-      "remote_name": "hextube.psf",
-      "file_type": "psf",
-      "size": 6732288,
-      "uploaded_at": "2025-01-15T10:32:05Z"
-    },
-    {
-      "name": "par_all36_na.prm",
-      "local_path": "/home/user/Documents/par_all36_na.prm",
-      "remote_name": "par_all36_na.prm",
-      "file_type": "prm",
-      "size": 61066,
-      "uploaded_at": "2025-01-15T10:32:07Z"
-    }
-  ],
   "output_files": [
     {
       "name": "output.dcd",
@@ -156,17 +163,22 @@ This file is created in each job directory on the cluster and contains all job m
 }
 ```
 
-### InputFile Schema
+### Template Values Schema
+
+Template values are stored as a JSON object mapping variable keys to their values:
 
 ```typescript
-interface InputFile {
-  name: string;              // Display filename
-  local_path: string;        // Local path when uploading (not used after upload)
-  remote_name?: string;      // Actual filename on server
-  file_type?: 'pdb' | 'psf' | 'prm' | 'other';  // NAMD file type
-  size?: number;             // File size in bytes (populated after upload)
-  uploaded_at?: string;      // RFC3339 timestamp when uploaded
-}
+interface TemplateValues {
+  [key: string]: string | number | boolean;
+
+  // Example for explicit_solvent_npt_v1 template:
+  structure_file: string;      // Filename (e.g., "hextube.psf")
+  coordinates_file: string;    // Filename (e.g., "hextube.pdb")
+  temperature: number;         // Simulation temperature in Kelvin
+  timestep: number;            // Integration timestep in femtoseconds
+  steps: number;               // Number of simulation steps
+  execution_command: string;   // "minimize" or "run"
+  // ... additional variables defined by template
 ```
 
 **When populated:**

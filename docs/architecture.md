@@ -350,7 +350,7 @@ src/
 │   │   │   ├── AppHeader.svelte     # Application header with connection status
 │   │   │   ├── AppSidebar.svelte    # Navigation sidebar
 │   │   │   ├── ConnectionDropdown.svelte # Connection management with demo mode toggle
-│   │   │   └── SSHConsolePanel.svelte    # SSH command logging and debugging interface
+│   │   │   └── LogsPanel.svelte          # Application and SSH command logging and debugging interface
 │   │   ├── create-job/          # Job creation workflow components
 │   │   │   ├── CreateJobTabs.svelte     # Tabbed job creation interface
 │   │   │   ├── ResourcesTab.svelte      # Resource allocation configuration
@@ -509,9 +509,9 @@ type JobStatus = 'CREATED' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'C
 // Job management types (IPC communication uses snake_case)
 interface CreateJobParams {
   job_name: string;
-  namd_config: NAMDConfig;
+  template_id: string;                     // Template to use for job
+  template_values: Record<string, any>;    // Variable values for template
   slurm_config: SlurmConfig;
-  input_files: InputFile[];
 }
 
 interface JobInfo {
@@ -519,11 +519,49 @@ interface JobInfo {
   job_name: string;
   status: JobStatus;
   slurm_job_id?: SlurmJobId;
+  template_id: string;                     // Template used for this job
+  template_values: Record<string, any>;    // Rendered variable values
   created_at: Timestamp;
   updated_at?: Timestamp;
   // ... additional fields
 }
 ```
+
+#### Template System Architecture
+
+NAMDRunner uses a **template-as-data** architecture where NAMD configurations are defined as templates stored in the database with variable definitions:
+
+**Template Structure:**
+```typescript
+interface Template {
+  id: string;                              // Unique identifier
+  name: string;                            // Display name
+  description: string;                     // User-facing description
+  namd_config_template: string;            // NAMD config with {{variables}}
+  variables: Record<string, VariableDefinition>;  // Variable definitions
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+interface VariableDefinition {
+  key: string;                             // Variable name (used in template)
+  label: string;                           // Display label in UI
+  var_type: VariableType;                  // Number | Text | Boolean | FileUpload
+  required: boolean;                       // Is this variable required?
+  help_text?: string;                      // User guidance
+}
+```
+
+**Key Design Decisions:**
+- **Templates stored in database** - Allows runtime creation/editing without code changes
+- **No hardcoded NAMD parameters** - All simulation settings defined via templates
+- **Files as template variables** - File uploads assigned to FileUpload variables
+- **Variable substitution** - `{{variable}}` syntax replaced during job creation
+- **Type-based rendering** - Boolean→"yes"/"no", FileUpload→"input_files/filename"
+
+**Default Templates:**
+- `vacuum_optimization_v1` - Large periodic box, PME disabled, ENM restraints
+- `explicit_solvent_npt_v1` - NPT ensemble, PME enabled, pressure control
 
 #### Rust Type System
 
@@ -531,9 +569,9 @@ NAMDRunner maintains strict type safety between TypeScript frontend and Rust bac
 
 **Core Types:**
 - **`ApiResult<T>`** - Consistent return type for all Tauri commands
-- **`JobInfo`** - Complete job lifecycle information with all status fields
+- **`JobInfo`** - Complete job lifecycle with template_id + template_values
 - **`SessionInfo`** - SSH connection state and authentication data
-- **`NAMDConfig`** - NAMD simulation parameters
+- **`Template`** - Template definition with NAMD config and variables
 - **`SlurmConfig`** - SLURM resource allocation settings
 
 **Type Safety Features:**
@@ -669,7 +707,7 @@ See [`tasks/roadmap.md`](../tasks/roadmap.md) for planned features and developme
 - **Connection State**: Global Svelte store managing SSH session lifecycle
 - **Job List**: Cached in store, synced with backend via periodic refresh
 - **Form State**: Local to components using Svelte's reactive binding
-- **SSH Console Buffer**: Global store with configurable size limit for debugging
+- **Logs Panel Buffer**: Global store with configurable size limit for debugging
 
 ### Performance Optimization Patterns
 - **Lazy loading** for job details and log content (loaded on-demand)

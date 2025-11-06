@@ -512,12 +512,12 @@ let cmd = format!("mkdir {}", user_input); // VULNERABLE TO INJECTION
 - `shell::escape_parameter(param)` - Individual parameter escaping
 - Located in `src-tauri/src/validation.rs`
 
-#### SSH Console Debugging
+#### Logs Panel Debugging
 
-**For SSH/SLURM operations**, log important events to the SSH console for user debugging:
+**For SSH/SLURM operations**, log important events to the logs panel for user debugging:
 
 ```typescript
-// Frontend: Add to SSH console (visible to users)
+// Frontend: Add to logs panel (visible to users)
 if (typeof window !== 'undefined' && window.sshConsole) {
   window.sshConsole.addDebug(`[JOBS] Job creation failed: ${error}`);
   window.sshConsole.addCommand(`sbatch job.sbatch`); // Show commands being run
@@ -525,11 +525,11 @@ if (typeof window !== 'undefined' && window.sshConsole) {
 ```
 
 ```rust
-// Backend: Use tagged console logs (captured by SSH console)
+// Backend: Use tagged console logs (captured by logs panel)
 println!("[SLURM] Submitting job: {}", job_name);
 ```
 
-**SSH Console captures**:
+**Logs Panel captures**:
 - Tagged console logs: `[SSH]`, `[SLURM]`, `[CONNECTION]`, `[JOBS]`
 - Backend Rust logs via Tauri events
 - User-visible debugging without production noise

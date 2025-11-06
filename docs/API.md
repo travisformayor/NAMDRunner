@@ -223,14 +223,8 @@ Frontend receives complete state in a single call. See [`AUTOMATIONS.md`](AUTOMA
 ```typescript
 interface CreateJobParams {
   job_name: string;
-  namd_config: {
-    steps: number;
-    temperature: number;
-    timestep: number;
-    outputname: string;
-    dcd_freq?: number;
-    restart_freq?: number;
-  };
+  template_id: string;                     // Template to use (e.g., "explicit_solvent_npt_v1")
+  template_values: Record<string, any>;    // Variable values for template
   slurm_config: {
     cores: number;
     memory: string;      // e.g., "16GB"
@@ -238,15 +232,18 @@ interface CreateJobParams {
     partition?: string;  // default: "amilan"
     qos?: string;        // default: "normal"
   };
-  input_files: InputFile[];
 }
 
-interface InputFile {
-  name: string;
-  local_path: string;
-  remote_name?: string;
-  file_type?: 'pdb' | 'psf' | 'prm' | 'other';
-}
+// Example template_values:
+// {
+//   "structure_file": "/path/to/hextube.psf",  // Local path, will be uploaded
+//   "coordinates_file": "/path/to/hextube.pdb",
+//   "parameters_file": "/path/to/par_all36_na.prm",
+//   "temperature": 300.0,
+//   "timestep": 2.0,
+//   "steps": 4800,
+//   "execution_command": "minimize"
+// }
 
 interface CreateJobResult {
   success: boolean;
@@ -364,6 +361,116 @@ interface ListFilesResult {
   error?: string;
 }
 ```
+
+## Template Management Commands
+
+### IPC Interface
+```typescript
+interface ITemplateCommands {
+  // List all templates (returns summary for template selection)
+  listTemplates(): Promise<ListTemplatesResult>;
+
+  // Get full template definition (for editing or job creation)
+  getTemplate(template_id: string): Promise<GetTemplateResult>;
+
+  // Create new user template
+  createTemplate(template: Template): Promise<CreateTemplateResult>;
+
+  // Update existing template
+  updateTemplate(template_id: string, template: Template): Promise<UpdateTemplateResult>;
+
+  // Delete template (blocked if jobs exist using it)
+  deleteTemplate(template_id: string): Promise<DeleteTemplateResult>;
+
+  // Validate template values against template definition
+  validateTemplateValues(
+    template_id: string,
+    values: Record<string, any>
+  ): Promise<ValidateTemplateValuesResult>;
+}
+
+interface Template {
+  id: string;
+  name: string;
+  description: string;
+  namd_config_template: string;            // NAMD config with {{variables}}
+  variables: Record<string, VariableDefinition>;
+  created_at: string;
+  updated_at: string;
+}
+
+interface VariableDefinition {
+  key: string;
+  label: string;
+  var_type: VariableType;
+  required: boolean;
+  help_text?: string;
+}
+
+type VariableType =
+  | { Number: { min?: number; max?: number; default?: number } }
+  | { Text: { default?: string } }
+  | { Boolean: { default: boolean } }
+  | { FileUpload: { extensions: string[] } };
+
+interface ListTemplatesResult {
+  success: boolean;
+  templates?: Array<{
+    id: string;
+    name: string;
+    description: string;
+  }>;
+  error?: string;
+}
+
+interface GetTemplateResult {
+  success: boolean;
+  template?: Template;
+  error?: string;
+}
+
+interface CreateTemplateResult {
+  success: boolean;
+  template_id?: string;
+  error?: string;
+}
+
+interface UpdateTemplateResult {
+  success: boolean;
+  error?: string;
+}
+
+interface DeleteTemplateResult {
+  success: boolean;
+  error?: string;  // e.g., "Cannot delete template: 3 job(s) are using it"
+}
+
+interface ValidateTemplateValuesResult {
+  valid: boolean;
+  errors: string[];  // Field-level validation errors
+}
+```
+
+### Template Rendering
+
+Templates use `{{variable}}` syntax for variable substitution. During job creation:
+
+1. Template loaded from database
+2. Files extracted from template_values (FileUpload variables)
+3. Files uploaded to cluster's `input_files/` directory
+4. template_values updated with filenames (not full paths)
+5. Template rendered: `{{variable}}` replaced with values
+6. Type-specific rendering:
+   - **FileUpload**: `{{structure_file}}` → `input_files/hextube.psf`
+   - **Boolean**: `{{pme_enabled}}` → `yes` or `no`
+   - **Number**: `{{temperature}}` → `300` (integers without .0)
+   - **Text**: `{{output_name}}` → `npt_equilibration`
+
+### Default Templates
+
+**Built-in templates** are auto-loaded from `src-tauri/templates/*.json` on first app startup:
+- `vacuum_optimization_v1.json` - Vacuum simulation with large periodic box
+- `explicit_solvent_npt_v1.json` - NPT ensemble with PME electrostatics
 
 ## Error Handling Strategy
 

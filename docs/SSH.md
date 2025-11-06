@@ -158,7 +158,7 @@ error_log!(connection_manager, "Failed: {}", error);
 - **Metadata operations**: job_info.json reads/writes
 - **Errors**: Failed operations with error messages
 
-#### Frontend SSH Console
+#### Frontend Logs Panel
 Displays all SSH/SFTP operations in real-time:
 ```typescript
 // Frontend subscribes to 'ssh-log' events
