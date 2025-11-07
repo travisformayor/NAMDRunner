@@ -1,4 +1,4 @@
 pub mod status;
 pub mod commands;
 pub mod script_generator;
-pub mod namd_constants;
+// DELETED: namd_constants - all NAMD config values now in templates

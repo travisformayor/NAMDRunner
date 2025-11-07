@@ -1,10 +1,13 @@
 import { writable, derived } from 'svelte/store';
+import { logger } from '../utils/logger';
 
-export type View = 'jobs' | 'create';
+export type View = 'jobs' | 'create' | 'templates' | 'template-edit';
 
 interface UIState {
   currentView: View;
   selectedJobId: string | null;
+  selectedTemplateId: string | null;
+  templateEditorMode: 'create' | 'edit';
   consoleOpen: boolean;
   sidebarCollapsed: boolean;
   theme: 'light' | 'dark';
@@ -19,6 +22,8 @@ interface BreadcrumbItem {
 const initialState: UIState = {
   currentView: 'jobs',
   selectedJobId: null,
+  selectedTemplateId: null,
+  templateEditorMode: 'create',
   consoleOpen: false,
   sidebarCollapsed: false,
   theme: 'light'
@@ -31,7 +36,7 @@ function createUIStore() {
   return {
     subscribe,
     setView: (view: View) => {
-      if (typeof window !== 'undefined' && window.sshConsole) window.sshConsole.addDebug(`[UIStore] Setting view: ${view}`);
+      logger.debug('UIStore', `Setting view: ${view}`);
       update(state => ({
         ...state,
         currentView: view,
@@ -41,6 +46,12 @@ function createUIStore() {
     selectJob: (job_id: string | null) => update(state => ({
       ...state,
       selectedJobId: job_id
+    })),
+    editTemplate: (template_id: string | null, mode: 'create' | 'edit' = 'edit') => update(state => ({
+      ...state,
+      currentView: 'template-edit',
+      selectedTemplateId: template_id,
+      templateEditorMode: mode
     })),
     toggleConsole: () => update(state => ({
       ...state,
@@ -68,6 +79,8 @@ export const uiStore = createUIStore();
 // Derived stores for convenience
 export const currentView = derived(uiStore, $ui => $ui.currentView);
 export const selectedJobId = derived(uiStore, $ui => $ui.selectedJobId);
+export const selectedTemplateId = derived(uiStore, $ui => $ui.selectedTemplateId);
+export const templateEditorMode = derived(uiStore, $ui => $ui.templateEditorMode);
 export const consoleOpen = derived(uiStore, $ui => $ui.consoleOpen);
 export const sidebarCollapsed = derived(uiStore, $ui => $ui.sidebarCollapsed);
 export const theme = derived(uiStore, $ui => $ui.theme);
@@ -78,20 +91,40 @@ export const breadcrumbs = derived(
   ([$ui]) => {
     const items: BreadcrumbItem[] = [];
 
-    // Always start with Jobs
-    const onClick = ($ui.currentView !== 'jobs' || $ui.selectedJobId) ?
-      () => uiStore.setView('jobs') : undefined;
+    // Determine top-level page (Jobs or Templates)
+    if ($ui.currentView === 'templates' || $ui.currentView === 'template-edit') {
+      // Templates hierarchy
+      const onClick = ($ui.currentView !== 'templates') ?
+        () => uiStore.setView('templates') : undefined;
 
-    items.push({
-      label: 'Jobs',
-      onClick
-    });
+      items.push({
+        label: 'Templates',
+        onClick
+      });
 
-    // Add current view specifics
-    if ($ui.currentView === 'create') {
-      items.push({ label: 'Create New Job', onClick: undefined });
-    } else if ($ui.currentView === 'jobs' && $ui.selectedJobId) {
-      items.push({ label: 'Job Details', onClick: undefined });
+      // Add template sub-pages
+      if ($ui.currentView === 'template-edit') {
+        items.push({
+          label: $ui.templateEditorMode === 'create' ? 'Create Template' : 'Edit Template',
+          onClick: undefined
+        });
+      }
+    } else {
+      // Jobs hierarchy (default)
+      const onClick = ($ui.currentView !== 'jobs' || $ui.selectedJobId) ?
+        () => uiStore.setView('jobs') : undefined;
+
+      items.push({
+        label: 'Jobs',
+        onClick
+      });
+
+      // Add job sub-pages
+      if ($ui.currentView === 'create') {
+        items.push({ label: 'Create New Job', onClick: undefined });
+      } else if ($ui.currentView === 'jobs' && $ui.selectedJobId) {
+        items.push({ label: 'Job Details', onClick: undefined });
+      }
     }
 
     return items;
