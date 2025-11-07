@@ -96,7 +96,7 @@ impl NAMDFileType {
     /// Detect file type from filename (source of truth for type detection)
     pub fn from_filename(filename: &str) -> Self {
         let lower = filename.to_lowercase();
-        let ext = lower.split('.').last().unwrap_or("");
+        let ext = lower.split('.').next_back().unwrap_or("");
 
         match ext {
             "pdb" => Self::Pdb,
@@ -132,9 +132,12 @@ pub struct JobInfo {
     pub error_info: Option<String>,
     pub slurm_stdout: Option<String>,
     pub slurm_stderr: Option<String>,
-    pub namd_config: NAMDConfig,
+
+    // Template-based configuration (replaces NAMDConfig)
+    pub template_id: String,
+    pub template_values: std::collections::HashMap<String, serde_json::Value>,
+
     pub slurm_config: SlurmConfig,
-    pub input_files: Vec<InputFile>,
     pub output_files: Option<Vec<OutputFile>>,
     pub remote_directory: String,
 }
@@ -142,53 +145,6 @@ pub struct JobInfo {
 // JobInfo has no custom constructor - construct directly using struct literal syntax
 // or let serde handle deserialization from JSON/database
 // For creating new jobs with business logic, use `crate::automations::job_creation::create_job_info()`
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NAMDConfig {
-    // Basic simulation parameters
-    pub outputname: String,
-    pub temperature: f64,
-    pub timestep: f64,
-
-    // Execution mode and steps
-    pub execution_mode: ExecutionMode,  // minimize or run
-    pub steps: u32,  // minimize steps or run steps depending on mode
-
-    // Periodic boundary conditions (required for PME)
-    pub cell_basis_vector1: Option<CellBasisVector>,
-    pub cell_basis_vector2: Option<CellBasisVector>,
-    pub cell_basis_vector3: Option<CellBasisVector>,
-
-    // Electrostatics and ensemble
-    pub pme_enabled: bool,
-    pub npt_enabled: bool,
-
-    // Langevin dynamics parameters
-    pub langevin_damping: f64,
-
-    // Output frequencies (all required, no Option)
-    pub xst_freq: u32,
-    pub output_energies_freq: u32,
-    pub dcd_freq: u32,
-    pub restart_freq: u32,
-    pub output_pressure_freq: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ExecutionMode {
-    #[serde(rename = "minimize")]
-    Minimize,
-    #[serde(rename = "run")]
-    Run,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CellBasisVector {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlurmConfig {
@@ -260,30 +216,6 @@ impl SlurmConfig {
     }
 }
 
-// Default configuration constants for database persistence
-impl Default for NAMDConfig {
-    fn default() -> Self {
-        Self {
-            outputname: "output".to_string(),
-            temperature: 300.0,
-            timestep: 2.0,
-            execution_mode: ExecutionMode::Run,
-            steps: 10000,
-            cell_basis_vector1: None,
-            cell_basis_vector2: None,
-            cell_basis_vector3: None,
-            pme_enabled: false,
-            npt_enabled: false,
-            langevin_damping: 5.0,
-            xst_freq: 1200,
-            output_energies_freq: 1200,
-            dcd_freq: 1200,
-            restart_freq: 1200,
-            output_pressure_freq: 1200,
-        }
-    }
-}
-
 impl Default for SlurmConfig {
     fn default() -> Self {
         Self {
@@ -294,16 +226,6 @@ impl Default for SlurmConfig {
             qos: None,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InputFile {
-    pub name: String,
-    pub local_path: String,
-    pub remote_name: Option<String>,
-    pub file_type: Option<NAMDFileType>,
-    pub size: Option<u64>,
-    pub uploaded_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
