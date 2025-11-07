@@ -7,7 +7,8 @@ This document defines all data persistence patterns for NAMDRunner, including SQ
 - [SQLite Schema](#sqlite-schema)
 - [JSON Metadata Schema](#json-metadata-schema)
   - [job_info.json (Server-Side)](#job_infojson-server-side)
-  - [InputFile Schema](#inputfile-schema)
+  - [Template Schema](#template-schema)
+  - [Template Values Schema](#template-values-schema)
   - [OutputFile Schema](#outputfile-schema)
 - [File Organization](#file-organization)
 - [Validation Rules](#validation-rules)
@@ -16,22 +17,24 @@ This document defines all data persistence patterns for NAMDRunner, including SQ
 
 ## Database Architecture
 
-**Design Philosophy**: Simple document store for job caching. No complex schema, no migrations, no manual serialization.
+**Design Philosophy**: Simple storage for job caching and template management. No complex schema, no migrations, minimal manual serialization.
 
 ### Key Principles
-1. **Document Storage**: Entire `JobInfo` struct serialized as JSON
-2. **No Schema Coupling**: Adding fields to Rust struct = automatic DB support via serde
-3. **Zero Migrations**: No backward compatibility needed - users can delete old DB
-4. **Performance**: SQLite operations are fast enough for desktop use (< 100 jobs typical)
+1. **Job Document Storage**: Entire `JobInfo` struct serialized as JSON in `jobs` table
+2. **Template Storage**: Templates stored with structured columns for easy querying, but variables serialized as JSON
+3. **No Schema Coupling**: Adding fields to Rust struct = automatic DB support via serde
+4. **Zero Migrations**: No backward compatibility needed - users can delete old DB
+5. **Performance**: SQLite operations are fast enough for desktop use (< 100 jobs typical)
 
 ### When Data is Stored
-- **Local SQLite**: Job caching only - enables offline viewing of job list
-- **Cluster (job_info.json)**: Single source of truth for job metadata
+- **Local SQLite Jobs Table**: Job caching only - enables offline viewing of job list
+- **Local SQLite Templates Table**: Template definitions - embedded defaults loaded on first use, custom templates added by users
+- **Cluster (job_info.json)**: Single source of truth for job metadata (includes template_id and template_values)
 - **Sync Pattern**: Download from cluster → cache in SQLite → display in UI
 
 ## SQLite Schema
 
-**Extremely simple - just two columns:**
+**Two tables: jobs (document store) and templates (structured storage):**
 
 ```sql
 -- Simple document store for job caching
@@ -50,39 +53,37 @@ CREATE TABLE IF NOT EXISTS templates (
     name TEXT NOT NULL,
     description TEXT,
     namd_config_template TEXT NOT NULL,  -- NAMD config with {{variable}} placeholders
-    variables TEXT NOT NULL,               -- JSON: variable definitions
+    variables TEXT NOT NULL,               -- JSON: HashMap<String, VariableDefinition>
+    is_builtin INTEGER NOT NULL DEFAULT 0, -- True for embedded templates, false for user-created
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 ```
 
 ### Why This Works
-- **No manual column mapping** - serde handles everything
-- **No column index hell** - just one JSON blob
-- **Easy to extend** - add field to Rust type, done
-- **JSON functions** - SQLite can query JSON directly for the status index
+- **Jobs table**: Document store pattern - serde handles serialization, no manual column mapping
+- **Templates table**: Structured columns for common fields (id, name, description) enable efficient listing, while variables serialized as JSON for flexibility
+- **Easy to extend**: Add fields to Rust types, serde handles the rest
+- **JSON functions**: SQLite can query JSON directly (e.g., status index on jobs, template_id lookup)
 
 ### API Usage
 
 ```rust
-// Save entire job
-db.save_job(&job_info)?;
-
-// Load job
-let job = db.load_job("job_001")?;
-
-// Load all jobs (sorted by created_at DESC)
-let jobs = db.load_all_jobs()?;
-
-// Delete job
-db.delete_job("job_001")?;
+// Job operations
+db.save_job(&job_info)?;                    // Save entire JobInfo struct as JSON
+let job = db.load_job("job_001")?;          // Load job by ID
+let jobs = db.load_all_jobs()?;             // Load all jobs (sorted by created_at DESC)
+db.delete_job("job_001")?;                  // Delete job
 
 // Template operations
-db.save_template(&template)?;
-let template = db.load_template("vacuum_optimization_v1")?;
-let all_templates = db.list_templates()?;
-db.delete_template("custom_template_v1")?;
-let count = db.count_jobs_using_template("vacuum_optimization_v1")?;
+db.save_template(&template)?;                                   // Save/update template
+let template = db.load_template("vacuum_optimization_v1")?;     // Load full template
+let summaries = db.list_templates()?;                           // List all (id, name, description, is_builtin)
+db.delete_template("custom_template_v1")?;                      // Delete template
+let count = db.count_jobs_using_template("vacuum_optimization_v1")?;  // Count jobs using template
+
+// Embedded template loading (automatic on first use)
+ensure_default_templates_loaded()?;  // Idempotent - loads defaults if not already loaded
 ```
 
 **That's it.** No manual serialization, no column lists, no migrations.
@@ -163,28 +164,84 @@ This file is created in each job directory on the cluster and contains all job m
 }
 ```
 
+### Template Schema
+
+Templates define NAMD configuration files with variable placeholders. They are stored in the `templates` table and define the structure for creating NAMD jobs.
+
+```typescript
+interface Template {
+  id: string;                    // Unique template identifier (e.g., "explicit_solvent_npt_v1")
+  name: string;                  // Display name (e.g., "Explicit Solvent NPT")
+  description: string;           // User-facing description
+  namd_config_template: string;  // NAMD config text with {{variable}} placeholders
+  variables: {                   // Variable definitions (serialized HashMap)
+    [key: string]: VariableDefinition;
+  };
+  is_builtin: boolean;           // True for embedded templates, false for user-created
+  created_at: string;            // RFC3339 timestamp
+  updated_at: string;            // RFC3339 timestamp
+}
+
+interface VariableDefinition {
+  key: string;                   // Variable key matching placeholder (e.g., "temperature")
+  label: string;                 // UI display label (e.g., "Temperature (K)")
+  var_type: VariableType;        // Type definition with constraints
+  help_text?: string;            // Optional help text for UI
+}
+
+type VariableType =
+  | { Number: { min: number; max: number; default: number } }
+  | { Text: { default: string } }
+  | { Boolean: { default: boolean } }
+  | { FileUpload: { extensions: string[] } };  // e.g., [".psf", ".pdb"]
+
+interface TemplateSummary {
+  id: string;                    // Unique template identifier
+  name: string;                  // Display name
+  description: string;           // User-facing description
+  is_builtin: boolean;           // True for embedded templates, false for user-created
+}
+```
+
+**Embedded Templates:**
+- Default templates are embedded in the binary using `include_str!` macro
+- Located in `src-tauri/templates/` directory (JSON files)
+- Loaded automatically on first `list_templates()` call
+- Current defaults: `vacuum_optimization_v1`, `explicit_solvent_npt_v1`
+- Embedded templates have `is_builtin: true`
+
 ### Template Values Schema
 
-Template values are stored as a JSON object mapping variable keys to their values:
+Template values are stored as a JSON object mapping variable keys to their values. The values can be strings, numbers, or booleans depending on the variable type defined in the template.
 
 ```typescript
 interface TemplateValues {
   [key: string]: string | number | boolean;
 
   // Example for explicit_solvent_npt_v1 template:
-  structure_file: string;      // Filename (e.g., "hextube.psf")
-  coordinates_file: string;    // Filename (e.g., "hextube.pdb")
+  structure_file: string;      // Filename only (e.g., "hextube.psf")
+  coordinates_file: string;    // Filename only (e.g., "hextube.pdb")
+  parameters_file: string;     // Filename only (e.g., "par_all36_na.prm")
+  extrabonds_file: string;     // Filename only (e.g., "hextube.exb")
+  output_name: string;         // Output prefix (e.g., "npt_equilibration")
   temperature: number;         // Simulation temperature in Kelvin
   timestep: number;            // Integration timestep in femtoseconds
   steps: number;               // Number of simulation steps
   execution_command: string;   // "minimize" or "run"
+  cell_x: number;              // Periodic box X dimension
+  cell_y: number;              // Periodic box Y dimension
+  cell_z: number;              // Periodic box Z dimension
   // ... additional variables defined by template
+}
 ```
 
-**When populated:**
-- `size` and `uploaded_at`: Set during job creation after each file upload completes
-- Backend stats the remote file after successful SFTP transfer
-- Allows UI to display file sizes without re-querying server
+**Template Rendering:**
+- During job submission, template values are substituted into `{{variable}}` placeholders in the NAMD config template
+- All variables are implicitly required - rendering fails if any placeholder is missing a value
+- FileUpload variables: filenames get "input_files/" prepended automatically (e.g., "hextube.psf" → "input_files/hextube.psf")
+- Number variables: rendered with appropriate precision (integers without decimals)
+- Boolean variables: converted to "yes"/"no" for NAMD
+- Text variables: used as-is
 
 ### OutputFile Schema
 
@@ -198,7 +255,7 @@ interface OutputFile {
 
 **When populated:**
 - Created during automatic job completion (when job reaches terminal state)
-- Backend does single batch SFTP readdir in project directory's output_files/
+- Backend does single batch SFTP readdir in project directory's outputs/
 - All output files queried at once (no per-file round trips)
 
 ## File Organization
@@ -215,7 +272,7 @@ interface OutputFile {
     ├── scripts/
     │   ├── config.namd         # Generated NAMD config
     │   └── job.sbatch          # Generated SLURM script
-    ├── output_files/           # Created after job completion (rsync from scratch)
+    ├── outputs/                # Created after job completion (rsync from scratch)
     │   ├── output.dcd          # Trajectory
     │   ├── restart.coor        # Restart files
     │   ├── restart.vel
@@ -250,8 +307,8 @@ interface OutputFile {
 - **Job metadata**: `job_info.json` (in job root)
 - **SLURM Stdout**: `logs/{job_name}_{slurm_job_id}.out`
 - **SLURM Stderr**: `logs/{job_name}_{slurm_job_id}.err`
-- **Trajectory**: `output_files/output.dcd`
-- **Restart files**: `output_files/restart.{coor,vel,xsc}`
+- **Trajectory**: `outputs/output.dcd`
+- **Restart files**: `outputs/restart.{coor,vel,xsc}`
 
 ## Validation Rules
 
@@ -262,22 +319,23 @@ interface OutputFile {
 
 ### File Path Validation
 - **No directory traversal** (`../`)
-- **Allowed file extensions**: `.pdb`, `.psf`, `.prm`, `.namd`, `.sbatch`, `.out`, `.err`, `.log`, `.dcd`, `.coor`, `.vel`, `.xsc`
+- **Allowed file extensions**: `.pdb`, `.psf`, `.prm`, `.exb`, `.extra`, `.namd`, `.sbatch`, `.out`, `.err`, `.log`, `.dcd`, `.coor`, `.vel`, `.xsc`
 - **Size limits**: 1GB per file (configurable)
 
 ### Parameter Ranges
+
+**Template Variables:**
+- Validation constraints are defined per-template in the `VariableDefinition.var_type` field
+- Number type variables include min/max/default constraints
+- FileUpload type variables include allowed file extensions
+- See Template Schema for details
+
+**SLURM Resources:**
 ```typescript
-interface ValidationRules {
-  namd: {
-    steps: { min: 1, max: 100000000 };
-    temperature: { min: 200, max: 400 };  // Kelvin
-    timestep: { min: 0.1, max: 4.0 };     // femtoseconds
-  };
-  slurm: {
-    cores: { min: 1, max: 64 };           // Single-node limit
-    memory_gb: { min: 1, max: 256 };      // Varies by partition
-    walltime_hours: { min: 0.1, max: 168 }; // Up to 7 days with long QoS
-  };
+interface SlurmValidation {
+  cores: { min: 1, max: 64 };           // Single-node limit
+  memory_gb: { min: 1, max: 256 };      // Varies by partition
+  walltime_hours: { min: 0.1, max: 168 }; // Up to 7 days with long QoS
 }
 ```
 
@@ -316,6 +374,8 @@ pub enum NAMDFileType {
     Psf,
     #[serde(rename = "prm")]
     Prm,
+    #[serde(rename = "exb")]
+    Exb,
     #[serde(rename = "other")]
     Other,
 }

@@ -517,11 +517,11 @@ let cmd = format!("mkdir {}", user_input); // VULNERABLE TO INJECTION
 **For SSH/SLURM operations**, log important events to the logs panel for user debugging:
 
 ```typescript
-// Frontend: Add to logs panel (visible to users)
-if (typeof window !== 'undefined' && window.sshConsole) {
-  window.sshConsole.addDebug(`[JOBS] Job creation failed: ${error}`);
-  window.sshConsole.addCommand(`sbatch job.sbatch`); // Show commands being run
-}
+// Frontend: Use centralized logger utility
+import { logger } from '$lib/utils/logger';
+
+logger.debug('[JOBS] Job creation failed: ${error}');
+logger.command('sbatch job.sbatch'); // Show commands being run
 ```
 
 ```rust
@@ -543,7 +543,6 @@ println!("[SLURM] Submitting job: {}", job_name);
 
 ### 2. Service Architecture
 **Direct Dependencies**: Services use direct imports rather than complex dependency injection.
-**Mock Testing**: Use mock implementations at the service boundary level.
 
 > **For SSH/SFTP service patterns and testing approaches**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
 
@@ -671,6 +670,8 @@ Test our logic, not external libraries. Focus on what NAMDRunner does, not how s
 ### What We Test
 ✅ **Security validation** - malicious inputs, path traversal, credential safety (backend only)
 ✅ **Resource validation** - cluster limits, QoS rules, partition constraints (backend only)
+✅ **Template rendering** - variable substitution, type conversion, file path prefixing (backend only)
+✅ **Template validation** - type checking, constraint validation, all variables required (backend only)
 ✅ **File path handling** - directory generation, safety checks
 ✅ **Command parsing** - SLURM output parsing, job state mapping
 ✅ **Error classification** - which errors are retryable vs fatal
@@ -681,6 +682,7 @@ Test our logic, not external libraries. Focus on what NAMDRunner does, not how s
 
 ### What We Don't Test
 ❌ **External crate functionality** - ssh2 connections, SFTP implementations
+❌ **Framework code** - Svelte reactivity, Tauri IPC, database drivers
 ❌ **Mock performance** - testing how fast our mocks run
 ❌ **"Stress Tests"** - unit tests should be fast and focused, not simulate production load
 ❌ **Fake Delays** - simulating server response times or file upload delays adds no value and slows down test feedback
@@ -757,7 +759,7 @@ Scientists need reliability over performance. A desktop app that safely handles 
 
 **Most valuable testing insights:**
 - **Integration testing finds more bugs than unit tests** - SSH operations and cluster behavior have many edge cases
-- **Mock mode enables offline testing** - No cluster required for development
+- **Unit tests focus on business logic** - Template rendering, validation, parsing, error handling
 - **Test error conditions explicitly** - Invalid input, network failures, etc.
 
 ### Development Process Best Practices
@@ -768,8 +770,9 @@ Scientists need reliability over performance. A desktop app that safely handles 
 - **Clear completion criteria** prevents "90% done" syndrome
 
 **Testing approach:**
-- Mock mode for offline development and automated testing
-- Periodic integration tests with real cluster
+- Unit tests for all business logic (backend Rust, minimal frontend TypeScript)
+- Frontend tests use Vitest `vi.mock()` to mock the CoreClientFactory (predictable, deterministic behavior)
+- Only the user can run integration tests with real cluster connection for full workflow validation
 - Focus on business logic, not external library internals
 
 **Documentation priorities:**
@@ -786,6 +789,36 @@ Scientists need reliability over performance. A desktop app that safely handles 
 ### Mock Development Philosophy
 
 **Simple, predictable mocks for fast development feedback** - avoid random behavior and complex simulation in favor of deterministic responses that enable reliable debugging.
+
+**Testing Approach**:
+- **Backend**: Unit tests for business logic (validation, rendering, parsing, error handling)
+- **Frontend**: Unit tests for stores and utilities use Vitest `vi.mock()` to mock CoreClientFactory
+- **Integration**: Manual testing and E2E tests for full workflows
+
+**Frontend Testing Pattern**:
+```typescript
+// Mock the CoreClientFactory at module level
+vi.mock('../ports/clientFactory', () => ({
+  CoreClientFactory: {
+    getClient: vi.fn(),
+    reset: vi.fn()
+  }
+}));
+
+// In test setup, create mock client with vi.fn() for each method
+beforeEach(() => {
+  mockClient = {
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    // ... other methods
+  };
+  vi.mocked(CoreClientFactory.getClient).mockReturnValue(mockClient);
+});
+```
+
+**No Mock Data in Production Code**:
+- Test fixtures defined inline in test files (no shared fixture files)
+- Production code never imports mock data
 
 > **For complete mock implementations and testing patterns**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
 

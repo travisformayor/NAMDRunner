@@ -60,19 +60,23 @@ Template + Values → Validate → Render → Upload Files → Generate SLURM Sc
 **Frontend (`src/lib/`)**:
 - ✅ `types/template.ts` - TypeScript types matching Rust backend
 - ✅ `stores/templateStore.ts` - Template state management
-- ✅ `stores/ui.ts` - Added template-edit view and navigation
+- ✅ `stores/ui.ts` - Template-edit view, navigation, breadcrumbs
 - ✅ `stores/jobs.ts` - Connection failure detection in all operations
-- ✅ `components/pages/TemplatesPage.svelte` - Unified template list with badges
+- ✅ `utils/logger.ts` - Centralized logging utility (window.appLogger)
+- ✅ `utils/template-utils.ts` - Shared template functions (extraction, labels, samples)
+- ✅ `utils/template-utils.test.ts` - Frontend unit tests (17 tests)
+- ✅ `components/pages/TemplatesPage.svelte` - Unified template list with is_builtin badges
 - ✅ `components/pages/TemplateEditorPage.svelte` - Full-page template editor
 - ✅ `components/templates/TemplateEditor.svelte` - Template form with auto-variable detection
-- ✅ `components/templates/VariableEditor.svelte` - Variable metadata editor
-- ✅ `components/create-job/CreateJobTabs.svelte` - 3-tab interface (Resources, Configure, Review)
-- ✅ `components/create-job/ResourcesTab.svelte` - Preset pills + validation + cost estimation
-- ✅ `components/create-job/ConfigureTab.svelte` - Job name + DynamicJobForm wrapper
-- ✅ `components/create-job/ReviewTab.svelte` - Validation summary + file upload progress
-- ✅ `components/create-job/DynamicJobForm.svelte` - Dynamic form from template variables
+- ✅ `components/templates/VariableEditor.svelte` - Variable metadata editor (required fields, dropdown for Boolean)
+- ✅ `components/create-job/CreateJobTabs.svelte` - 3-tab interface with debounced validation
+- ✅ `components/create-job/ResourcesTab.svelte` - Preset pills, validation, cost, preview button
+- ✅ `components/create-job/ConfigureTab.svelte` - Job name, DynamicJobForm, preview button
+- ✅ `components/create-job/ReviewTab.svelte` - Validation summary, file upload progress
+- ✅ `components/create-job/DynamicJobForm.svelte` - Dynamic form with template text ordering
 - ✅ `components/pages/CreateJobPage.svelte` - Tab-based job creation
-- ✅ `components/ui/ConfirmDialog.svelte` - Unified confirmation dialog (reused across app)
+- ✅ `components/ui/ConfirmDialog.svelte` - Unified confirmation dialog
+- ✅ `components/ui/PreviewModal.svelte` - Reusable preview modal (NAMD config, SLURM script)
 - ✅ `components/layout/LogsPanel.svelte` - Renamed from SSHConsolePanel
 
 ### Key Implementation Details
@@ -89,11 +93,11 @@ Template + Values → Validate → Render → Upload Files → Generate SLURM Sc
 - Type conversion: Boolean → "yes"/"no", Number → string, Text → as-is
 - Errors if unreplaced variables remain after rendering
 
-**Variable Types**:
-- **Number**: min/max/default constraints, rendered as numeric string
-- **Text**: default value, rendered as-is
-- **Boolean**: default value, rendered as "yes"/"no"
-- **FileUpload**: file extensions filter, filename extracted and prepended with "input_files/"
+**Variable Types** (All Constraints Required):
+- **Number**: min (required), max (required), default (required) - rendered as numeric string
+- **Text**: default (required) - rendered as-is
+- **Boolean**: default (required, dropdown UI) - rendered as "yes"/"no"
+- **FileUpload**: extensions list - filename prepended with "input_files/", validated for empty and extension match
 
 **Auto-Variable Detection**:
 - Variables automatically detected from template text using regex
@@ -128,10 +132,12 @@ Template + Values → Validate → Render → Upload Files → Generate SLURM Sc
 - Users can delete built-in templates if not needed
 
 **Create Job Flow (3-Tab Interface)**:
-- Tab 1: Resources - Preset pills (Small/Medium/Large/GPU), manual config (collapsible), real-time validation/cost
-- Tab 2: Configure - Job name + template selector + dynamic form (template variables auto-generated)
-- Tab 3: Review - Validation summary, resource review, template values, file upload progress, submit button
-- Uses global `namd-tabs` CSS for consistency with job details
+- Tab 1: Resources - Preset pills, manual config (collapsible), real-time validation/cost, SLURM script preview
+- Tab 2: Configure - Job name, template selector, dynamic form with template text ordering, NAMD config preview
+- Tab 3: Review - Validation summary, resource/template values, file upload progress with animated bars
+- Debounced backend validation (500ms) updates errors in real-time as user types
+- Preview buttons call backend to render actual NAMD config and SLURM script
+- Uses global `namd-tabs` CSS for consistency
 
 **Connection Failure Detection**:
 - Pattern-matches errors from all job operations (sync, create, submit, delete)
@@ -144,16 +150,30 @@ Template + Values → Validate → Render → Upload Files → Generate SLURM Sc
 - Cached jobs visible when disconnected
 - All action buttons disabled offline (Submit, Delete, Download, Create Job, Sync)
 
+**Centralized Logging**:
+- Created logger utility with consistent API (debug, error, command, output)
+- Renamed window.sshConsole → window.appLogger throughout codebase
+- All components use logger utility (no console.error or direct window access)
+- Backend uses info_log!/error_log! macros (emits Tauri events)
+
+**Template Built-in Detection**:
+- Added is_builtin boolean field to Template schema (replaces fragile .includes('_v1') check)
+- Database column: is_builtin INTEGER NOT NULL
+- Embedded templates: is_builtin = true
+- User-created/edited templates: is_builtin = false
+- Frontend uses proper flag instead of naming convention
+
 **Theme & Accessibility**:
 - Centralized CSS variables for all colors (light + dark themes)
-- Hover states maintain readable contrast in both themes
-- Unified ConfirmDialog component (replaces duplicate modal implementations)
+- Hover states maintain readable contrast in both themes (primary-hover-fg, sidebar-active-hover)
+- Unified ConfirmDialog and PreviewModal components
 
-**UX Improvements**:
-- Sync time updates every 10 seconds (reactive timer, not just on navigation)
-- Variable ordering follows template text (not alphabetical)
+**UX & Code Quality**:
+- Sync time updates every 10 seconds (reactive timer)
+- Variable ordering follows template text via shared extraction utility
 - Template card buttons aligned to bottom (flexbox)
-- All templates editable (no "View" vs "Edit" distinction)
+- Removed setTimeout anti-pattern (errors cleared on next operation, matches app pattern)
+- Extracted duplicate template utilities (extraction, label generation, sample values)
 
 ### Remaining Work
 
@@ -186,10 +206,11 @@ Template + Values → Validate → Render → Upload Files → Generate SLURM Sc
 
 ### Quality Requirements ✅ (Complete)
 - ✅ Unit tests for template renderer (5 tests - variable substitution, types, errors)
-- ✅ Unit tests for validation logic (9 tests - required fields, ranges, types, extensions)
+- ✅ Unit tests for template validation (9 tests - required fields, ranges, types, extensions)
+- ✅ Unit tests for template utilities (17 tests - extraction, label generation, sample values)
 - ✅ No demo mode, file auto-detection, or backwards compatibility code
 - ✅ Clean codebase following NAMDRunner standards
-- ✅ **137 tests passing**, zero warnings
+- ✅ **159 tests passing** (137 Rust + 22 frontend), zero warnings
 
 ## Key Technical Decisions (Final)
 
@@ -253,16 +274,18 @@ Before archiving this task:
 **Phase**: Implementation complete - ready for user testing
 
 **What's Complete**:
-- Template system fully functional (create, edit, delete, duplicate templates)
-- Auto-variable detection with position-based ordering (template text order preserved)
-- Job creation with 3-tab interface (Resources with presets, Configure with templates, Review with validation)
-- Resource presets, real-time validation, and cost estimation
+- Template system fully functional (create, edit, delete, duplicate with is_builtin flag)
+- Auto-variable detection with shared utilities (extraction, label generation, sample values)
+- Job creation with 3-tab interface (Resources, Configure, Review) and debounced validation
+- Preview features (NAMD config and SLURM script rendered by backend)
+- Resource presets, real-time validation, cost estimation
 - Job details display template information (Overview, SLURM Logs, Output Files)
-- Connection timeout detection (auto-transitions to Expired state on failures)
-- Offline mode with cached data (jobs visible, action buttons disabled)
-- Unified confirmation dialogs (ConfirmDialog component)
-- Theme consistency (centralized CSS variables, readable hover states)
-- 137 tests passing, zero warnings
+- Connection timeout detection (auto-transitions to Expired on operation failures)
+- Offline mode with cached data (loaded on startup, action buttons disabled)
+- Centralized logging (logger utility, window.appLogger, no console.error)
+- Code quality (no setTimeout anti-patterns, extracted duplicate code, proper error handling)
+- Theme consistency (centralized CSS variables with readable hover states)
+- 159 tests passing (137 Rust + 22 frontend), zero warnings
 
 **Blockers**: None
 

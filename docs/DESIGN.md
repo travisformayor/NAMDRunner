@@ -33,11 +33,12 @@ NAMDRunner is a desktop application for managing NAMD molecular dynamics simulat
 
 ### Navigation Structure
 - **Left Sidebar**: Primary navigation between main sections
-  - Jobs (default view)
-  - Create Job
-  - Settings (future)
+  - Jobs (default view, shows badge with total job count)
+  - Create Job (disabled when disconnected)
+  - Templates
 - **Breadcrumbs**: Secondary navigation for drilling into details
-  - Example: `Jobs > job_001_simulation`
+  - Example: `Jobs > Job Details`
+  - Example: `Templates > Edit Template`
 - **Connection Status**: Top-right dropdown for SSH management
 
 ---
@@ -100,11 +101,9 @@ NAMDRunner is a desktop application for managing NAMD molecular dynamics simulat
 ```
 
 #### Tab Contents
-- **Overview**: Summary statistics, resource usage
+- **Overview**: Simulation progress, resource allocation, job information, template configuration values
 - **SLURM Logs**: stdout and stderr output viewers
-- **Input Files**: List with file names, sizes, types
 - **Output Files**: List with download buttons for each file
-- **Configuration**: NAMD and SLURM parameters used
 
 #### Delete Confirmation
 Modal dialog:
@@ -121,50 +120,149 @@ Delete Job: [job_name]?
 #### Breadcrumb
 `Jobs > Create New Job`
 
-#### Form Structure (Single page with sections)
+#### Tab Interface (3 tabs)
+The create job page uses a 3-tab interface for organizing job configuration:
 
-**Section 1: SLURM Resource Allocation**
-- Cores: [number input] *
-- Memory: [text input] GB *
-- Wall Time: [text input] format: HH:MM:SS *
-- Partition: [dropdown] (default: "amilan")
-- QOS: [dropdown] (default: "normal")
+**Tab 1: Resources**
+- **Resource Presets**: Pill-style buttons for common configurations
+  - Small, Medium, Large, GPU presets
+  - Each shows specs: cores, memory, wall time
+  - Selected preset is highlighted
+- **Manual Configuration** (collapsible details section)
+  - Cores: [number input] (1-1024) *
+  - Memory: [text input] (e.g., "32GB") *
+  - Wall Time: [text input] (HH:MM:SS format) *
+  - Partition: [dropdown] *
+  - QOS: [dropdown] *
+- **Validation Bar**: Real-time display showing:
+  - Validation status (valid/invalid with icon)
+  - Cost estimate in SU (Service Units)
+  - Queue time estimate
+  - Expandable issues/warnings list
+- **Actions**: [Preview SLURM Script] button
 
-**Section 2: Input Files**
-```
-┌─────────────────────────────────┐
-│  Drag & drop files here or      │
-│  [Click to Browse]              │
-│                                 │
-│  Accepted: .pdb, .psf, .prm     │
-└─────────────────────────────────┘
+**Tab 2: Configure**
+- **Job Information**
+  - Job Name: [text input] * (unique identifier)
+- **Template Selection**
+  - Template dropdown with description display
+- **Dynamic Form** (generated from selected template):
+  - **Input Files Section** (if template has file variables)
+    - File upload fields with browse buttons
+    - Shows allowed extensions
+    - Help text per field
+  - **Simulation Parameters Section** (if template has parameter variables)
+    - Dynamic form fields based on variable types:
+      - Number inputs (with min/max constraints)
+      - Text inputs
+      - Checkbox for boolean values
+    - Help text per field
+  - Field order matches template text order
+- **Actions**: [Validate Configuration], [Preview NAMD Configuration]
 
-Uploaded Files:
-- structure.pdb [x]
-- structure.psf [x]
-- parameters.prm [x]
-```
-
-**Section 3: NAMD Configuration**
-- Job Name: [text input] *
-- Simulation Steps: [number input] *
-- Temperature (K): [number input] *
-- Timestep (fs): [number input] *
-- Output Name: [text input] *
-- DCD Frequency: [number input] (optional)
-- Restart Frequency: [number input] (optional)
-
-**Actions**
-[Cancel] [Create Job]
+**Tab 3: Review**
+- **Validation Summary**: Shows count of validation errors if any
+- **Resource Summary**: Displays selected partition, QOS, cores, memory, wall time
+- **Configuration Summary**: Job name, template ID, template parameter values
+- **Input Files**: List of files to upload with animated progress bars
+- **Actions**: [Back to Jobs], [Create Job] (disabled if validation errors exist)
 
 #### Form Validation
-- **Required Fields**: Marked with asterisk (*), show inline error if empty on submit
-- **Type Validation**: Number fields show error for non-numeric input
-- **Format Validation**: Wall time must match HH:MM:SS format
-- **Inline Errors**: Appear below fields in red text
-  - Example: "This field is required"
-  - Example: "Please enter a valid number"
-  - Example: "Wall time must be in HH:MM:SS format"
+- **Backend Validation**: Debounced validation runs automatically on input changes
+- **Required Fields**: Marked with asterisk (*)
+- **Inline Errors**: Red border and error text below fields
+- **Real-time Feedback**: Validation bar updates as configuration changes
+- **Submit Prevention**: Create Job button disabled when validation errors exist
+
+---
+
+### 4. Templates Page
+
+#### Breadcrumb
+`Templates`
+
+#### Page Layout
+```
+[Page Header]
+- Title: "Simulation Templates"
+- [+ Create Template] button
+
+[Template Grid]
+- Card-based grid layout (auto-fill, min 300px width)
+- Each card shows:
+  - Template name (header)
+  - Badge: "Built-in" (blue) or "Custom" (green)
+  - Description text
+  - Action buttons: [Edit] [Duplicate] [Delete]
+```
+
+#### Template Cards
+- **Built-in Templates**: Light blue border highlight
+- **Custom Templates**: Standard border
+- **Hover State**: Elevated shadow effect
+- **Empty State**: Centered message encouraging template creation
+
+#### Actions
+- **Create**: Opens template editor in create mode
+- **Edit**: Opens template editor in edit mode with template data
+- **Duplicate**: Creates copy with "_copy_timestamp" ID and "(Copy)" name suffix
+- **Delete**: Shows confirmation dialog (unified ConfirmDialog component)
+
+---
+
+### 5. Template Editor Page
+
+#### Breadcrumb
+`Templates > Create Template` or `Templates > Edit Template`
+
+#### Form Structure
+
+**Template Metadata**
+- Template ID: [text input] * (disabled in edit mode, lowercase/underscores only)
+- Template Name: [text input] *
+- Description: [textarea] (optional, 3 rows)
+
+**NAMD Configuration Template**
+- Large textarea (20 rows, monospace font) *
+- Uses `{{variable_name}}` syntax for variables
+- Auto-detects variables on text change (debounced 500ms)
+- Help text explains variable syntax
+
+**Template Variables** (Auto-detected section)
+- Shows list of detected variables from template text
+- Each variable shows:
+  - Label (human-readable)
+  - Variable key (monospace, gray background)
+  - Type badge (uppercase, colored: Number/Text/Boolean/FileUpload)
+  - [Edit] button
+- Variables ordered by first appearance in template
+- Empty state message if no variables detected
+
+**Variable Editor** (Modal)
+Opens when editing a variable to configure:
+- Variable key (editable, triggers re-indexing in parent)
+- Display label
+- Variable type selection (Number/Text/Boolean/FileUpload)
+- Type-specific configuration:
+  - Number: min, max, default
+  - Text: default value
+  - Boolean: default (checkbox)
+  - FileUpload: allowed extensions (array)
+- Required checkbox
+- Help text (optional)
+
+**Form Actions**
+- Left side: [Delete Template] (edit mode only, red button)
+- Right side: [Cancel] [Test Template] [Save Template]
+- Test Template: Shows preview modal with sample values substituted
+- Save: Creates or updates template, navigates back to templates list
+
+#### Auto-Variable Detection
+Variables are automatically detected from template text using regex pattern:
+- Pattern: `{{[a-zA-Z_][a-zA-Z0-9_]*}}`
+- New variables get default Text type with smart label (capitalize, replace underscores)
+- Removed variables deleted from metadata
+- Existing variable metadata preserved on re-detection
 
 ---
 
@@ -221,9 +319,46 @@ Uploaded Files:
 └─────────────────────────────────────────────┘
 ```
 
+### Common UI Components
+
+**ConfirmDialog**
+- Unified confirmation dialog used throughout the app
+- Props: isOpen, title, message, confirmText, cancelText, confirmStyle
+- confirmStyle: 'destructive' (red) or default
+- Used for: template deletion, job deletion
+
+**PreviewModal**
+- Modal for displaying preview content
+- Used for: SLURM script preview, NAMD config preview, template testing
+- Props: isOpen, title, content, onClose
+- Content displayed in monospace font with scrolling
+
 ---
 
 ## CSS Design System
+
+### CSS Variables and Theming
+
+NAMDRunner uses CSS custom properties (variables) for consistent theming and easy dark mode support. All variables use the `--namd-*` prefix.
+
+**Core Color Categories:**
+- `--namd-bg-*`: Background colors (primary, secondary, muted)
+- `--namd-text-*`: Text colors (primary, secondary, muted)
+- `--namd-primary-*`: Primary action colors and variants
+- `--namd-secondary-*`: Secondary action colors
+- `--namd-success/warning/error/info-*`: Status colors with background/foreground variants
+- `--namd-sidebar-*`: Sidebar-specific colors including active states
+- `--namd-border*`: Border colors and shadows
+
+**Layout Variables:**
+- `--namd-border-radius*`: Border radius tokens (sm, base, lg)
+- `--namd-spacing-*`: Spacing scale (xs, sm, md, lg, xl, 2xl)
+- `--namd-font-size-*`: Typography scale
+- `--namd-font-weight-*`: Font weights
+- `--namd-shadow-*`: Box shadow tokens
+
+**Dark Theme:**
+Uses `[data-theme="dark"]` selector to override variables. Toggle via `uiStore.setTheme()`.
 
 #### Naming Convention
 **Consistent Naming**: Use `namd-*` prefix for all custom CSS classes.
@@ -234,24 +369,24 @@ Uploaded Files:
 .namd-button--outline { /* variant */ }
 .namd-status-badge { /* component */ }
 .namd-status-badge--running { /* state */ }
-.namd-file-type-badge { /* component */ }
-.namd-file-type-structure { /* variant */ }
 ```
 
-#### Centralized Styling
-**Define reusable styles in `app.css`**, not component files.
+#### Centralized Styling Approach
+**CSS Variables** are defined in `app.css` and referenced in component styles:
 
 ```svelte
-<!-- ✅ Use centralized classes -->
-<span class="namd-status-badge namd-status-badge--{statusClass}">
-  {status}
-</span>
-
-<!-- ❌ Component-specific styles -->
+<!-- Component uses CSS variables -->
 <style>
-  .status-badge { /* duplicate styles */ }
+  .card {
+    background: var(--namd-bg-primary);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius);
+    padding: var(--namd-spacing-md);
+  }
 </style>
 ```
+
+Component-specific styles are allowed but should use CSS variables for colors, spacing, and other themeable values.
 
 #### Component Class Examples
 ```css
@@ -401,12 +536,35 @@ Uploaded Files:
 
 ### Store-Based State Management
 
-NAMDRunner uses Svelte stores for global state management instead of prop drilling:
+NAMDRunner uses Svelte stores for global state management instead of prop drilling.
 
+#### Core Stores
+
+**`stores/ui.ts`** - View navigation and UI state
 ```typescript
-// stores/session.ts
-import { writable, derived } from 'svelte/store';
+interface UIState {
+  currentView: 'jobs' | 'create' | 'templates' | 'template-edit';
+  selectedJobId: string | null;
+  selectedTemplateId: string | null;
+  templateEditorMode: 'create' | 'edit';
+  consoleOpen: boolean;
+  theme: 'light' | 'dark';
+}
 
+// Key methods
+uiStore.setView(view)              // Navigate between pages
+uiStore.selectJob(job_id)          // Select job for detail view
+uiStore.editTemplate(id, mode)     // Open template editor
+uiStore.toggleConsole()            // Show/hide logs panel
+uiStore.setTheme(theme)            // Toggle dark mode
+
+// Derived stores
+export const currentView = derived(uiStore, $ui => $ui.currentView);
+export const breadcrumbs = derived(uiStore, ...); // Auto-generated breadcrumbs
+```
+
+**`stores/session.ts`** - SSH connection state
+```typescript
 interface ConnectionState {
   status: 'disconnected' | 'connecting' | 'connected' | 'expired';
   host?: string;
@@ -414,63 +572,54 @@ interface ConnectionState {
   connectedSince?: Date;
 }
 
-function createSessionStore() {
-  const { subscribe, set, update } = writable<ConnectionState>({
-    status: 'disconnected'
-  });
-
-  return {
-    subscribe,
-    connect: async (host: string, username: string, password: string) => {
-      update(s => ({ ...s, status: 'connecting' }));
-      try {
-        await invoke('ssh_connect', { host, username, password });
-        set({ status: 'connected', host, username, connectedSince: new Date() });
-      } catch (error) {
-        set({ status: 'disconnected' });
-      }
-    },
-    disconnect: () => {
-      invoke('ssh_disconnect');
-      set({ status: 'disconnected' });
-    }
-  };
-}
-
-export const session = createSessionStore();
-export const isConnected = derived(session, $session => $session.status === 'connected');
+// Connection transitions to 'expired' on SSH errors
+export const isConnected = derived(session, $s => $s.status === 'connected');
 ```
 
+**`stores/jobs.ts`** - Job management with offline support
 ```typescript
-// stores/jobs.ts
-function createJobsStore() {
-  const { subscribe, set, update } = writable<Job[]>([]);
+// Cached jobs loaded from SQLite
+jobsStore.loadJobs()          // Load from local DB
+jobsStore.syncJobs()          // Sync with cluster (requires connection)
+jobsStore.createJob(params)   // Create new job
+jobsStore.deleteJob(id)       // Delete job and optionally files
 
-  return {
-    subscribe,
-    load: async () => {
-      const jobs = await invoke('get_jobs');
-      set(jobs);
-    },
-    sync: async () => {
-      const updatedJobs = await invoke('sync_jobs');
-      set(updatedJobs);
-    },
-    create: async (jobData: CreateJobRequest) => {
-      const newJob = await invoke('create_job', jobData);
-      update(jobs => [...jobs, newJob]);
-      return newJob;
-    }
-  };
-}
+// Derived stores
+export const jobCounts = derived(jobs, ...);  // Count by status
+export const selectedJob = derived(...);       // Current job details
 
-export const jobs = createJobsStore();
-export const selectedJobId = writable<string | null>(null);
-export const selectedJob = derived(
-  [jobs, selectedJobId],
-  ([$jobs, $selectedJobId]) =>
-    $selectedJobId ? $jobs.find(j => j.id === $selectedJobId) : null
-);
+// Features:
+// - Auto-detects connection failures (transitions to Expired state)
+// - Offline mode: shows cached jobs, disables actions requiring connection
+```
+
+**`stores/templateStore.ts`** - Template management
+```typescript
+templateStore.loadTemplates()                    // List all templates
+templateStore.loadTemplate(id)                   // Get full template
+templateStore.createTemplate(template)           // Create new
+templateStore.updateTemplate(id, template)       // Update existing
+templateStore.deleteTemplate(id)                 // Delete template
+templateStore.validateTemplateValues(id, values) // Validate user input
+
+// Stores
+export const templates = writable<TemplateSummary[]>([]);  // List view
+export const templatesLoading = writable(false);
+export const templatesError = writable<string | null>(null);
+```
+
+**`stores/clusterConfig.ts`** - Cluster configuration
+```typescript
+// Pre-loaded cluster metadata
+export const partitions = writable<Partition[]>([]);       // Available partitions
+export const allQosOptions = writable<QosOption[]>([]);    // QOS options
+export const jobPresets = writable<JobPreset[]>([]);       // Resource presets
+
+// Helper functions
+validateResourceRequest(cores, memory, walltime, partition, qos)
+calculateJobCost(cores, walltimeHours, hasGpu, gpuCount)
+estimateQueueTime(cores, partition)
+walltimeToHours(walltime)  // Parse HH:MM:SS to hours
 ```
 
 ### Component Reactive Patterns
@@ -567,34 +716,42 @@ export const selectedJob = derived(
 
 ## Svelte Component Architecture
 
-### Recommended Component Structure
+### Component Architecture
+
 ```
 components/
 ├── layout/
-│   ├── Sidebar.svelte
-│   ├── ConnectionStatus.svelte
-│   ├── Breadcrumbs.svelte
-│   └── SSHConsole.svelte
-├── jobs/
-│   ├── JobTable.svelte
-│   ├── JobTableRow.svelte
-│   ├── JobStatusBadge.svelte
-│   └── SyncStatus.svelte
+│   ├── AppSidebar.svelte          # Main navigation with job count badges
+│   ├── ConnectionDropdown.svelte   # SSH connection status/controls
+│   └── LogsPanel.svelte           # Collapsible SSH logs footer
+├── pages/
+│   ├── JobsPage.svelte            # Jobs table with sync controls
+│   ├── CreateJobPage.svelte       # Create job 3-tab interface
+│   ├── JobDetailPage.svelte       # Job detail tabs
+│   ├── TemplatesPage.svelte       # Template grid with actions
+│   └── TemplateEditorPage.svelte  # Template create/edit form
+├── create-job/
+│   ├── CreateJobTabs.svelte       # 3-tab container with validation
+│   ├── ResourcesTab.svelte        # Presets + manual config + validation
+│   ├── ConfigureTab.svelte        # Job name + template + dynamic form
+│   ├── ReviewTab.svelte           # Summary + file upload progress
+│   └── DynamicJobForm.svelte      # Auto-generated form from template
+├── templates/
+│   ├── TemplateEditor.svelte      # Template CRUD form
+│   └── VariableEditor.svelte      # Variable metadata editor modal
 ├── job-detail/
-│   ├── JobSummaryCard.svelte
-│   ├── JobTabs.svelte
-│   └── FileList.svelte
-├── job-create/
-│   ├── ResourceForm.svelte
-│   ├── FileUploadArea.svelte
-│   └── NAMDConfigForm.svelte
-└── common/
-    ├── Button.svelte
-    ├── Toast.svelte
-    ├── Modal.svelte
-    ├── FormInput.svelte
-    ├── FormError.svelte
-    └── NumberInput.svelte
+│   ├── JobTabs.svelte             # Tab container for job details
+│   └── tabs/
+│       ├── OverviewTab.svelte     # Progress, resources, template values
+│       ├── SlurmLogsTab.svelte    # stdout/stderr viewers
+│       └── OutputFilesTab.svelte  # Download interface
+├── jobs/
+│   ├── JobsTable.svelte           # Table with sortable columns
+│   └── SyncControls.svelte        # Sync status/controls
+└── ui/
+    ├── ConfirmDialog.svelte       # Unified confirmation dialogs
+    ├── PreviewModal.svelte        # Preview display modal
+    └── FormField.svelte           # Reusable form field wrapper
 ```
 
 ### Component Guidelines
@@ -603,6 +760,102 @@ components/
 - Keep component props simple and typed
 - Use Svelte stores for shared state (connection status, job list)
 - Form components should handle their own validation display
+- Use CSS variables for all themeable values (colors, spacing, etc.)
+
+---
+
+## Key Features and Patterns
+
+### Template System
+
+**Core Concept:** Job configuration is driven by templates instead of hardcoded forms.
+
+**Variable Detection:**
+- Variables parsed from template text using `{{variable_name}}` syntax
+- Auto-detection runs on template text changes (debounced 500ms)
+- Variables ordered by first occurrence in template text
+- Metadata preserved when template text changes
+
+**Variable Types:**
+- `Number`: min, max, default values
+- `Text`: default string value
+- `Boolean`: default true/false
+- `FileUpload`: allowed file extensions array
+
+**Dynamic Form Generation:**
+- `DynamicJobForm` component generates form fields from template variables
+- Fields organized into sections: Input Files, Simulation Parameters
+- Field order matches template text order (not alphabetical)
+- Form values initialized from variable defaults
+- File paths stored during configuration, uploaded during job creation
+
+### Connection State Management
+
+**Connection States:**
+- `disconnected`: No active connection
+- `connecting`: Connection attempt in progress
+- `connected`: Active SSH session
+- `expired`: Connection lost due to error
+
+**Auto-Detection:**
+- Jobs store detects SSH failures during sync operations
+- Automatically transitions session to `expired` state
+- UI shows "Connection Expired" status
+- Prompts user to reconnect
+
+**Offline Mode:**
+- Jobs loaded from SQLite cache always available
+- Sync controls show last sync timestamp
+- Action buttons disabled when disconnected
+- Create Job page shows connection warning
+
+### Real-Time Validation
+
+**Debounced Backend Validation:**
+- Runs automatically 500ms after input changes
+- Validates all job configuration fields together
+- Returns field-specific error messages
+- Errors displayed inline with red borders and text
+
+**Validation Display:**
+- Resources tab: Validation bar with status, cost estimate, queue time
+- Configure tab: Inline errors on individual fields
+- Review tab: Summary banner showing error count
+- Create Job button disabled when errors exist
+
+### File Upload with Progress
+
+**Upload Flow:**
+1. User selects files via Tauri dialog in Configure tab
+2. File paths stored in template values
+3. Review tab extracts file variables and shows list
+4. During job creation, files uploaded via SFTP
+5. Progress events update UI with percentage
+
+**Progress Display:**
+- Animated background bar showing upload percentage
+- Percentage text displayed next to filename
+- Progress tracked per file in Map structure
+
+---
+
+## Deleted Components and Features
+
+These components were removed during Phase 7.1 refactor:
+
+**Removed Components:**
+- `ConfigurationTab.svelte` (create-job): Replaced by dynamic form system
+- `FilesTab.svelte` (create-job): Integrated into ConfigureTab
+- `JobPresets.svelte`: Replaced by preset pills in ResourcesTab
+- `CompactQosSelector.svelte`, `PartitionSelector.svelte`, `ResourceValidator.svelte`: Consolidated into ResourcesTab
+- `LogsPanel.svelte`: Footer panel for SSH/SLURM operation logs
+- `ConfigurationTab.svelte` (job-detail): Removed, template values shown in OverviewTab
+- `InputFilesTab.svelte` (job-detail): Removed, file info shown in template values
+
+**Removed Features:**
+- Demo mode toggle: Removed from ConnectionDropdown and session store
+- Hardcoded NAMD configuration form: Replaced by template-driven dynamic forms
+- Separate files tab in job creation: Files now integrated with template configuration
 
 ---
 

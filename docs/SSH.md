@@ -31,9 +31,13 @@
 - [Implementation Patterns](#implementation-patterns)
   - [Rust Implementation](#rust-implementation)
   - [TypeScript Integration](#typescript-integration)
-  - [Mock/Real Mode Switching](#mockreal-mode-switching)
+    - [Frontend IPC Layer](#frontend-ipc-layer)
+    - [Connection Error Detection](#connection-error-detection)
+    - [Offline Mode Support](#offline-mode-support)
 - [Testing & Development](#testing--development)
   - [SSH-Specific Testing Notes](#ssh-specific-testing-notes)
+    - [Mock Infrastructure](#mock-infrastructure)
+    - [Testing Best Practices](#testing-best-practices)
 - [Troubleshooting](#troubleshooting)
   - [SSH-Specific Issues](#ssh-specific-issues)
 
@@ -136,42 +140,69 @@ Directory creation is handled by `src-tauri/src/ssh/sftp.rs:218-248` with recurs
 
 ### Logging Bridge Architecture
 
-**Implementation**: `src-tauri/src/logging.rs` (110 lines)
+**Implementation**: `src-tauri/src/logging.rs`
 
-Bridges Rust backend logs to frontend SSH console panel for real-time operation visibility.
+Bridges Rust backend logs to frontend logs panel for real-time operation visibility.
 
 #### Logging Macros
 ```rust
 // In Rust backend
-info_log!(connection_manager, "Creating directory: {}", path);
-debug_log!(connection_manager, "SFTP transfer: {} bytes", size);
-error_log!(connection_manager, "Failed: {}", error);
+info_log!("[CONNECT] Starting connection to {}", host);
+debug_log!("[SYNC] Job sync completed");
+error_log!("[SSH] Connection failed: {}", error);
 
-// Emits Tauri event → Frontend SSH console
+// Emits 'rust-log' event → Frontend logs panel
 ```
 
 #### What Gets Logged
-- **Directory operations**: `mkdir -p` commands with paths
-- **File uploads**: SFTP transfers with progress (bytes uploaded/total)
-- **File downloads**: SFTP transfers with progress
-- **Command execution**: sbatch, squeue, sacct, scancel with full command text
-- **Metadata operations**: job_info.json reads/writes
+- **Connection operations**: SSH connect/disconnect with status
+- **Job operations**: Creation, submission, sync with progress
+- **Database operations**: Job queries and updates
+- **Command execution**: SLURM commands with results
 - **Errors**: Failed operations with error messages
 
 #### Frontend Logs Panel
-Displays all SSH/SFTP operations in real-time:
+
+**Implementation**: `src/lib/components/layout/LogsPanel.svelte`
+
+The Logs panel displays both backend Rust logs and frontend TypeScript logs in real-time. It exposes a global `window.appLogger` interface for frontend logging.
+
+**Backend Log Subscription:**
 ```typescript
-// Frontend subscribes to 'ssh-log' events
-listen('ssh-log', (event: SSHLogEvent) => {
-    console.log(`[${event.level}] ${event.message}`);
+// Frontend subscribes to 'rust-log' events from Rust backend
+listen('rust-log', (event) => {
+    const logData = event.payload;
+    // Display with appropriate styling based on log level
 });
 ```
 
-**Console Features:**
-- Real-time command logging
-- Scrollable history
-- Color-coded log levels (INFO, DEBUG, ERROR)
-- Helps debug connection and transfer issues
+**Frontend Logging Utility:**
+
+Frontend code logs to the panel using `src/lib/utils/logger.ts`:
+```typescript
+import { logger } from '$lib/utils/logger';
+
+// Log debug/info messages
+logger.debug('SYNC', 'Job sync started');
+
+// Log errors
+logger.error('API', 'Failed to fetch jobs', error);
+
+// Log SSH commands (for tracking)
+logger.command('sbatch job.slurm');
+
+// Log command output
+logger.output('Submitted batch job 12345');
+```
+
+The logger utility internally checks for `window.appLogger` and safely handles cases where the panel isn't available.
+
+**Panel Features:**
+- Real-time backend and frontend log streaming
+- Scrollable history with timestamps
+- Color-coded log levels (ERROR, WARN, INFO, DEBUG)
+- Copy all logs and clear functionality
+- Collapsible panel to save screen space
 
 For automation progress tracking, see [docs/AUTOMATIONS.md](AUTOMATIONS.md#progress-tracking-system)
 
@@ -231,11 +262,6 @@ Path validation to prevent traversal attacks and ensure safe file operations is 
 
 #### Proper Resource Management
 Connection cleanup is handled in the Drop implementation for SSHConnection in `src-tauri/src/ssh/connection.rs:158-167`.
-
-### Input Validation
-
-#### Path Safety Validation
-Path validation to prevent traversal attacks and ensure safe file operations is implemented in `src-tauri/src/validation.rs`.
 
 ## Error Handling
 
@@ -364,19 +390,79 @@ SSH modules are organized in `src-tauri/src/ssh/` with connection, manager, comm
 #### Frontend IPC Layer
 Frontend communicates with Rust SSH backend via Tauri IPC commands, following patterns defined in [`docs/API.md`](API.md) with proper error mapping between Rust and TypeScript.
 
-### Demo/Real Mode Switching
+#### Connection Error Detection
+The frontend automatically detects connection failures and updates session state accordingly:
 
-#### Environment-Based Service Selection
-Demo mode selection based on environment variables and build configuration is implemented in `src-tauri/src/demo/mode.rs`.
+**Implementation**: `src/lib/stores/jobs.ts:8-24` and `src/lib/stores/session.ts:136-143`
+
+```typescript
+// Helper: Detect if error indicates connection failure
+function isConnectionError(errorMessage: string): boolean {
+  const msg = errorMessage.toLowerCase();
+  return msg.includes('timeout') ||
+         msg.includes('not connected') ||
+         msg.includes('connection') ||
+         msg.includes('broken pipe') ||
+         msg.includes('network') ||
+         msg.includes('ssh');
+}
+
+// Helper: Handle connection failure by updating session state
+function handleConnectionFailure(error: string) {
+  if (isConnectionError(error)) {
+    sessionActions.markExpired(error);
+  }
+}
+```
+
+**Connection State Transitions:**
+- All job operations (sync, create, submit, delete) check for connection errors
+- When detected, session state transitions to 'Expired'
+- User is prompted to reconnect before attempting further operations
+
+#### Offline Mode Support
+Jobs store maintains cached data for offline viewing:
+
+**Implementation**: `src/lib/stores/jobs.ts` and `src/lib/stores/session.ts:97-98`
+
+```typescript
+// Load jobs from database (for offline/startup)
+loadFromDatabase: async () => {
+  const result = await CoreClientFactory.getClient().getAllJobs();
+  if (result.success && result.jobs) {
+    update(state => ({
+      ...state,
+      jobs: result.jobs || []
+    }));
+  }
+}
+```
+
+**Offline Features:**
+- Jobs cached in local SQLite database persist after disconnect
+- Users can view job details, configurations, and metadata offline
+- Sync operations gracefully fail with error messages when disconnected
+- Connection state clearly indicates when operations require active connection
 
 ## Testing & Development
 
 > **For complete testing strategies, mock infrastructure setup, and development workflows**, see [`docs/CONTRIBUTING.md#testing-strategy`](CONTRIBUTING.md#testing-strategy).
 
 ### SSH-Specific Testing Notes
-- Mock SSH infrastructure is in `src-tauri/src/ssh/test_utils.rs`
-- Environment-based mock switching via `USE_MOCK_SSH=true`
-- Error classification testing focuses on business logic, not ssh2 library
+
+#### Mock Infrastructure
+**Implementation**: `src-tauri/src/ssh/test_utils.rs`
+
+Test utilities provide mock helpers to test business logic without requiring actual SSH connections:
+- `MockFileSystem`: Simulates file system state for SFTP operations
+- `MockFile`: Represents files with size, permissions, content
+- Mock helpers for testing SSH command execution and error handling
+
+#### Testing Best Practices
+- Mock SSH infrastructure focuses on business logic testing
+- Error classification tests verify error mapping and categorization
+- Use mock file system to test SFTP operations without network
+- Integration tests use real SSH connections (require test server)
 
 ## Troubleshooting
 

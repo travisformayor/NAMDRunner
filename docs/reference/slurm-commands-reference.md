@@ -2,9 +2,9 @@
 
 > **📚 For cluster-specific details**, see [`alpine-cluster-reference.md`](alpine-cluster-reference.md)
 > **🔐 For SSH/SFTP patterns**, see [`../SSH.md`](../SSH.md)
-> **⚙️ For dynamic configuration**, see Phase 5 Settings Page architecture
+> **🧬 For NAMD configuration templates**, see builtin templates in `src-tauri/templates/`
 
-This document provides a complete reference of SLURM commands and patterns. **Note**: Starting in Phase 5, resource limits and partition information will be discoverable via the Settings page rather than hardcoded.
+This document provides a complete reference of SLURM commands and patterns used by NAMDRunner.
 
 ## Table of Contents
 - [Module Loading](#module-loading)
@@ -93,19 +93,20 @@ cd {{ working_dir }}
 
 # Execute NAMD with MPI
 # See: namd-commands-reference.md#command-execution
-# Note: Use actual uploaded file names in config, not generic names like "structure.psf"
-# NAMDRunner extracts names from InputFile.name field based on file_type
+# NAMD config generated from templates - contains actual uploaded file names with input_files/ prefix
 # Do NOT use +setcpuaffinity with OpenMPI-compiled NAMD (Alpine uses OpenMPI)
 # OpenMPI handles CPU affinity automatically - manual affinity flags cause binding conflicts
-mpirun -np $SLURM_NTASKS namd3 {{ namd_config }} > {{ namd_log }}
-#      │             │     │               │
-#      │             │     │               └─ NAMD output log
-#      │             │     └─ NAMD config file
-#      │             └─ Number of MPI tasks (from SLURM)
+mpirun -np $SLURM_NTASKS namd3 scripts/config.namd > namd_output.log
+#      │             │     │                        │
+#      │             │     │                        └─ NAMD output log
+#      │             │     └─ NAMD config file (template-generated)
+#      │             └─ SLURM environment variable (set at runtime based on --ntasks)
 #      └─ MPI launcher (recommended over srun on Alpine)
 ```
 
 ### Template Variable Reference
+
+**SLURM Script Variables** (handled by script generator):
 
 | Variable | Description | Example | Documentation |
 |----------|-------------|---------|---------------|
@@ -113,26 +114,32 @@ mpirun -np $SLURM_NTASKS namd3 {{ namd_config }} > {{ namd_log }}
 | `{{ nodes }}` | Number of nodes | `1` (single-node only app version) | [alpine-cluster-reference.md#node-calculation](alpine-cluster-reference.md#node-calculation) |
 | `{{ num_cores }}` | Total MPI tasks | `48` | [alpine-cluster-reference.md#resource-allocation-rules](alpine-cluster-reference.md#resource-allocation-rules) |
 | `{{ walltime }}` | Maximum runtime | `24:00:00` | [alpine-cluster-reference.md#quality-of-service-qos](alpine-cluster-reference.md#quality-of-service-qos) |
-| `{{ memory }}` | Memory in GB (unit added by template) | `32` → `32GB` |  |
+| `{{ memory }}` | Memory in GB (unit added by script generator) | `32` → `32GB` |  |
 | `{{ working_dir }}` | Job working directory | `/scratch/alpine/user/job_001` | [alpine-cluster-reference.md#directory-structure-requirements](alpine-cluster-reference.md#directory-structure-requirements) |
-| `{{ namd_config }}` | NAMD config file | `config.namd` | [namd-commands-reference.md#configuration-templates](namd-commands-reference.md#configuration-templates) |
-| `{{ namd_log }}` | NAMD output log | `namd_output.log` | [namd-commands-reference.md#file-organization](namd-commands-reference.md#file-organization) |
+
+**NAMD Config Variables** (template-specific):
+- NAMD configuration is now generated using the template system (see Phase 7.1)
+- Each template defines its own variables and config structure
+- File paths automatically get `input_files/` prepended during rendering
+- See builtin templates in `src-tauri/templates/` for examples
 
 ### Critical Requirements Checklist
 
-Before generating a job script, verify:
+**SLURM Script Generation** (`script_generator.rs`):
+- ✅ **Function signature**: `generate_namd_script(job_info: &JobInfo, scratch_dir: &str)` - scratch_dir passed as parameter, not read from JobInfo
+- ✅ **Working directory**: Script uses scratch_dir parameter for `cd` command in generated script
+- ✅ **MPI task count**: Uses `$SLURM_NTASKS` environment variable (set by SLURM at runtime based on --ntasks directive)
 - ✅ **Memory includes `GB` unit** - Bare numbers interpreted as MB (64 = 64MB causes OOM, not 64GB)
 - ✅ **`--nodes` calculated correctly** - `ceiling(cores/64)` for amilan partition (Phase 6: always nodes=1, max 64 cores)
 - ✅ **`--constraint=ib` included** - Required for MPI jobs on Alpine
 - ✅ **`export SLURM_EXPORT_ENV=ALL` present** - Required for OpenMPI when jobs submitted from login nodes
 - ✅ **`source /etc/profile` before modules** - Required for SSH connections to initialize module system
-- ✅ **NAMD config uses actual uploaded file names** - Extract from InputFile.name (e.g., "hextube.psf" not "structure.psf")
 
-**Phase 6.6 Fixes Applied:**
-- Memory unit bug fixed in `script_generator.rs::generate_namd_script()` (appends "GB" if missing)
-- File naming bug fixed (uses `input_files.iter().find(|f| f.file_type == Psf).name`)
-- OpenMPI export added to template
-- Node calculation implemented (Phase 6: single-node only, validates cores ≤ 64)
+**NAMD Config Generation** (template system):
+- ✅ **Template rendering** - NAMD config generated by `templates::render_template()` with user values
+- ✅ **File path handling** - FileUpload variables automatically get `input_files/` prefix prepended
+- ✅ **Type conversion** - Numbers formatted correctly, booleans convert to "yes"/"no"
+- ✅ **Variable validation** - Missing or invalid values caught before rendering
 
 ### Submit Command
 ```bash
@@ -325,22 +332,9 @@ scontrol update JobId=<job_id> Partition=amilan
 # Note: Only pending jobs can be modified
 ```
 
-## Resource Limits (Dynamic Discovery)
+## Resource Limits
 
-**Phase 5+**: Resource limits will be discovered automatically via Settings page using:
-
-```bash
-# Query partition information
-sinfo --partition=amilan --format="%n %c %m %t %O" --noheader
-
-# Get detailed partition limits
-scontrol show partition amilan
-
-# Query QOS information
-sacctmgr show qos format=name,priority,maxtres,maxwall --noheader
-```
-
-**Legacy Reference** (Alpine Cluster - amilan partition):
+**Alpine Cluster - amilan partition** (hardcoded limits for single-node jobs):
 | Resource | Minimum | Maximum | Default |
 |----------|---------|---------|---------|
 | Cores | 1 | 64 | 1 |
@@ -491,15 +485,20 @@ Jobs are identified by working directory pattern:
 └── job_001/
     ├── job_info.json
     ├── input_files/
-    ├── config.namd
-    ├── job.sbatch
+    │   ├── structure.psf
+    │   ├── coordinates.pdb
+    │   └── parameters.prm
+    ├── scripts/
+    │   ├── config.namd      # Template-generated NAMD config
+    │   └── job.sbatch        # SLURM batch script
     └── outputs/
 
 /scratch/alpine/$USER/namdrunner_jobs/
 └── job_001/
-    ├── [all job files]
+    ├── [symlinks or copies of job files from /projects]
     ├── namd_output.log
-    └── *.dcd (trajectory files)
+    └── outputs/
+        └── *.dcd (trajectory files)
 ```
 
 ## Mock Data for Testing

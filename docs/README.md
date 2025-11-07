@@ -13,15 +13,15 @@ This directory contains the complete NAMDRunner project documentation. Use this 
 
 ### [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
 **How does this app work?** Read this for a high-level overview of the system design, technology stack, and end-to-end workflows.
-- "How this project is built and works"
 - Project overview and design principles
+- Template system architecture
 - End-to-end workflow and data placement strategy
 - Technology choices and module structure
 - Security architecture and current implementation
 
 ### [`docs/API.md`](API.md)
 **Adding a command?** This defines the contract between the frontend and backend, including IPC interfaces, data schemas, and error handling.
-- IPC command interfaces
+- IPC command interfaces (connection, jobs, templates, files)
 - SLURM integration patterns
 - Error handling patterns
 - Security implementation
@@ -35,21 +35,23 @@ This directory contains the complete NAMDRunner project documentation. Use this 
 
 ### [`docs/DB.md`](DB.md)
 **Touching the database?** This document covers the SQLite schema, JSON metadata formats, and data validation rules.
-- SQLite database design
+- SQLite database design (jobs and templates tables)
 - JSON metadata schemas
+- Template storage and embedded defaults
 - Data validation rules
-- Migration and backup strategies
 
 ### [`docs/DESIGN.md`](DESIGN.md)
 **Building UI?** This is the specification for UI/UX design, component architecture, and page workflows.
 - Design philosophy and patterns
 - Component architecture
-- Page specifications and workflows
+- Page specifications (Jobs, Templates, Create Job)
+- Dynamic form generation from templates
 - Implementation guidelines
 
 ### [`docs/SSH.md`](SSH.md)
 **Working with the cluster?** This details SSH/SFTP connection management, security patterns, and file operations.
 - Connection lifecycle and state management
+- Connection timeout detection and offline mode
 - SFTP file operations and optimization
 - Security patterns and credential handling
 - Error handling and troubleshooting

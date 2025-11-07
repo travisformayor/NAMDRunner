@@ -4,8 +4,8 @@
 
 This document defines NAMDRunner's automation system architecture, current automation chains, and design principles for future extensibility including an in-app automation builder.
 
-> **Implementation Status**: ✅ **IMPLEMENTED** - Phase 6.1 automation architecture completed
-> **Current State**: Simple automation functions with progress callbacks and Tauri event emission
+> **Implementation Status**: ✅ **IMPLEMENTED** - Phase 7.1 with template system integration
+> **Current State**: Template-based job creation with automatic file uploads, connection failure detection, and simplified automation chains
 
 ## Table of Contents
 - [Overview](#overview)
@@ -14,6 +14,7 @@ This document defines NAMDRunner's automation system architecture, current autom
 - [Implementation Architecture](#implementation-architecture)
 - [Event System](#event-system)
 - [Verification Framework](#verification-framework)
+- [Connection Failure Detection](#connection-failure-detection)
 - [Future Automation Builder](#future-automation-builder)
 
 ## Overview
@@ -141,33 +142,50 @@ The `execute_job_creation_with_progress` function handles the complete job creat
    - Create subdirectories: `input_files/`, `scripts/`, `outputs/`
    - Only creates project directories (scratch directories created during submission)
 
-3. **Upload Input Files** (Integrated)
-   - Upload each user-provided file to `input_files/` subdirectory
-   - Progress tracking per file with validation
-   - Uses existing ConnectionManager with retry logic
+3. **Load and Process Template**
+   - Load template from database using `template_id` from CreateJobParams
+   - Extract FileUpload variables from template definition
+   - Process template_values to identify files that need uploading
 
-4. **Generate SLURM Batch Script**
-   - Use `SlurmScriptGenerator::generate_namd_script()` to create job.sbatch
+4. **Upload Input Files** (Template-Driven)
+   - Upload files for FileUpload variables to `input_files/` subdirectory
+   - Extract filename from local path and update template_values with just filename
+   - Progress tracking per file with validation
+   - Uses ConnectionManager with retry logic
+
+5. **Render NAMD Configuration from Template**
+   - Use `crate::templates::render_template()` with template and values
+   - FileUpload variables: filenames automatically get "input_files/" prepended
+   - Number variables: converted to numeric strings
+   - Boolean variables: converted to "yes"/"no" for NAMD
+   - Text variables: used as-is
+   - Validates all variables are replaced (no unreplaced {{variables}})
+
+6. **Generate SLURM Batch Script**
+   - Use `SlurmScriptGenerator::generate_namd_script(&job_info, &scratch_dir)` to create job.sbatch
+   - Scratch directory path passed as parameter (not stored in JobInfo until submission)
    - Upload script to `scripts/job.sbatch`
    - Script configures SLURM resources, modules, and NAMD execution
 
-5. **Generate NAMD Configuration**
-   - Use `SlurmScriptGenerator::generate_namd_config()` to create config.namd
-   - Upload config to `scripts/config.namd`
+7. **Upload NAMD Configuration**
+   - Upload rendered config to `scripts/config.namd`
    - Config includes simulation parameters, input files, and output settings
 
-6. **Create Job Metadata**
-   - Generate JobInfo struct with complete job specification
-   - Set only project directory (scratch_dir remains None until submission)
+8. **Create Job Metadata**
+   - Generate JobInfo struct using factory function `create_job_info()`
+   - Store template_id and template_values for job reconstruction
+   - JobInfo.project_dir set to project directory path
+   - JobInfo.scratch_dir remains None until job submission
+   - Initial status set to "CREATED" (not submitted)
 
-7. **Save to Local Database**
-   - Store job record in local SQLite database using existing `with_database` utility
-   - Set initial status as "CREATED" (not submitted)
+9. **Save to Local Database**
+   - Store job record in local SQLite database using `with_database` utility
+   - JobInfo includes template_id and template_values for template-based job tracking
 
-8. **Upload Job Metadata to Server**
-   - Create `job_info.json` in project directory with complete job specification
-   - Enables job discovery even for jobs that haven't been submitted yet
-   - Serves as single source of truth for job parameters on cluster
+10. **Upload Job Metadata to Server**
+    - Create `job_info.json` in project directory with complete job specification
+    - Enables job discovery even for jobs that haven't been submitted yet
+    - Serves as single source of truth for job parameters on cluster
 
 **Result**: Job appears in UI with "CREATED" status, ready for submission. Job folder on cluster contains complete metadata for discovery and sharing.
 
@@ -186,6 +204,7 @@ The `execute_job_submission_with_progress` function handles the complete job sub
 1. **Load Job Information**:
    - Retrieve job from database by ID
    - Validate job status is CREATED or FAILED (eligible for submission)
+   - Template validation completed before submission (happens during job creation)
 
 2. **Mirror Job Directory to Scratch** (using rsync):
    - NAMDRunner app -> SLURM execution (crosses project/scratch data boundary)
@@ -235,7 +254,7 @@ The `execute_job_submission_with_progress` function handles the complete job sub
 
 **Trigger**: User clicks "Sync Status" button or automatic periodic sync (if implemented)
 **Purpose**: Query SLURM for current job status, update local database, trigger job discovery if needed, and return complete job list
-**Status**: ✅ **IMPLEMENTED** (Phase 6.6) - Complete backend-owned workflow with automatic job discovery
+**Status**: ✅ **IMPLEMENTED** (Phase 6.6) - Complete backend-owned workflow with automatic job discovery and connection failure detection
 
 **Implementation** (Backend-Owned Workflow):
 
@@ -244,6 +263,7 @@ The `sync_all_jobs()` function handles complete synchronization workflow, includ
 1. **Validate Connection**:
    - Verify SSH connection is active
    - Get cluster username for SLURM queries
+   - Connection failures automatically handled by frontend (transitions to Expired state)
 
 2. **Load Active Jobs**:
    - Retrieve all jobs from database
@@ -400,12 +420,18 @@ The job deletion automation performs safe cleanup with multiple validation steps
 ```
 src-tauri/src/automations/
 ├── mod.rs                   # Module exports
-├── job_creation.rs         # ✅ Job creation automation (implemented)
-├── job_submission.rs       # ✅ Job submission automation (implemented)
-├── job_completion.rs       # ✅ Job completion and results retrieval (implemented)
-└── progress.rs             # ✅ Progress tracking utilities (implemented)
+├── job_creation.rs         # ✅ Template-based job creation with file uploads
+├── job_submission.rs       # ✅ Simplified submission (validation in job_creation)
+├── job_sync.rs             # ✅ Status sync, job discovery, connection detection
+├── job_completion.rs       # ✅ Automatic completion on terminal state
+└── progress.rs             # ✅ Progress tracking utilities
 
-# Status synchronization implemented in commands/jobs.rs and slurm/status.rs
+src-tauri/src/templates/
+├── mod.rs                   # Template system module exports
+├── types.rs                # Template, VariableDefinition, VariableType
+├── renderer.rs             # Template rendering with variable substitution
+└── validation.rs           # Template value validation (all variables required)
+
 # Job cleanup implemented in commands/jobs.rs (delete_job function)
 ```
 
@@ -428,11 +454,13 @@ async fn create_job_real(app_handle: tauri::AppHandle, params: CreateJobParams) 
         Ok((job_id, job_info)) => CreateJobResult {
             success: true,
             job_id: Some(job_id),
+            job: Some(job_info),
             error: None,
         },
         Err(e) => CreateJobResult {
             success: false,
             job_id: None,
+            job: None,
             error: Some(e.to_string()),
         },
     }
@@ -478,48 +506,89 @@ progress_callback("Saving job to database...");
 progress_callback("Job creation completed successfully");
 ```
 
+## Connection Failure Detection
+
+NAMDRunner implements automatic connection failure detection without additional network calls, ensuring users are promptly notified when their SSH session expires.
+
+### Implementation Approach
+
+**Zero Extra Network Calls**: Connection failures are detected by pattern-matching error messages from existing job operations (sync, create, submit, delete). No dedicated "connection health check" commands are needed.
+
+**Automatic State Transition**: When any automation function encounters a connection-related error (timeout, connection reset, authentication failure), the frontend automatically transitions the connection state to `Expired`.
+
+**Error Patterns Detected**:
+- SSH connection timeouts
+- Connection reset errors
+- Authentication failures
+- Network unreachable errors
+- Session termination errors
+
+**User Experience**:
+- User sees "Connection Expired" status in UI
+- All action buttons disabled until reconnection
+- User can click "Connect" to re-establish session
+- No data loss - local database maintains offline cache
+
+**Implementation Location**:
+- Frontend: `src/lib/stores/jobs.ts` - Pattern matches errors in job operation results
+- Backend: Automation functions return standard error messages that frontend can parse
+
 ## Verification Framework
 
 ### Current Verification
 
-The automation system includes basic verification:
+The automation system includes verification at multiple stages:
 
-```rust
-fn validate_upload_file(file: &InputFile) -> Result<()> {
-    // Check local file exists
-    let local_path = Path::new(&file.local_path);
-    if !local_path.exists() {
-        return Err(anyhow!("Local file does not exist: {}", file.local_path));
-    }
+**Template Validation** (`src-tauri/src/templates/validation.rs`):
+- All variables required: Every variable defined in template must have a value provided
+- Type checking: Ensures template values match variable definitions
+- Range validation: Number variables respect min/max constraints
+- File extensions: FileUpload variables validate against allowed extensions
 
-    // Check file is readable
-    if let Err(e) = fs::File::open(local_path) {
-        return Err(anyhow!("Cannot read local file: {}", e));
-    }
+**Input Sanitization** (`src-tauri/src/validation/input.rs`):
+- Job name sanitization: Removes unsafe characters from user input
+- Path safety validation: Prevents directory traversal attacks
+- Command injection prevention: Sanitizes all shell command inputs
 
-    // Basic file size check (limit to 1GB)
-    let metadata = fs::metadata(local_path)?;
-    if metadata.len() > 1_073_741_824 {
-        return Err(anyhow!("File too large: {} bytes (max 1GB)", metadata.len()));
-    }
+**Connection Validation**:
+- SSH connection state verification before operations
+- Username retrieval and validation
+- Connection failure detection (see Connection Failure Detection section)
 
-    // Validate remote filename
-    if let Some(remote_name) = &file.remote_name {
-        if remote_name.contains('/') || remote_name.contains('\\') {
-            return Err(anyhow!("Remote filename cannot contain path separators"));
-        }
-    }
+**Directory Safety** (`src-tauri/src/validation/paths.rs`):
+- Path validation: Ensures paths contain "namdrunner_jobs"
+- Dangerous pattern blocking: Prevents access to system directories
+- Remote path construction using validated functions
 
-    Ok(())
-}
-```
+### Verification During Automation
 
-### Planned Verification Enhancements
+**Job Creation**:
+1. Template loaded and validated before rendering
+2. File upload variables validated against template constraints
+3. Template rendering validates all variables are replaced
+4. Directory creation verified before file uploads
+5. File uploads validated (size, path safety)
+6. Database save verification
 
-- File transfer verification with size/checksum validation
-- Directory creation verification
-- JSON metadata write verification
-- Database save verification
+**Job Submission**:
+1. Job status validated (must be CREATED or FAILED)
+2. Connection verified before operations
+3. Rsync command validated and sanitized
+4. SLURM job ID parsed and validated from sbatch output
+5. Database update verification
+
+**Job Sync**:
+1. Connection verified before batch query
+2. SLURM status parsed and validated
+3. Terminal state detection triggers completion chain
+4. Database updates verified
+
+**Job Completion**:
+1. Terminal state validated (COMPLETED, FAILED, CANCELLED)
+2. Project and scratch directories verified before rsync
+3. Rsync source/destination paths validated
+4. Log file fetch handles missing files gracefully
+5. Output file metadata parsed and validated
 
 ## Future Automation Builder
 
@@ -553,14 +622,16 @@ pub struct AutomationTemplate {
 
 ## Current Implementation Status
 
-### ✅ Implemented (Phase 6.2 Complete)
-- **Job Creation Automation**: Complete workflow with file uploads and progress tracking
-- **Job Submission Automation**: Scratch workspace setup, file copying, SLURM submission
-- **Status Synchronization**: Real-time SLURM queue monitoring with database updates
-- **Job Completion Automation**: Results preservation from scratch to project directories
+### ✅ Implemented (Phase 7.1 Complete)
+- **Job Creation Automation**: Template-based workflow with dynamic file uploads and progress tracking
+- **Template System Integration**: Template loading, rendering, and validation integrated into job creation
+- **Job Submission Automation**: Simplified workflow with pre-validated templates
+- **Status Synchronization**: Real-time SLURM queue monitoring with automatic job discovery
+- **Job Completion Automation**: Automatic rsync of results from scratch to project directories
 - **Job Cleanup Automation**: Safe deletion with comprehensive path validation
-- **Security Improvements**: All operations use centralized command builders with proper escaping
-- **Performance Optimization**: Batched find operations, reduced SSH round-trips
+- **Connection Failure Detection**: Automatic state transition to Expired on connection errors
+- **Security Improvements**: Input sanitization, path validation, command injection prevention
+- **Performance Optimization**: Batched SLURM queries, reduced SSH round-trips
 - **Progress Tracking**: Real-time UI updates via Tauri events for all automation chains
 - **Error Handling**: Consistent `Result<T>` patterns with proper error classification
 

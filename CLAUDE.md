@@ -79,13 +79,53 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters built with
 After implementation and testing, before archiving:
 1. **Code Review & Refactor** - Use `.claude/agents/review-refactor.md` agent to analyze completed work
 2. **Apply Improvements** - Implement recommended refactoring based on what was learned
-3. **Update Documentation** - Update `tasks/roadmap.md` and `docs/ARCHITECTURE.md` with final implementation details
+3. **Update Documentation** - Update `tasks/roadmap.md` and `docs/ARCHITECTURE.md` with final implementation details (see Documentation Rules below)
 4. **Update and Archive Task** - Move to `tasks/completed/`
+
+#### Documentation Update Rules
+
+When updating task plans (`tasks/active/*.md`) or project documentation (`docs/*.md`):
+
+**Integrate Changes Contextually:**
+- Insert new information where it belongs topically, not at the end
+- Update existing sections rather than creating duplicate sections
+- Preserve document structure and logical flow
+
+**Maintain Proportional Detail:**
+- Match the level of detail used for comparable topics
+- Avoid over-emphasizing content just because you're currently adding it
+- If related content needs more detail to match new additions, research and expand it first
+
+**Keep Documentation Lean:**
+- Identify and remove redundant information when adding new content
+- Delete outdated or incorrect information discovered during updates
+- Consolidate verbose sections - prefer focused, essential information
+
+**Document Current State:**
+- Describe what the system does NOW, not its planning history
+- Avoid narratives like "originally we planned X, then implemented Y, now it's Z"
+- Remove implementation evolution details - readers need current facts, not historical context
 
 ### When You're Stuck
 - **Use the Context-Specific Reading Guide above** - Find docs relevant to your current task
 - Review `tasks/roadmap.md` for current development phase
 - **Ask specific questions** about the requested feature or cluster integration details
+
+### Dangerous Practices to Avoid
+
+**Never Use `git checkout/restore` to Fix Broken Code:**
+- ❌ **DO NOT** use `git checkout HEAD -- file.ts` to "fix" syntax errors
+- ❌ This reverts ALL work in that file, not just the broken parts
+- ❌ Causes massive loss of progress when file contains completed features
+- ✅ **Instead:** Manually fix the specific syntax error or logic issue
+- ✅ Use `git diff` to understand what changed, then fix the actual problem
+- ✅ If truly unsalvageable, discuss with user before reverting
+
+**Why This Matters:**
+- A single syntax error doesn't invalidate all work in the file
+- Automated refactoring (sed, find/replace) can break syntax while logic is sound
+- Restoring from git discards hours of implementation
+- Always fix forward - never revert completed features to fix syntax
 
 ## Quick Commands
 
@@ -113,17 +153,59 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 
 ## Common Pitfalls to Avoid
 
+### Code Quality Standards (Non-Negotiable)
+
+**Zero Tolerance for Warnings:**
+- **Treat warnings as errors** - Compiler warnings, linter warnings, build warnings all indicate problems
+- Warnings hint at dead code, incorrect patterns, or incomplete implementations
+- "It builds/runs fine" is never justification for ignoring warnings
+- Investigate and fix ALL warnings, every time
+
+**Holistic Refactoring Over Patches:**
+- **Never patch on top of patches** - If code needs changing, step back and ask: "If I knew the requirement from the start, how would I implement this correctly?"
+- Delete and refactor rather than adding conditional logic to existing code
+- Don't be biased toward keeping existing code just because it exists
+- Prefer solutions that result in less code, simpler code, easier-to-reason-about code
+
+**No "Quick Fixes":**
+- Always choose the solution that removes the most tech debt, even if it takes longer
+- "This is easier" is never a reason to choose inferior approach
+- Centralize patterns, extract utilities, remove duplication - do it right the first time
+
+**Complete Work Honestly:**
+- Never claim work is "complete" or "100% done" if stubs, broken tests, or known issues remain
+- Be transparent about all remaining work - list it explicitly
+- Don't hide decisions to skip or defer things - communicate openly
+
+**Code Quality Applies Everywhere:**
+- Internal code, naming, patterns matter just as much as user-facing code
+- "Users won't see this" is never justification for bad code
+- Consistency matters in variable names, function names, logging patterns, error handling
+- Fix inconsistencies even in code that works
+
+**No Priority Levels for Issues:**
+- All identified issues must be resolved - there are no "low priority" bugs
+- Organize work by optimal implementation order (dependencies, logical flow)
+- Don't use "priority" as excuse to defer work
+- If something is truly optional, discuss explicitly - don't just deprioritize
+
+**Balance in Abstraction:**
+- Avoid both extremes: don't copy-paste code, but don't over-abstract for DRY's sake
+- Extract when sharing logic reduces errors and improves maintainability
+- Don't create abstractions that make code harder to understand
+- Prefer simple, obvious code over clever abstractions
+
 ### Cluster Integration Pitfalls
 - **Don't hardcode module versions** - Make configurable (gcc/14.2.0, etc.)
 - **Don't skip error handling** - SSH operations WILL fail
 - **Don't block UI thread** - All SSH/SFTP operations must be async
-- **Don't ignore working SLURM patterns** - Check reference docs for proven approaches
-- **Don't reinvent solved problems** - Review reference docs before implementing from scratch
-- **Don't skip reference documentation** - Learn from documented patterns and pitfalls
+- **Don't ignore SLURM and NAMD documentation** - Check docs for offical approaches
+- **Don't reinvent solved problems** - Review docs and related code before implementing from scratch
+- **Don't skip documentation** - Learn from documented patterns
 - **Don't work without task plan** - Complex application needs structured approach
 
 ### Code Completeness
-- **Don't leave stubs in production** - Replace all setTimeout/mock data with real backend calls before completing tasks
+- **Don't leave stubs in production** - Replace all setTimeout/mock data with real backend calls
 - **Don't implement business logic in frontend** - Validation, calculations, cluster config belong in Rust
 - **Don't keep orphaned code** - Delete service layers and utilities that production code never imports
 - **Don't treat test usage as real usage** - If only tests use code, delete both the code and tests

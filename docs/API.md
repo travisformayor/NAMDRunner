@@ -8,15 +8,17 @@ This document defines all interfaces and data contracts for NAMDRunner, consolid
   - [Connection State Management](#connection-state-management)
   - [Job Lifecycle States](#job-lifecycle-states)
   - [Basic Types](#basic-types)
-- [Application Configuration Commands](#application-configuration-commands)
-  - [IPC Interface](#ipc-interface)
 - [Connection Management Commands](#connection-management-commands)
-  - [IPC Interface](#ipc-interface-1)
+  - [IPC Interface](#ipc-interface)
 - [Job Management Commands](#job-management-commands)
-  - [IPC Interface](#ipc-interface-2)
+  - [IPC Interface](#ipc-interface-1)
   - [Request/Response Types](#requestresponse-types)
 - [File Management Commands](#file-management-commands)
+  - [IPC Interface](#ipc-interface-2)
+- [Template Management Commands](#template-management-commands)
   - [IPC Interface](#ipc-interface-3)
+  - [Template Rendering](#template-rendering)
+  - [Default Templates](#default-templates)
 - [Error Handling Strategy](#error-handling-strategy)
   - [Error Categories](#error-categories)
   - [Common Error Examples](#common-error-examples)
@@ -63,7 +65,6 @@ This document defines all interfaces and data contracts for NAMDRunner, consolid
    This consistency was a key goal of Phase 6.4, where 49 `#[serde(rename)]` attributes were removed for the same reason.
 
 10. **IPC parameter serialization for structs**: Commands that accept struct parameters (like `connect_to_cluster`) expect the struct wrapped: `{params: {host, username, password}}`. Commands with individual parameters send them directly: `{job_id: "job_001"}`.
-11. **Demo mode synchronization**: Frontend mode preference must be synced to backend via `set_app_mode` command with `{is_demo: boolean}` parameter
 
 These patterns are proven to work with the CURC Alpine cluster and provide the foundation for reliable SLURM integration in the Tauri implementation.
 
@@ -88,18 +89,6 @@ type SlurmJobId = string;   // SLURM's job ID (numbers)
 type Timestamp = string;    // ISO 8601 format
 ```
 
-## Application Configuration Commands
-
-### IPC Interface
-```typescript
-interface IApplicationCommands {
-  // Set application mode (demo/real)
-  set_app_mode(is_demo: boolean): Promise<{success: boolean, data?: string, error?: string}>;
-}
-```
-
-**Actual Rust Command**: `set_app_mode(is_demo: bool) -> ApiResult<String>`
-Location: [src-tauri/src/commands/system.rs](../src-tauri/src/commands/system.rs)
 
 ## Connection Management Commands
 
@@ -122,6 +111,9 @@ interface IConnectionCommands {
   suggest_qos_for_partition(walltime_hours: number, partition_id: string): Promise<string>;
   estimate_queue_time_for_job(cores: number, partition_id: string): Promise<string>;
   calculate_job_cost(cores: number, walltime_hours: number, has_gpu: boolean, gpu_count: number): Promise<number>;
+
+  // Validate resource allocation against cluster constraints
+  validate_resource_allocation(cores: number, memory: string, walltime: string, partition_id: string, qos_id: string): Promise<ValidationResult>;
 }
 
 interface ConnectResult {
@@ -195,14 +187,20 @@ interface IJobCommands {
   // Sync job statuses with cluster (includes automatic discovery if database empty)
   syncJobs(): Promise<SyncJobsResult>;
 
+  // Discover jobs from server by scanning remote directory (only when database empty)
+  discover_jobs_from_server(): Promise<DiscoverJobsResult>;
+
   // Delete job (local and optionally remote)
   deleteJob(job_id: JobId, delete_remote: boolean): Promise<DeleteJobResult>;
 
   // Refetch SLURM logs from server (overwrites cached logs)
   refetchSlurmLogs(job_id: JobId): Promise<RefetchLogsResult>;
 
-  // Validate resource allocation for cluster constraints
-  validate_resource_allocation(cores: number, memory: string, walltime: string, partition_id: string, qos_id: string): Promise<ValidationResult>;
+  // Preview SLURM script before submission
+  preview_slurm_script(job_name: string, cores: number, memory: string, walltime: string, partition?: string, qos?: string): Promise<PreviewResult>;
+
+  // Validate complete job configuration
+  validate_job_config(job_name: string, template_id: string, template_values: Record<string, any>, cores: number, memory: string, walltime: string, partition?: string, qos?: string): Promise<JobValidationResult>;
 }
 ```
 
@@ -276,9 +274,12 @@ interface JobInfo {
   project_dir?: string;
   scratch_dir?: string;
   error_info?: string;
-  namd_config: NAMDConfig;
+  slurm_stdout?: string;
+  slurm_stderr?: string;
+  template_id: string;                     // Template used for this job
+  template_values: Record<string, any>;    // Variable values for template
   slurm_config: SlurmConfig;
-  input_files: InputFile[];
+  output_files?: OutputFile[];
   remote_directory: string;
 }
 
@@ -295,6 +296,13 @@ interface SyncJobsResult {
   errors: string[];
 }
 
+interface DiscoverJobsResult {
+  success: boolean;
+  jobs_found: number;         // Total job directories found on server
+  jobs_imported: number;      // Number of new jobs imported
+  error?: string;
+}
+
 interface DeleteJobResult {
   success: boolean;
   error?: string;
@@ -302,9 +310,26 @@ interface DeleteJobResult {
 
 interface RefetchLogsResult {
   success: boolean;
-  slurm_stdout?: string;  // Fetched SLURM stdout
-  slurm_stderr?: string;  // Fetched SLURM stderr
+  job_info?: JobInfo;     // Updated job with refreshed logs
   error?: string;
+}
+
+interface JobValidationResult {
+  is_valid: boolean;
+  errors: string[];
+}
+
+interface PreviewResult {
+  success: boolean;
+  content?: string;  // Rendered content (NAMD config or SLURM script)
+  error?: string;
+}
+
+interface ValidationResult {
+  is_valid: boolean;
+  issues: string[];
+  warnings: string[];
+  suggestions: string[];
 }
 ```
 
@@ -368,25 +393,31 @@ interface ListFilesResult {
 ```typescript
 interface ITemplateCommands {
   // List all templates (returns summary for template selection)
-  listTemplates(): Promise<ListTemplatesResult>;
+  list_templates(): Promise<ListTemplatesResult>;
 
   // Get full template definition (for editing or job creation)
-  getTemplate(template_id: string): Promise<GetTemplateResult>;
+  get_template(template_id: string): Promise<GetTemplateResult>;
 
   // Create new user template
-  createTemplate(template: Template): Promise<CreateTemplateResult>;
+  create_template(template: Template): Promise<CreateTemplateResult>;
 
   // Update existing template
-  updateTemplate(template_id: string, template: Template): Promise<UpdateTemplateResult>;
+  update_template(template_id: string, template: Template): Promise<UpdateTemplateResult>;
 
   // Delete template (blocked if jobs exist using it)
-  deleteTemplate(template_id: string): Promise<DeleteTemplateResult>;
+  delete_template(template_id: string): Promise<DeleteTemplateResult>;
 
   // Validate template values against template definition
-  validateTemplateValues(
+  validate_template_values(
     template_id: string,
     values: Record<string, any>
   ): Promise<ValidateTemplateValuesResult>;
+
+  // Preview rendered NAMD config with user values
+  preview_namd_config(
+    template_id: string,
+    values: Record<string, any>
+  ): Promise<PreviewResult>;
 }
 
 interface Template {
@@ -395,6 +426,7 @@ interface Template {
   description: string;
   namd_config_template: string;            // NAMD config with {{variables}}
   variables: Record<string, VariableDefinition>;
+  is_builtin: boolean;                     // True for embedded templates, false for user-created
   created_at: string;
   updated_at: string;
 }
@@ -403,7 +435,6 @@ interface VariableDefinition {
   key: string;
   label: string;
   var_type: VariableType;
-  required: boolean;
   help_text?: string;
 }
 
@@ -415,12 +446,15 @@ type VariableType =
 
 interface ListTemplatesResult {
   success: boolean;
-  templates?: Array<{
-    id: string;
-    name: string;
-    description: string;
-  }>;
+  templates?: TemplateSummary[];
   error?: string;
+}
+
+interface TemplateSummary {
+  id: string;
+  name: string;
+  description: string;
+  is_builtin: boolean;
 }
 
 interface GetTemplateResult {
@@ -451,6 +485,8 @@ interface ValidateTemplateValuesResult {
 }
 ```
 
+**Actual Rust Commands**: Located in [src-tauri/src/commands/templates.rs](../src-tauri/src/commands/templates.rs)
+
 ### Template Rendering
 
 Templates use `{{variable}}` syntax for variable substitution. During job creation:
@@ -469,8 +505,10 @@ Templates use `{{variable}}` syntax for variable substitution. During job creati
 ### Default Templates
 
 **Built-in templates** are auto-loaded from `src-tauri/templates/*.json` on first app startup:
-- `vacuum_optimization_v1.json` - Vacuum simulation with large periodic box
-- `explicit_solvent_npt_v1.json` - NPT ensemble with PME electrostatics
+- `vacuum_optimization_v1` - Vacuum simulation with large periodic box
+- `explicit_solvent_npt_v1` - NPT ensemble with PME electrostatics
+
+Templates are stored in SQLite database after initial load. Embedded templates have `is_builtin: true` to communicate their origin to the user.
 
 ## Error Handling Strategy
 
@@ -524,7 +562,6 @@ Use the `retryable` field to determine whether operations should be retried with
 ### Core Types
 ```rust
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConnectionState {
@@ -550,23 +587,23 @@ pub struct JobInfo {
     pub job_name: String,
     pub status: JobStatus,
     pub slurm_job_id: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: Option<DateTime<Utc>>,
-    pub submitted_at: Option<DateTime<Utc>>,
-    pub completed_at: Option<DateTime<Utc>>,
+    pub created_at: String,  // RFC3339 timestamp
+    pub updated_at: Option<String>,
+    pub submitted_at: Option<String>,
+    pub completed_at: Option<String>,
     pub project_dir: Option<String>,
     pub scratch_dir: Option<String>,
     pub error_info: Option<String>,
-}
+    pub slurm_stdout: Option<String>,
+    pub slurm_stderr: Option<String>,
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NAMDConfig {
-    pub steps: u32,
-    pub temperature: f64,
-    pub timestep: f64,
-    pub outputname: String,
-    pub dcd_freq: Option<u32>,
-    pub restart_freq: Option<u32>,
+    // Template-based configuration
+    pub template_id: String,
+    pub template_values: HashMap<String, serde_json::Value>,
+
+    pub slurm_config: SlurmConfig,
+    pub output_files: Option<Vec<OutputFile>>,
+    pub remote_directory: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -579,15 +616,53 @@ pub struct SlurmConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InputFile {
+pub struct OutputFile {
     pub name: String,
-    pub local_path: String,
-    pub file_type: String,
+    pub size: u64,
+    pub modified_at: String,
+}
+
+// Template types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Template {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub namd_config_template: String,
+    pub variables: HashMap<String, VariableDefinition>,
+    pub is_builtin: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VariableDefinition {
+    pub key: String,
+    pub label: String,
+    pub var_type: VariableType,
+    pub help_text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VariableType {
+    Number { min: f64, max: f64, default: f64 },
+    Text { default: String },
+    Boolean { default: bool },
+    FileUpload { extensions: Vec<String> },
 }
 ```
 
+**Location**: [src-tauri/src/types/core.rs](../src-tauri/src/types/core.rs), [src-tauri/src/templates/types.rs](../src-tauri/src/templates/types.rs)
+
 ### Command Result Types
 ```rust
+#[derive(Debug, Serialize)]
+pub struct ApiResult<T> {
+    pub success: bool,
+    pub data: Option<T>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ConnectResult {
     pub success: bool,
@@ -599,18 +674,29 @@ pub struct ConnectResult {
 pub struct SessionInfo {
     pub host: String,
     pub username: String,
-    pub connected_at: DateTime<Utc>,
+    pub connected_at: String,  // RFC3339 timestamp
 }
 
 #[derive(Debug, Serialize)]
 pub struct CreateJobResult {
     pub success: bool,
     pub job_id: Option<String>,
+    pub job: Option<JobInfo>,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ValidationResult {
+    pub is_valid: bool,
+    pub issues: Vec<String>,
+    pub warnings: Vec<String>,
+    pub suggestions: Vec<String>,
 }
 
 // Additional result types follow same pattern...
 ```
+
+**Location**: [src-tauri/src/types/commands.rs](../src-tauri/src/types/commands.rs), [src-tauri/src/types/core.rs](../src-tauri/src/types/core.rs)
 
 ## SLURM Integration
 
