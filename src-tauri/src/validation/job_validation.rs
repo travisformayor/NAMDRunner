@@ -3,7 +3,6 @@ use crate::cluster::{get_partition_limits, get_qos_for_partition};
 
 /// Business logic validation for job operations
 /// Extracted from Tauri commands for independent testing
-
 /// Validation result with detailed error information
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ValidationResult {

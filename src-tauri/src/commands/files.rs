@@ -24,46 +24,42 @@ pub fn detect_file_type(filename: String) -> String {
     }
 }
 
-/// Open a file dialog to select NAMD input files
-/// Returns list of selected file paths with metadata
+/// Open a file dialog to select a single NAMD input file
+/// Returns selected file path with metadata, or None if cancelled
 #[tauri::command(rename_all = "snake_case")]
-pub async fn select_input_files(_app: AppHandle) -> Result<Vec<SelectedFile>, String> {
+pub async fn select_input_file(_app: AppHandle) -> Result<Option<SelectedFile>, String> {
     use rfd::FileDialog;
 
-    let files = FileDialog::new()
+    let file = FileDialog::new()
         .add_filter("NAMD Files", &["pdb", "psf", "prm", "exb"])
-        .set_title("Select NAMD Input Files")
-        .pick_files();
+        .set_title("Select NAMD Input File")
+        .pick_file();
 
-    match files {
-        Some(paths) => {
-            let mut selected_files = Vec::new();
+    match file {
+        Some(path) => {
+            let path_str = path.to_string_lossy().to_string();
 
-            for path in paths {
-                let path_str = path.to_string_lossy().to_string();
+            // Get file metadata
+            if let Ok(metadata) = fs::metadata(&path) {
+                if let Some(filename) = path.file_name() {
+                    let filename_str = filename.to_string_lossy().to_string();
+                    let extension = path.extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|s| format!(".{}", s))
+                        .unwrap_or_else(|| String::from(""));
 
-                // Get file metadata
-                if let Ok(metadata) = fs::metadata(&path) {
-                    if let Some(filename) = path.file_name() {
-                        let filename_str = filename.to_string_lossy().to_string();
-                        let extension = path.extension()
-                            .and_then(|ext| ext.to_str())
-                            .map(|s| format!(".{}", s))
-                            .unwrap_or_else(|| String::from(""));
-
-                        selected_files.push(SelectedFile {
-                            name: filename_str,
-                            path: path_str,
-                            size: metadata.len(),
-                            file_type: extension,
-                        });
-                    }
+                    return Ok(Some(SelectedFile {
+                        name: filename_str,
+                        path: path_str,
+                        size: metadata.len(),
+                        file_type: extension,
+                    }));
                 }
             }
 
-            Ok(selected_files)
+            Err("Failed to read file metadata".to_string())
         }
-        None => Ok(Vec::new()), // User cancelled
+        None => Ok(None), // User cancelled
     }
 }
 

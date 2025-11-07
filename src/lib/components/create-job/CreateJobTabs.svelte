@@ -1,106 +1,109 @@
 <script lang="ts">
-  import type { NAMDConfig } from '../../types/api';
+    import { logger } from '$lib/utils/logger';
+import { invoke } from '@tauri-apps/api/core';
   import ResourcesTab from './ResourcesTab.svelte';
-  import ConfigurationTab from './ConfigurationTab.svelte';
-  import FilesTab from './FilesTab.svelte';
+  import ConfigureTab from './ConfigureTab.svelte';
   import ReviewTab from './ReviewTab.svelte';
 
-  export let job_name: string;
-
+  // Props from parent
+  export let jobName: string;
+  export let templateId: string;
+  export let templateValues: Record<string, any>;
   export let resourceConfig: {
     cores: number;
     memory: string;
-    wallTime: string;
+    walltime: string;
     partition: string;
     qos: string;
   };
-
-  export let uploadedFiles: { name: string; size: number; type: string; path: string }[];
-
-  export let namdConfig: NAMDConfig;
-
   export let errors: Record<string, string>;
-  export let selectedPresetId: string;
-  export let onPresetSelect: (preset: any) => void;
-  export let onPartitionChange: (partition: string) => void;
-  export let onQosChange: (qos: string) => void;
-  export let onFileUpload: () => void;
-  export let onRemoveFile: (index: number) => void;
-  export let formatFileSize: (bytes: number) => string;
   export let onSubmit: () => void;
   export let onCancel: () => void;
   export let isSubmitting: boolean = false;
-  export let uploadProgress: Map<string, { percentage: number }> = new Map();
+  export let uploadProgress: Map<string, { percentage: number }>;
 
-  type TabId = 'resources' | 'configuration' | 'files' | 'review';
+  type TabId = 'resources' | 'configure' | 'review';
 
   const tabs = [
     { id: 'resources', label: 'Resources' },
-    { id: 'configuration', label: 'Configuration' },
-    { id: 'files', label: 'Files' },
+    { id: 'configure', label: 'Configure' },
     { id: 'review', label: 'Review' }
   ];
 
   let activeTab: TabId = 'resources';
+  let validationTimer: number;
 
-  // UI-only validation (format checking only - business logic in backend)
-  function validateConfiguration() {
-    const newErrors: Record<string, string> = {};
-
-    // Basic format validation only - backend will do comprehensive validation
-    if (!resourceConfig.cores || resourceConfig.cores <= 0) {
-      newErrors.cores = "Cores is required";
-    }
-
-    if (!resourceConfig.memory || !resourceConfig.memory.trim()) {
-      newErrors.memory = "Memory is required";
-    }
-
-    if (!resourceConfig.wallTime || !/^\d{2}:\d{2}:\d{2}$/.test(resourceConfig.wallTime)) {
-      newErrors.wallTime = "Wall time must be in HH:MM:SS format";
-    }
-
-    if (!job_name.trim()) {
-      newErrors.job_name = "Job name is required";
-    }
-
-    if (!namdConfig.outputname.trim()) {
-      newErrors.outputname = "Output name is required";
-    }
-
-    // Note: Backend will validate:
-    // - Partition limits and resource constraints
-    // - File types and requirements
-    // - NAMD parameter ranges
-    // - QOS compatibility
-
-    errors = newErrors;
-    return Object.keys(newErrors).length === 0;
+  // Debounced backend validation - triggers on any input change
+  $: if (jobName || templateId || templateValues || resourceConfig) {
+    triggerValidation();
   }
 
-  // Run validation when switching to review tab
-  $: if (activeTab === 'review') {
-    validateConfiguration();
+  function triggerValidation() {
+    clearTimeout(validationTimer);
+    validationTimer = window.setTimeout(async () => {
+      await runBackendValidation();
+    }, 500);
+  }
+
+  async function runBackendValidation() {
+    try {
+      const result = await invoke('validate_job_config', {
+        job_name: jobName,
+        template_id: templateId,
+        template_values: templateValues,
+        cores: resourceConfig.cores,
+        memory: resourceConfig.memory,
+        walltime: resourceConfig.walltime,
+        partition: resourceConfig.partition || null,
+        qos: resourceConfig.qos || null
+      });
+
+      if (result.is_valid) {
+        errors = {};
+      } else {
+        // Parse errors to extract field-specific errors
+        const newErrors: Record<string, string> = {};
+        for (const error of result.errors) {
+          if (error.toLowerCase().includes('job name')) {
+            newErrors.job_name = error;
+          } else if (error.toLowerCase().includes('template')) {
+            newErrors.template = error;
+          } else if (error.toLowerCase().includes('cores')) {
+            newErrors.cores = error;
+          } else if (error.toLowerCase().includes('memory')) {
+            newErrors.memory = error;
+          } else if (error.toLowerCase().includes('wall time')) {
+            newErrors.walltime = error;
+          } else {
+            // Template variable errors - extract field name from "FieldLabel: error" format
+            const colonIndex = error.indexOf(':');
+            if (colonIndex > 0) {
+              const fieldLabel = error.substring(0, colonIndex).trim();
+              // Field errors will be handled by DynamicJobForm's validation display
+              if (!newErrors.general) {
+                newErrors.general = error;
+              }
+            } else {
+              newErrors.general = error;
+            }
+          }
+        }
+        errors = newErrors;
+      }
+    } catch (error) {
+      logger.error('[CreateJobTabs] Validation error:', error);
+    }
   }
 </script>
 
-<style>
-  /* All styling is handled by parent namd-card and namd-tabs classes in global CSS */
-</style>
-
 <div class="namd-tabs-container namd-card">
   <div class="namd-tabs-header">
-    <nav class="namd-tabs-nav namd-tabs-nav--grid namd-tabs-nav--grid-4">
+    <nav class="namd-tabs-nav namd-tabs-nav--grid namd-tabs-nav--grid-3">
       {#each tabs as tab}
         <button
           class="namd-tab-button"
           class:active={activeTab === tab.id}
-          on:click={() => {
-            activeTab = tab.id as TabId;
-            if (window.sshConsole) {
-              window.sshConsole.addDebug(`[USER] Switched to tab: ${tab.label}`);
-            }
-          }}
+          on:click={() => activeTab = tab.id as TabId}
         >
           {tab.label}
         </button>
@@ -110,42 +113,25 @@
 
   <div class="namd-tab-content">
     {#if activeTab === 'resources'}
-      <ResourcesTab
-        {resourceConfig}
-        {errors}
-        {selectedPresetId}
-        {onPresetSelect}
-        {onPartitionChange}
-        {onQosChange}
-      />
-    {:else if activeTab === 'configuration'}
-      <ConfigurationTab
-        bind:job_name
-        bind:namdConfig
-        {errors}
-      />
-    {:else if activeTab === 'files'}
-      <FilesTab
-        {uploadedFiles}
-        {errors}
-        {onFileUpload}
-        {onRemoveFile}
-        {formatFileSize}
-      />
+      <ResourcesTab bind:resourceConfig {errors} />
+    {:else if activeTab === 'configure'}
+      <ConfigureTab bind:jobName bind:templateId bind:templateValues {errors} />
     {:else if activeTab === 'review'}
       <ReviewTab
-        {job_name}
+        {jobName}
+        {templateId}
+        {templateValues}
         {resourceConfig}
-        {namdConfig}
-        {uploadedFiles}
         {errors}
-        {formatFileSize}
+        {uploadProgress}
         {onSubmit}
         {onCancel}
         {isSubmitting}
-        {uploadProgress}
       />
     {/if}
   </div>
 </div>
 
+<style>
+  /* All styling handled by global namd-tabs CSS */
+</style>

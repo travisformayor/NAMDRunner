@@ -1,6 +1,6 @@
 // Global type definitions for NAMDRunner
 
-interface SSHConsole {
+interface AppLogger {
   addCommand: (command: string) => void;
   addOutput: (output: string) => void;
   addDebug: (message: string) => void;
@@ -8,7 +8,7 @@ interface SSHConsole {
 
 declare global {
   interface Window {
-    sshConsole?: SSHConsole;
+    appLogger?: AppLogger;
   }
 }
 

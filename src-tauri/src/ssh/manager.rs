@@ -61,7 +61,7 @@ impl ConnectionManager {
     /// Check if there's an active connection
     pub async fn is_connected(&self) -> bool {
         let conn = self.connection.lock().await;
-        conn.as_ref().map_or(false, |c| c.is_connected())
+        conn.as_ref().is_some_and(|c| c.is_connected())
     }
 
     /// Get current connection information

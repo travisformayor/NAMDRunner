@@ -1,21 +1,34 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { isConnected } from '../../stores/session';
   import { lastSyncTime, hasEverSynced, isSyncing } from '../../stores/jobs';
-  import { CoreClientFactory } from '../../ports/clientFactory';
 
   let autoSync = false;
   let syncInterval = 5;
+  let currentTime = new Date();
+  let updateTimer: number;
 
   const dispatch = createEventDispatcher<{ sync: void }>();
+
+  // Update current time every 10 seconds to refresh relative time display
+  onMount(() => {
+    updateTimer = window.setInterval(() => {
+      currentTime = new Date();
+    }, 10000);
+  });
+
+  onDestroy(() => {
+    if (updateTimer) {
+      clearInterval(updateTimer);
+    }
+  });
 
   function handleSync() {
     if (!$isConnected || $isSyncing) return;
     dispatch('sync');
   }
 
-  function formatSyncTime(date: Date): string {
-    const now = new Date();
+  function formatSyncTime(date: Date, now: Date): string {
     const diffMs = now.getTime() - date.getTime();
     const diffSecs = Math.floor(diffMs / 1000);
     const diffMins = Math.floor(diffSecs / 60);
@@ -32,43 +45,25 @@
     }
   }
 
-  function getStatusText(): string {
-    const isDemoMode = CoreClientFactory.getUserMode() === 'demo';
-
-    if (isDemoMode) {
-      if ($isConnected) {
-        if ($hasEverSynced) {
-          return `Demo mode - sample data (last updated: ${formatSyncTime($lastSyncTime)})`;
-        } else {
-          return `Demo mode - sample data (not synced)`;
-        }
+  // Reactive status text updates when stores OR currentTime changes
+  $: statusText = (() => {
+    if ($isConnected) {
+      if ($hasEverSynced) {
+        return `Last synced: ${formatSyncTime($lastSyncTime, currentTime)}`;
       } else {
-        return `Demo mode - sample data (offline)`;
+        return `Not synced yet`;
       }
     } else {
-      if ($isConnected) {
-        if ($hasEverSynced) {
-          return `Last synced: ${formatSyncTime($lastSyncTime)}`;
-        } else {
-          return `Not synced yet`;
-        }
-      } else {
-        if ($hasEverSynced) {
-          return `Offline - showing cached data from ${$lastSyncTime.toLocaleString()}`;
-        } else {
-          return `Offline - no data synced`;
-        }
-      }
+      // Offline mode - show cached data message without timestamp
+      return `Offline - showing cached data`;
     }
-  }
-
-  $: statusText = getStatusText();
+  })();
 </script>
 
 <!-- Match React mockup: flex items-center justify-between -->
 <div class="sync-status">
   <div class="sync-left">
-    <span class="status-text" class:offline={!$isConnected && CoreClientFactory.getUserMode() !== 'demo'} class:demo={CoreClientFactory.getUserMode() === 'demo'}>
+    <span class="status-text" class:offline={!$isConnected}>
       {statusText}
     </span>
 
@@ -133,11 +128,6 @@
 
   .status-text.offline {
     color: var(--namd-text-muted);
-  }
-
-  .status-text.demo {
-    color: #f59e0b;
-    font-weight: var(--namd-font-weight-medium);
   }
 
   .sync-button {

@@ -3,7 +3,6 @@
   import { getStatusBadgeClass } from '../../../utils/file-helpers';
 
   export let job: JobInfo;
-  export let isDemoMode: boolean = false;
 
   // Reactive computed values for SLURM config
   $: slurmConfig = {
@@ -13,25 +12,21 @@
     partition: job.slurm_config.partition || 'N/A',
   };
 
+  // Extract key template values for display
+  $: steps = job.template_values?.steps || 0;
+  $: temperature = job.template_values?.temperature || 0;
+  $: timestep = job.template_values?.timestep || 0;
+
   function getSimulationProgress(): number {
     if (job.status === 'CREATED' || job.status === 'PENDING') return 0;
     if (job.status === 'COMPLETED') return 100;
-    // For running and failed jobs, we don't have real-time progress tracking yet
-    // Show a static value for demo/visual purposes only
-    if (isDemoMode) {
-      if (job.status === 'FAILED') return 75;
-      if (job.status === 'RUNNING') return 45;
-    }
-    return 0; // Real mode: progress tracking not yet implemented
+    // Real-time progress tracking not implemented yet
+    return 0;
   }
 
   function getCompletedSteps(): number {
-    const total = getTotalSteps();
+    const total = typeof steps === 'number' ? steps : 0;
     return Math.floor(total * (getSimulationProgress() / 100));
-  }
-
-  function getTotalSteps(): number {
-    return job.namd_config?.steps || 0;
   }
 
   function getEstimatedTimeRemaining(): string {
@@ -57,7 +52,7 @@
           <div class="progress-fill" style="width: {getSimulationProgress()}%"></div>
         </div>
         <div class="progress-details">
-          <span class="namd-text-sm">{getCompletedSteps().toLocaleString()} / {getTotalSteps().toLocaleString()} steps</span>
+          <span class="namd-text-sm">{getCompletedSteps().toLocaleString()} / {typeof steps === 'number' ? steps.toLocaleString() : '0'} steps</span>
           <span class="namd-text-sm">{getEstimatedTimeRemaining()}</span>
         </div>
       </div>
@@ -95,18 +90,130 @@
           <span class="info-value namd-status-badge {getStatusBadgeClass(job.status)}">{job.status}</span>
         </div>
         <div class="info-item">
-          <span class="info-label">Simulation Steps</span>
-          <span class="info-value">{job.namd_config.steps.toLocaleString()}</span>
+          <span class="info-label">Template</span>
+          <span class="info-value">{job.template_id || 'N/A'}</span>
         </div>
-        <div class="info-item">
-          <span class="info-label">Temperature</span>
-          <span class="info-value">{job.namd_config.temperature} K</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Timestep</span>
-          <span class="info-value">{job.namd_config.timestep} fs</span>
-        </div>
+        {#if typeof steps === 'number' && steps > 0}
+          <div class="info-item">
+            <span class="info-label">Simulation Steps</span>
+            <span class="info-value">{steps.toLocaleString()}</span>
+          </div>
+        {/if}
+        {#if typeof temperature === 'number' && temperature > 0}
+          <div class="info-item">
+            <span class="info-label">Temperature</span>
+            <span class="info-value">{temperature} K</span>
+          </div>
+        {/if}
+        {#if typeof timestep === 'number' && timestep > 0}
+          <div class="info-item">
+            <span class="info-label">Timestep</span>
+            <span class="info-value">{timestep} fs</span>
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Template Values -->
+    <div class="overview-section">
+      <h3>Template Configuration</h3>
+      <div class="template-values">
+        {#if job.template_values && Object.keys(job.template_values).length > 0}
+          <div class="info-grid">
+            {#each Object.entries(job.template_values) as [key, value]}
+              <div class="info-item">
+                <span class="info-label">{key}</span>
+                <span class="info-value">{typeof value === 'object' ? JSON.stringify(value) : value}</span>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="namd-text-sm">No template values available</p>
+        {/if}
       </div>
     </div>
   </div>
 </div>
+
+<style>
+  .namd-tab-panel {
+    padding: var(--namd-spacing-lg);
+  }
+
+  .overview-content {
+    max-width: 800px;
+  }
+
+  .overview-section {
+    margin-bottom: var(--namd-spacing-xl);
+  }
+
+  .overview-section h3 {
+    margin-bottom: var(--namd-spacing-md);
+    font-size: var(--namd-font-size-lg);
+    font-weight: var(--namd-font-weight-medium);
+  }
+
+  .progress-card {
+    background: var(--namd-bg-primary);
+    border: 1px solid var(--namd-border-color);
+    border-radius: var(--namd-border-radius-md);
+    padding: var(--namd-spacing-md);
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--namd-spacing-sm);
+  }
+
+  .progress-bar {
+    height: 8px;
+    background: var(--namd-bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: var(--namd-spacing-sm);
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--namd-primary);
+    transition: width 0.3s ease;
+  }
+
+  .progress-details {
+    display: flex;
+    justify-content: space-between;
+    color: var(--namd-text-secondary);
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--namd-spacing-md);
+  }
+
+  .info-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--namd-spacing-xs);
+  }
+
+  .info-label {
+    font-size: var(--namd-font-size-sm);
+    color: var(--namd-text-secondary);
+    font-weight: var(--namd-font-weight-medium);
+  }
+
+  .info-value {
+    font-size: var(--namd-font-size-md);
+    color: var(--namd-text-primary);
+  }
+
+  .template-values {
+    background: var(--namd-bg-primary);
+    border: 1px solid var(--namd-border-color);
+    border-radius: var(--namd-border-radius-md);
+    padding: var(--namd-spacing-md);
+  }
+</style>

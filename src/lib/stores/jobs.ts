@@ -1,11 +1,27 @@
+import { logger } from '$lib/utils/logger';
 import { writable, derived } from 'svelte/store';
 import type { JobInfo, JobStatus, CreateJobParams } from '../types/api';
 import { CoreClientFactory } from '../ports/clientFactory';
 import { listen } from '@tauri-apps/api/event';
-import { mockJobs as importedMockJobs } from '../test/fixtures/mockJobData';
+import { sessionActions } from './session';
 
-// Re-export mock jobs from centralized fixtures
-export const mockJobs = importedMockJobs;
+// Helper: Detect if error indicates connection failure
+function isConnectionError(errorMessage: string): boolean {
+  const msg = errorMessage.toLowerCase();
+  return msg.includes('timeout') ||
+         msg.includes('not connected') ||
+         msg.includes('connection') ||
+         msg.includes('broken pipe') ||
+         msg.includes('network') ||
+         msg.includes('ssh');
+}
+
+// Helper: Handle connection failure by updating session state
+function handleConnectionFailure(error: string) {
+  if (isConnectionError(error)) {
+    sessionActions.markExpired(error);
+  }
+}
 
 // Progress tracking interface
 interface JobProgress {
@@ -39,77 +55,67 @@ function createJobsStore() {
 
   return {
     subscribe,
+
+    // Load jobs from database (for offline/startup)
+    loadFromDatabase: async () => {
+      try {
+        const result = await CoreClientFactory.getClient().getAllJobs();
+
+        if (result.success && result.jobs) {
+          update(state => ({
+            ...state,
+            jobs: result.jobs || [],
+            hasEverSynced: result.jobs && result.jobs.length > 0
+          }));
+        }
+      } catch (error) {
+        logger.error('[Jobs] Failed to load from database:', error);
+      }
+    },
+
     // Sync with backend
     sync: async () => {
       // Log user action to SSH console
-      if (typeof window !== 'undefined' && window.sshConsole) {
-        window.sshConsole.addDebug('[SYNC] User clicked Sync Now button');
-      }
 
       // Set syncing state
       update(state => ({ ...state, isSyncing: true }));
 
-      const currentMode = CoreClientFactory.getUserMode();
-
       try {
-        if (currentMode === 'demo') {
-          // Demo mode: simulate sync but keep the same mockJobs for consistency
-          // Add a small delay to simulate network activity
-          await new Promise(resolve => setTimeout(resolve, 300));
+        // Call syncJobs to update job statuses from SLURM, then fetch updated jobs
 
+        const syncResult = await CoreClientFactory.getClient().syncJobs();
+
+        if (syncResult.success) {
+          // Pure caching - backend returns complete job list (discovery happens automatically if DB empty)
           update(state => ({
             ...state,
-            jobs: mockJobs, // Always use the same mockJobs in demo mode
+            jobs: syncResult.jobs || [],
             lastSyncTime: new Date(),
             hasEverSynced: true,
             isSyncing: false
           }));
-          // Demo mode: simulated sync completed
         } else {
-          // Real mode: Call syncJobs to update job statuses from SLURM, then fetch updated jobs
-          if (typeof window !== 'undefined' && window.sshConsole) {
-            window.sshConsole.addDebug('[SYNC] Starting job status sync with SLURM cluster');
-          }
+          // Sync failed - check if it's a connection error
+          const errorMsg = syncResult.errors.join(', ');
+          handleConnectionFailure(errorMsg);
 
-          const syncResult = await CoreClientFactory.getClient().syncJobs();
-
-          if (syncResult.success) {
-            // Pure caching - backend returns complete job list (discovery happens automatically if DB empty)
-            if (typeof window !== 'undefined' && window.sshConsole) {
-              window.sshConsole.addDebug(`[SYNC] Sync completed - ${syncResult.jobs_updated} job(s) updated, ${syncResult.jobs.length} total jobs`);
-            }
-
-            update(state => ({
-              ...state,
-              jobs: syncResult.jobs || [],
-              lastSyncTime: new Date(),
-              hasEverSynced: true,
-              isSyncing: false
-            }));
-          } else {
-            // Sync failed - log error and keep existing jobs
-            if (typeof window !== 'undefined' && window.sshConsole) {
-              window.sshConsole.addDebug(`[SYNC] Job sync failed: ${syncResult.errors.join(', ')}`);
-            }
-            update(state => ({
-              ...state,
-              lastSyncTime: new Date(),
-              hasEverSynced: true,
-              isSyncing: false
-            }));
-          }
+          update(state => ({
+            ...state,
+            lastSyncTime: new Date(),
+            hasEverSynced: true,
+            isSyncing: false
+          }));
         }
       } catch (error) {
-        // Keep existing jobs but update sync time on error
+        // Check if exception indicates connection failure
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        handleConnectionFailure(errorMsg);
+
         update(state => ({
           ...state,
           lastSyncTime: new Date(),
           isSyncing: false
         }));
-        // Sync error - maintaining existing jobs
-        if (typeof window !== 'undefined' && window.sshConsole) {
-          window.sshConsole.addDebug(`[JOBS] Sync error: ${error}`);
-        }
       }
     },
 
@@ -150,26 +156,26 @@ function createJobsStore() {
 
           return result;
         } else {
-          // Job creation failed - error shown in UI
-          if (typeof window !== 'undefined' && window.sshConsole) {
-            window.sshConsole.addDebug(`[JOBS] Job creation failed: ${result.error}`);
-          }
+          // Job creation failed - check for connection error
+          const errorMsg = result.error || 'Job creation failed';
+          handleConnectionFailure(errorMsg);
+
           update(state => ({
             ...state,
-            creationProgress: { message: `Job creation failed: ${result.error}`, isActive: false }
+            creationProgress: { message: `Job creation failed: ${errorMsg}`, isActive: false }
           }));
           return result;
         }
       } catch (error) {
-        // Job creation error - error shown in UI
-        if (typeof window !== 'undefined' && window.sshConsole) {
-          window.sshConsole.addDebug(`[JOBS] Job creation error: ${error}`);
-        }
+        // Job creation error - check for connection error
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        handleConnectionFailure(errorMsg);
+
         update(state => ({
           ...state,
           creationProgress: { message: 'Job creation failed due to unexpected error', isActive: false }
         }));
-        return { success: false, error: 'Job creation failed' };
+        return { success: false, error: errorMsg };
       } finally {
         // Clean up event listener
         unlisten();
@@ -218,23 +224,27 @@ function createJobsStore() {
             })
           }));
         } else {
+          // Submission failed - check for connection error
+          const errorMsg = result.error || 'Job submission failed';
+          handleConnectionFailure(errorMsg);
+
           update(state => ({
             ...state,
-            submissionProgress: { message: `Job submission failed: ${result.error}`, isActive: false }
+            submissionProgress: { message: `Job submission failed: ${errorMsg}`, isActive: false }
           }));
         }
 
         return result;
       } catch (error) {
-        // Job submission error - handled by UI state
-        if (typeof window !== 'undefined' && window.sshConsole) {
-          window.sshConsole.addDebug(`[JOBS] Job submission error: ${error}`);
-        }
+        // Job submission error - check for connection error
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        handleConnectionFailure(errorMsg);
+
         update(state => ({
           ...state,
           submissionProgress: { message: 'Job submission failed due to unexpected error', isActive: false }
         }));
-        return { success: false, error: 'Job submission failed' };
+        return { success: false, error: errorMsg };
       } finally {
         // Clean up event listener
         unlisten();
@@ -252,15 +262,19 @@ function createJobsStore() {
             ...state,
             jobs: state.jobs.filter(job => job.job_id !== job_id)
           }));
+        } else {
+          // Deletion failed - check for connection error
+          const errorMsg = result.error || 'Job deletion failed';
+          handleConnectionFailure(errorMsg);
         }
 
         return result;
       } catch (error) {
-        // Job deletion error - handled by UI state
-        if (typeof window !== 'undefined' && window.sshConsole) {
-          window.sshConsole.addDebug(`[JOBS] Job deletion error: ${error}`);
-        }
-        return { success: false, error: 'Job deletion failed' };
+        // Job deletion error - check for connection error
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        handleConnectionFailure(errorMsg);
+
+        return { success: false, error: errorMsg };
       }
     },
 
@@ -275,25 +289,23 @@ function createJobsStore() {
             ...state,
             jobs: state.jobs.map(job => job.job_id === job_id ? result.job_info as JobInfo : job)
           }));
+        } else {
+          // Status check failed - check for connection error
+          const errorMsg = result.error || 'Job status check failed';
+          handleConnectionFailure(errorMsg);
         }
 
         return result;
       } catch (error) {
-        // Job status check error - handled by UI state
-        return { success: false, error: 'Job status check failed' };
+        // Job status check error - check for connection error
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        handleConnectionFailure(errorMsg);
+        return { success: false, error: errorMsg };
       }
     },
 
-    // Reset to initial mock data
+    // Reset to initial state
     reset: () => set(initialJobsState),
-
-    // Load demo jobs for offline/demo mode
-    loadDemoJobs: () => update(state => ({
-      ...state,
-      jobs: mockJobs,
-      lastSyncTime: new Date(0), // Never synced - demo data
-      hasEverSynced: false,
-    })),
 
     // Clear all jobs
     clearJobs: () => update(state => ({

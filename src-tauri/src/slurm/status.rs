@@ -299,7 +299,7 @@ mod tests {
     fn test_batch_vs_individual_operations() {
         // Test business logic for choosing batch vs individual operations
         let empty_jobs: Vec<String> = vec![];
-        let single_job = vec!["12345".to_string()];
+        let single_job = ["12345".to_string()].to_vec();
         let multiple_jobs = vec!["12345".to_string(), "67890".to_string(), "11111".to_string()];
 
         // Empty job list should be handled efficiently

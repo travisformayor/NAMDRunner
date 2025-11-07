@@ -15,6 +15,7 @@ import { writable, derived, get } from 'svelte/store';
 import type { ClusterCapabilities, PartitionSpec, QosSpec, ValidationResult } from '../types/cluster';
 import type { GetClusterCapabilitiesResult } from '../types/api';
 import { CoreClientFactory } from '../ports/clientFactory';
+import { logger } from '../utils/logger';
 
 // Main store - holds full cluster capabilities from backend
 const clusterCapabilitiesStore = writable<ClusterCapabilities | null>(null);
@@ -25,27 +26,27 @@ const loadErrorStore = writable<string | null>(null);
  * Initialize cluster configuration - call once on app startup
  */
 export async function initClusterConfig(): Promise<void> {
-  if (typeof window !== 'undefined' && window.sshConsole) window.sshConsole.addDebug('[ClusterConfig] Init started');
+  logger.debug('ClusterConfig', 'Init started');
   try {
     loadErrorStore.set(null);
-    if (typeof window !== 'undefined' && window.sshConsole) window.sshConsole.addDebug('[ClusterConfig] Calling backend getClusterCapabilities...');
+    logger.debug('ClusterConfig', 'Calling backend getClusterCapabilities...');
     const result: GetClusterCapabilitiesResult = await CoreClientFactory.getClient().getClusterCapabilities();
-    if (typeof window !== 'undefined' && window.sshConsole) window.sshConsole.addDebug(`[ClusterConfig] Backend response: success=${result.success}, hasData=${!!result.data}`);
+    logger.debug('ClusterConfig', `Backend response: success=${result.success}, hasData=${!!result.data}`);
 
     if (result.success && result.data) {
-      if (typeof window !== 'undefined' && window.sshConsole) window.sshConsole.addDebug(`[ClusterConfig] Setting cluster capabilities: ${result.data.partitions.length} partitions, ${result.data.qos_options.length} QOS, ${result.data.job_presets.length} presets`);
+      logger.debug('ClusterConfig', `Setting cluster capabilities: ${result.data.partitions.length} partitions, ${result.data.qos_options.length} QOS, ${result.data.job_presets.length} presets`);
       clusterCapabilitiesStore.set(result.data);
       isLoadedStore.set(true);
-      if (typeof window !== 'undefined' && window.sshConsole) window.sshConsole.addDebug('[ClusterConfig] Cluster config loaded successfully');
+      logger.debug('ClusterConfig', 'Cluster config loaded successfully');
     } else {
       const error = result.error || 'Failed to load cluster configuration';
-      if (typeof window !== 'undefined' && window.sshConsole) window.sshConsole.addDebug(`[ClusterConfig] Backend returned error: ${error}`);
+      logger.debug('ClusterConfig', `Backend returned error: ${error}`);
       loadErrorStore.set(error);
       throw new Error(error);
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error loading cluster config';
-    if (typeof window !== 'undefined' && window.sshConsole) window.sshConsole.addDebug(`[ClusterConfig] Exception during init: ${errorMsg}`);
+    logger.debug('ClusterConfig', `Exception during init: ${errorMsg}`);
     loadErrorStore.set(errorMsg);
     throw error;
   }
@@ -94,7 +95,7 @@ export function getQosForPartitionStore(partitionId: string) {
       return $config.qos_options.filter(qos =>
         qos.valid_partitions.includes(partitionId)
       );
-    }
+}
   );
 }
 
@@ -139,9 +140,7 @@ export async function calculateJobCost(
   try {
     return await CoreClientFactory.getClient().calculateJobCost(cores, walltimeHours, hasGpu, gpuCount);
   } catch (error) {
-    if (typeof window !== 'undefined' && window.sshConsole) {
-      window.sshConsole.addDebug(`[ClusterConfig] Cost calculation failed: ${error}`);
-    }
+    logger.debug('ClusterConfig', `Cost calculation failed: ${error}`);
     return 0;
   }
 }
@@ -169,9 +168,7 @@ export async function suggestQos(walltimeHours: number, partitionId: string): Pr
   try {
     return await CoreClientFactory.getClient().suggestQosForPartition(walltimeHours, partitionId);
   } catch (error) {
-    if (typeof window !== 'undefined' && window.sshConsole) {
-      window.sshConsole.addDebug(`[ClusterConfig] QoS suggestion failed: ${error}`);
-    }
+    logger.debug('ClusterConfig', `QoS suggestion failed: ${error}`);
     // Fallback to default QoS
     const config = get(clusterCapabilitiesStore);
     const validQos = getQosForPartition(partitionId);
@@ -188,9 +185,7 @@ export async function estimateQueueTime(cores: number, partitionId: string): Pro
   try {
     return await CoreClientFactory.getClient().estimateQueueTimeForJob(cores, partitionId);
   } catch (error) {
-    if (typeof window !== 'undefined' && window.sshConsole) {
-      window.sshConsole.addDebug(`[ClusterConfig] Queue time estimation failed: ${error}`);
-    }
+    logger.debug('ClusterConfig', `Queue time estimation failed: ${error}`);
     return 'Unknown';
   }
 }
@@ -217,14 +212,12 @@ export async function validateResourceRequest(
       issues: ['Cluster configuration not loaded'],
       warnings: [],
       suggestions: []
-    };
+};
   }
 
   // Call backend validation - pass parameters as-is, no conversion
   try {
-    if (typeof window !== 'undefined' && window.sshConsole) {
-      window.sshConsole.addDebug(`[ClusterConfig] Calling backend validation: cores=${cores}, memory=${memory}, walltime=${walltime}, partition=${partitionId}, qos=${qosId}`);
-    }
+    logger.debug('ClusterConfig', `Calling backend validation: cores=${cores}, memory=${memory}, walltime=${walltime}, partition=${partitionId}, qos=${qosId}`);
     const result = await CoreClientFactory.getClient().validateResourceAllocation(
       cores,
       memory,
@@ -232,14 +225,10 @@ export async function validateResourceRequest(
       partitionId,
       qosId
     );
-    if (typeof window !== 'undefined' && window.sshConsole) {
-      window.sshConsole.addDebug(`[ClusterConfig] Backend validation result: is_valid=${result.is_valid}, issues=${JSON.stringify(result.issues)}`);
-    }
+    logger.debug('ClusterConfig', `Backend validation result: is_valid=${result.is_valid}, issues=${JSON.stringify(result.issues)}`);
     return result;
   } catch (error) {
-    if (typeof window !== 'undefined' && window.sshConsole) {
-      window.sshConsole.addDebug(`[ClusterConfig] Backend validation ERROR: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
-    }
+    logger.debug('ClusterConfig', `Backend validation ERROR: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
     return {
       is_valid: false,
       issues: ['Validation failed: ' + (error instanceof Error ? error.message : 'Unknown error')],

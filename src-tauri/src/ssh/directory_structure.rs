@@ -6,7 +6,6 @@
 /// - File operations use these paths for uploads/downloads
 ///
 /// Centralizing this knowledge prevents inconsistencies and makes the structure easy to change.
-
 /// Base directory name for all NAMDRunner jobs (relative to /projects/$USER/)
 pub const JOB_BASE_DIRECTORY: &str = "namdrunner_jobs";
 

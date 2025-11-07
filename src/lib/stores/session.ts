@@ -54,12 +54,8 @@ export const sessionActions = {
           lastError: null,
         }));
 
-        // Sync jobs after successful connection (but not in demo mode)
-        const currentMode = CoreClientFactory.getUserMode();
-        if (currentMode !== 'demo') {
-          await jobsStore.sync();
-        }
-        // In demo mode, keep the existing cached demo jobs
+        // Sync jobs after successful connection
+        await jobsStore.sync();
 
         return true;
       } else {
@@ -98,15 +94,8 @@ export const sessionActions = {
         lastError: result.error || null,
       }));
 
-      // Clear jobs when disconnecting, but keep demo jobs if in demo mode
-      const currentMode = CoreClientFactory.getUserMode();
-      if (currentMode === 'demo') {
-        // Keep demo jobs when disconnecting in demo mode
-        jobsStore.loadDemoJobs();
-      } else {
-        // Clear all jobs when disconnecting in real mode
-        jobsStore.reset();
-      }
+      // Keep cached jobs when disconnecting - allows offline viewing
+      // Jobs remain in store for offline access
 
       return result.success;
     } catch (error) {
@@ -141,6 +130,15 @@ export const sessionActions = {
     sessionStore.update((state) => ({
       ...state,
       lastError: null,
+    }));
+  },
+
+  // Mark connection as expired (called when connection failure detected)
+  markExpired(error: string): void {
+    sessionStore.update((state) => ({
+      ...state,
+      connectionState: 'Expired',
+      lastError: error,
     }));
   },
 

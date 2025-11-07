@@ -1,26 +1,17 @@
 <script lang="ts">
   import type { JobInfo } from '../../../types/api';
   import { getFileIcon, getTypeLabel, getTypeColor, getFileDescription, getFileExtension, formatFileSize } from '../../../utils/file-helpers';
-  import { CoreClientFactory } from '../../../ports/clientFactory';
   import { isConnected } from '../../../stores/session';
-  import { getMockOutputFiles } from '../../../test/fixtures/mockJobData';
 
   export let job: JobInfo;
-  export let isDemoMode: boolean = false;
-
-  // Get mock output files based on job status
-  $: mockOutputFiles = getMockOutputFiles(job.status);
 
   function getOutputFiles() {
-    if (isDemoMode) {
-      return mockOutputFiles;
-    }
-    // Real mode: use job.output_files from job info
+    // Use job.output_files from job info
     return job.output_files?.map(file => {
       const ext = getFileExtension(file.name);
       return {
         name: file.name,
-        path: `output_files/${file.name}`,
+        path: `outputs/${file.name}`,
         size: formatFileSize(file.size),
         type: ext,
         description: getFileDescription(ext),
@@ -35,27 +26,30 @@
   let downloadErrors = new Map<string, string>();
 
   async function downloadFile(file_path: string, file_name: string) {
+    // Clear previous error for this file (matches app pattern)
+    downloadErrors.delete(file_name);
+    downloadErrors = downloadErrors; // Trigger reactivity
+
     if (!$isConnected) {
       downloadErrors.set(file_name, 'Connect to server to download files');
-      setTimeout(() => downloadErrors.delete(file_name), 3000);
+      downloadErrors = downloadErrors; // Trigger reactivity
       return;
     }
 
     downloadingFiles.add(file_name);
     downloadingFiles = downloadingFiles; // Trigger reactivity
-    downloadErrors.delete(file_name);
 
     try {
       const result = await CoreClientFactory.getClient().downloadJobOutput(job.job_id, file_path);
 
       if (!result.success) {
         downloadErrors.set(file_name, result.error || 'Failed to download file');
-        setTimeout(() => downloadErrors.delete(file_name), 5000);
+        downloadErrors = downloadErrors; // Trigger reactivity
       }
       // Success - file was saved to user's chosen location via native dialog
     } catch (error) {
       downloadErrors.set(file_name, error instanceof Error ? error.message : 'Download failed');
-      setTimeout(() => downloadErrors.delete(file_name), 5000);
+      downloadErrors = downloadErrors; // Trigger reactivity
     } finally {
       downloadingFiles.delete(file_name);
       downloadingFiles = downloadingFiles; // Trigger reactivity
@@ -66,26 +60,25 @@
   let downloadAllError = '';
 
   async function downloadAllOutputs() {
+    // Clear previous error (matches app pattern)
+    downloadAllError = '';
+
     if (!$isConnected) {
       downloadAllError = 'Connect to server to download files';
-      setTimeout(() => downloadAllError = '', 3000);
       return;
     }
 
     isDownloadingAll = true;
-    downloadAllError = '';
 
     try {
       const result = await CoreClientFactory.getClient().downloadAllOutputs(job.job_id);
 
       if (!result.success) {
         downloadAllError = result.error || 'Failed to download output files';
-        setTimeout(() => downloadAllError = '', 5000);
       }
       // Success - zip file was saved to user's chosen location via native dialog
     } catch (error) {
       downloadAllError = error instanceof Error ? error.message : 'Download failed';
-      setTimeout(() => downloadAllError = '', 5000);
     } finally {
       isDownloadingAll = false;
     }

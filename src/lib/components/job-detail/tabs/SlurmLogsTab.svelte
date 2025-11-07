@@ -1,11 +1,8 @@
 <script lang="ts">
   import type { JobInfo } from '../../../types/api';
-  import { CoreClientFactory } from '../../../ports/clientFactory';
   import { isConnected } from '../../../stores/session';
-  import { mockStdout, mockStderr } from '../../../test/fixtures/mockJobData';
 
   export let job: JobInfo;
-  export let isDemoMode: boolean = false;
 
   let activeLogTab: 'stdout' | 'stderr' = 'stdout';
   let isRefetchingLogs = false;
@@ -16,11 +13,7 @@
       return 'Logs will be available once the job starts running.';
     }
 
-    if (isDemoMode) {
-      return mockStdout;
-    }
-
-    // Real mode: use cached logs from database
+    // Use cached logs from database
     if (job.slurm_stdout !== undefined && job.slurm_stdout !== null) {
       return job.slurm_stdout || '(No output)';
     }
@@ -33,11 +26,7 @@
       return 'Logs will be available once the job starts running.';
     }
 
-    if (isDemoMode) {
-      return mockStderr;
-    }
-
-    // Real mode: use cached logs from database
+    // Use cached logs from database
     if (job.slurm_stderr !== undefined && job.slurm_stderr !== null) {
       return job.slurm_stderr || '(No errors)';
     }

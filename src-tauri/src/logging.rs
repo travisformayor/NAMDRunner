@@ -17,12 +17,7 @@ pub struct TauriLogger {
     app_handle: Option<AppHandle>,
 }
 
-#[allow(dead_code)]
 impl TauriLogger {
-    pub fn new() -> Self {
-        Self { app_handle: None }
-    }
-
     pub fn set_app_handle(&mut self, app_handle: AppHandle) {
         self.app_handle = Some(app_handle);
     }

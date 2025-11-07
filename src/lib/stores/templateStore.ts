@@ -118,7 +118,7 @@ export async function updateTemplate(templateId: string, template: Template): Pr
   templatesError.set(null);
 
   try {
-    const result = await invoke<UpdateTemplateResult>('update_template', { templateId, template });
+    const result = await invoke<UpdateTemplateResult>('update_template', { template_id: templateId, template });
 
     if (result.success) {
       // Reload templates to get updated list
@@ -181,7 +181,7 @@ export async function validateTemplateValues(
 ): Promise<{ valid: boolean; errors: string[] }> {
   try {
     const result = await invoke<ValidateTemplateValuesResult>('validate_template_values', {
-      templateId,
+      template_id: templateId,
       values
     });
 

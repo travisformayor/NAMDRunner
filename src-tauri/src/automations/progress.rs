@@ -1,6 +1,5 @@
 /// Structured progress reporting for automation workflows
 /// Provides detailed progress information with percentages and step tracking
-
 use serde::{Deserialize, Serialize};
 
 /// Structured progress information for automation workflows
@@ -49,13 +48,13 @@ impl ProgressInfo {
     /// Create progress with sub-step progress
     pub fn with_sub_progress(step: &str, current_step: u32, total_steps: u32, sub_progress: f32) -> Self {
         let mut progress = Self::new(step, current_step, total_steps);
-        progress.sub_progress = Some(sub_progress.min(100.0).max(0.0));
+        progress.sub_progress = Some(sub_progress.clamp(0.0, 100.0));
         progress
     }
 
     /// Update the sub-progress for the current step
     pub fn update_sub_progress(&mut self, sub_progress: f32) {
-        self.sub_progress = Some(sub_progress.min(100.0).max(0.0));
+        self.sub_progress = Some(sub_progress.clamp(0.0, 100.0));
     }
 
     /// Update the message for the current step

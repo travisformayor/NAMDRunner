@@ -73,7 +73,7 @@ pub fn run() {
             commands::jobs::discover_jobs_from_server,
             // File management
             commands::files::detect_file_type,
-            commands::files::select_input_files,
+            commands::files::select_input_file,
             commands::files::upload_job_files,
             commands::files::download_job_output,
             commands::files::download_all_outputs,

@@ -50,7 +50,7 @@ impl MockFileSystem {
                 .unwrap_or(path);
 
             self.directories.entry(parent_str.to_string())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(filename.to_string());
         }
 
@@ -77,7 +77,7 @@ impl MockFileSystem {
                 .unwrap_or(path);
 
             self.directories.entry(parent_str.to_string())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(dirname.to_string());
         }
 
@@ -134,6 +134,12 @@ impl MockFileSystem {
 pub struct MockCommandExecutor {
     pub predefined_responses: HashMap<String, CommandResult>,
     pub default_response: CommandResult,
+}
+
+impl Default for MockCommandExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockCommandExecutor {
