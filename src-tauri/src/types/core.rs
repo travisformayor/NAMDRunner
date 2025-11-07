@@ -96,7 +96,7 @@ impl NAMDFileType {
     /// Detect file type from filename (source of truth for type detection)
     pub fn from_filename(filename: &str) -> Self {
         let lower = filename.to_lowercase();
-        let ext = lower.split('.').last().unwrap_or("");
+        let ext = lower.split('.').next_back().unwrap_or("");
 
         match ext {
             "pdb" => Self::Pdb,
@@ -132,92 +132,19 @@ pub struct JobInfo {
     pub error_info: Option<String>,
     pub slurm_stdout: Option<String>,
     pub slurm_stderr: Option<String>,
-    pub namd_config: NAMDConfig,
+
+    // Template-based configuration (replaces NAMDConfig)
+    pub template_id: String,
+    pub template_values: std::collections::HashMap<String, serde_json::Value>,
+
     pub slurm_config: SlurmConfig,
-    pub input_files: Vec<InputFile>,
     pub output_files: Option<Vec<OutputFile>>,
     pub remote_directory: String,
 }
 
-impl JobInfo {
-    /// Create a new JobInfo with default timestamps
-    pub fn new(
-        job_id: String,
-        job_name: String,
-        namd_config: NAMDConfig,
-        slurm_config: SlurmConfig,
-        input_files: Vec<InputFile>,
-        remote_directory: String,
-    ) -> Self {
-        Self {
-            job_id,
-            job_name,
-            status: JobStatus::Created,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: None,
-            submitted_at: None,
-            completed_at: None,
-            slurm_job_id: None,
-            project_dir: None,
-            scratch_dir: None,
-            error_info: None,
-            slurm_stdout: None,
-            slurm_stderr: None,
-            namd_config,
-            slurm_config,
-            input_files,
-            output_files: None,
-            remote_directory,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NAMDConfig {
-    // Basic simulation parameters
-    pub outputname: String,
-    pub temperature: f64,
-    pub timestep: f64,
-
-    // Execution mode and steps
-    pub execution_mode: ExecutionMode,  // minimize or run
-    pub steps: u32,  // minimize steps or run steps depending on mode
-
-    // Periodic boundary conditions (required for PME)
-    pub cell_basis_vector1: Option<CellBasisVector>,
-    pub cell_basis_vector2: Option<CellBasisVector>,
-    pub cell_basis_vector3: Option<CellBasisVector>,
-
-    // Electrostatics and ensemble
-    pub pme_enabled: bool,
-    pub npt_enabled: bool,
-
-    // Langevin dynamics parameters
-    pub langevin_damping: f64,
-
-    // Output frequencies (all required, no Option)
-    pub xst_freq: u32,
-    pub output_energies_freq: u32,
-    pub dcd_freq: u32,
-    pub restart_freq: u32,
-    pub output_pressure_freq: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ExecutionMode {
-    #[serde(rename = "minimize")]
-    Minimize,
-    #[serde(rename = "run")]
-    Run,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CellBasisVector {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
+// JobInfo has no custom constructor - construct directly using struct literal syntax
+// or let serde handle deserialization from JSON/database
+// For creating new jobs with business logic, use `crate::automations::job_creation::create_job_info()`
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlurmConfig {
@@ -228,27 +155,64 @@ pub struct SlurmConfig {
     pub qos: Option<String>,
 }
 
-// Default configuration constants for database persistence
-impl Default for NAMDConfig {
-    fn default() -> Self {
-        Self {
-            outputname: "output".to_string(),
-            temperature: 300.0,
-            timestep: 2.0,
-            execution_mode: ExecutionMode::Run,
-            steps: 10000,
-            cell_basis_vector1: None,
-            cell_basis_vector2: None,
-            cell_basis_vector3: None,
-            pme_enabled: false,
-            npt_enabled: false,
-            langevin_damping: 5.0,
-            xst_freq: 1200,
-            output_energies_freq: 1200,
-            dcd_freq: 1200,
-            restart_freq: 1200,
-            output_pressure_freq: 1200,
+impl SlurmConfig {
+    /// Parse memory string to GB (e.g., "16GB", "32", "2048MB")
+    pub fn parse_memory_gb(&self) -> anyhow::Result<f64> {
+        let clean = self.memory.trim().to_lowercase();
+
+        if clean.is_empty() {
+            return Err(anyhow::anyhow!("Memory value is required"));
         }
+
+        // Try to extract number and unit
+        let re = regex::Regex::new(r"^(\d+(?:\.\d+)?)\s*(gb|g|mb|m)?$").unwrap();
+
+        if let Some(captures) = re.captures(&clean) {
+            let value: f64 = captures.get(1)
+                .ok_or_else(|| anyhow::anyhow!("Invalid memory format"))?
+                .as_str()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Invalid memory number"))?;
+
+            let unit = captures.get(2).map(|m| m.as_str()).unwrap_or("gb");
+
+            match unit {
+                "gb" | "g" | "" => Ok(value),
+                "mb" | "m" => Ok(value / 1024.0),
+                _ => Err(anyhow::anyhow!("Unsupported memory unit: {}", unit)),
+            }
+        } else {
+            Err(anyhow::anyhow!("Invalid memory format: {}. Use format like '16GB', '32', or '2048MB'", self.memory))
+        }
+    }
+
+    /// Parse walltime string to hours (e.g., "24:00:00", "04:30:00")
+    pub fn parse_walltime_hours(&self) -> anyhow::Result<f64> {
+        if self.walltime.trim().is_empty() {
+            return Err(anyhow::anyhow!("Walltime is required"));
+        }
+
+        let parts: Vec<&str> = self.walltime.split(':').collect();
+
+        if parts.len() != 3 {
+            return Err(anyhow::anyhow!("Walltime must be in HH:MM:SS format (e.g., '24:00:00')"));
+        }
+
+        let hours: u32 = parts[0].parse()
+            .map_err(|_| anyhow::anyhow!("Invalid hours in walltime"))?;
+        let minutes: u32 = parts[1].parse()
+            .map_err(|_| anyhow::anyhow!("Invalid minutes in walltime"))?;
+        let seconds: u32 = parts[2].parse()
+            .map_err(|_| anyhow::anyhow!("Invalid seconds in walltime"))?;
+
+        if minutes >= 60 {
+            return Err(anyhow::anyhow!("Minutes must be less than 60"));
+        }
+        if seconds >= 60 {
+            return Err(anyhow::anyhow!("Seconds must be less than 60"));
+        }
+
+        Ok(hours as f64 + (minutes as f64 / 60.0) + (seconds as f64 / 3600.0))
     }
 }
 
@@ -262,16 +226,6 @@ impl Default for SlurmConfig {
             qos: None,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InputFile {
-    pub name: String,
-    pub local_path: String,
-    pub remote_name: Option<String>,
-    pub file_type: Option<NAMDFileType>,
-    pub size: Option<u64>,
-    pub uploaded_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -302,14 +256,6 @@ pub struct RemoteFile {
     pub size: u64,
     pub modified_at: String,
     pub file_type: FileType,
-}
-
-/// Command execution result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommandResult {
-    pub stdout: String,
-    pub stderr: String,
-    pub exit_code: i32,
 }
 
 /// Connection status response

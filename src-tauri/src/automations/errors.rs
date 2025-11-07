@@ -1,6 +1,5 @@
 /// Typed error system for automation workflows
 /// Provides structured error handling with user-friendly messages and recovery suggestions
-
 use anyhow::Result;
 use std::fmt;
 

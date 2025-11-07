@@ -64,7 +64,7 @@ impl<'a> CommandExecutor<'a> {
 
         let timed_out = read_result.is_err();
 
-        if let Err(_) = read_result {
+        if read_result.is_err() {
             return Err(SSHError::TimeoutError(
                 format!("Command timed out after {} seconds", self.timeout.as_secs())
             ).into());
@@ -172,6 +172,38 @@ impl<'a> CommandExecutor<'a> {
     }
 }
 
+/// Generate a zip command for archiving output files
+/// Creates zip in /tmp/ and returns the temp file path
+pub fn zip_outputs_command(project_dir: &str, job_id: &str) -> Result<(String, String)> {
+    use crate::validation::shell;
+
+    // Validate inputs
+    let clean_project_dir = shell::escape_parameter(project_dir);
+    let clean_job_id = shell::escape_parameter(job_id);
+
+    // Temp zip file path
+    let temp_zip = format!("/tmp/namdrunner_outputs_{}.zip", clean_job_id);
+    let clean_temp_zip = shell::escape_parameter(&temp_zip);
+
+    // Build command: cd to job dir and zip outputs subdirectory
+    let command = format!(
+        "cd {} && zip -r {} {}",
+        clean_project_dir,
+        clean_temp_zip,
+        shell::escape_parameter(super::JobDirectoryStructure::OUTPUTS)
+    );
+
+    Ok((command, temp_zip))
+}
+
+/// Generate a command to remove a temporary file
+pub fn remove_temp_file_command(file_path: &str) -> Result<String> {
+    use crate::validation::shell;
+
+    let clean_path = shell::escape_parameter(file_path);
+    Ok(format!("rm -f {}", clean_path))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,36 +252,4 @@ mod tests {
         assert!(quick_result.duration_ms < 1000);
         assert!(!quick_result.timed_out);
     }
-}
-
-/// Generate a zip command for archiving output files
-/// Creates zip in /tmp/ and returns the temp file path
-pub fn zip_outputs_command(project_dir: &str, job_id: &str) -> Result<(String, String)> {
-    use crate::validation::shell;
-
-    // Validate inputs
-    let clean_project_dir = shell::escape_parameter(project_dir);
-    let clean_job_id = shell::escape_parameter(job_id);
-
-    // Temp zip file path
-    let temp_zip = format!("/tmp/namdrunner_outputs_{}.zip", clean_job_id);
-    let clean_temp_zip = shell::escape_parameter(&temp_zip);
-
-    // Build command: cd to job dir and zip outputs subdirectory
-    let command = format!(
-        "cd {} && zip -r {} {}",
-        clean_project_dir,
-        clean_temp_zip,
-        shell::escape_parameter(super::JobDirectoryStructure::OUTPUTS)
-    );
-
-    Ok((command, temp_zip))
-}
-
-/// Generate a command to remove a temporary file
-pub fn remove_temp_file_command(file_path: &str) -> Result<String> {
-    use crate::validation::shell;
-
-    let clean_path = shell::escape_parameter(file_path);
-    Ok(format!("rm -f {}", clean_path))
 }

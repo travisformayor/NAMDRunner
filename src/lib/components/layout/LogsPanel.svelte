@@ -30,7 +30,7 @@
 
   // Export functions globally so other components can use them
   if (typeof window !== 'undefined') {
-    window.sshConsole = {
+    window.appLogger = {
       addCommand: addSSHCommandEntry,
       addOutput: addSSHOutputEntry,
       addDebug: addDebugEntry
@@ -93,7 +93,7 @@
       <svg class="chevron-up" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="18,15 12,9 6,15"></polyline>
       </svg>
-      SSH Console
+      Logs
     </button>
   </div>
 {:else}
@@ -105,7 +105,7 @@
         <svg class="chevron-down" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6,9 12,15 18,9"></polyline>
         </svg>
-        <span class="console-title">SSH Console</span>
+        <span class="console-title">Logs</span>
       </button>
 
       <div class="console-actions">
@@ -253,12 +253,12 @@
   }
 
   .output-line.app-debug {
-    color: #6b7280;
+    color: var(--namd-text-secondary);
     font-size: 0.9em;
   }
 
   .timestamp {
-    color: #9ca3af;
+    color: var(--namd-text-muted);
     font-size: 0.85em;
     flex-shrink: 0;
   }

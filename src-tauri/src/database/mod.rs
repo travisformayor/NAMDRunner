@@ -1,11 +1,13 @@
 use rusqlite::Connection;
 use crate::types::JobInfo;
+use crate::templates::{Template, TemplateSummary};
 use anyhow::{Result, anyhow};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use crate::info_log;
 
-/// Simple document-store database for job caching
-/// Stores entire JobInfo as JSON - no complex schema, no migrations needed
+/// Simple document-store database for jobs and templates
+/// Stores JobInfo and Template as JSON - no complex schema, no migrations needed
 #[derive(Clone)]
 pub struct JobDatabase {
     conn: Arc<Mutex<Connection>>,
@@ -25,7 +27,7 @@ impl JobDatabase {
 
     fn initialize_schema(conn: &Connection) -> Result<()> {
         conn.execute_batch(r#"
-            -- Simple two-column document store
+            -- Jobs table - stores JobInfo as JSON
             CREATE TABLE IF NOT EXISTS jobs (
                 job_id TEXT PRIMARY KEY,
                 data TEXT NOT NULL
@@ -34,6 +36,18 @@ impl JobDatabase {
             -- Index on status for filtering (uses JSON extraction)
             CREATE INDEX IF NOT EXISTS idx_jobs_status
             ON jobs(json_extract(data, '$.status'));
+
+            -- Templates table - stores Template as JSON
+            CREATE TABLE IF NOT EXISTS templates (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                namd_config_template TEXT NOT NULL,
+                variables TEXT NOT NULL,
+                is_builtin INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
         "#)?;
         Ok(())
     }
@@ -100,19 +114,182 @@ impl JobDatabase {
 
         Ok(rows_affected > 0)
     }
+
+    // Template CRUD operations
+
+    pub fn save_template(&self, template: &Template) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Serialize variables to JSON
+        let variables_json = serde_json::to_string(&template.variables)?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO templates (id, name, description, namd_config_template, variables, is_builtin, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                &template.id,
+                &template.name,
+                &template.description,
+                &template.namd_config_template,
+                &variables_json,
+                &template.is_builtin,
+                &template.created_at,
+                &template.updated_at,
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn load_template(&self, id: &str) -> Result<Option<Template>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT id, name, description, namd_config_template, variables, is_builtin, created_at, updated_at FROM templates WHERE id = ?1"
+        )?;
+
+        let mut rows = stmt.query([id])?;
+
+        if let Some(row) = rows.next()? {
+            let id: String = row.get(0)?;
+            let name: String = row.get(1)?;
+            let description: String = row.get(2)?;
+            let namd_config_template: String = row.get(3)?;
+            let variables_json: String = row.get(4)?;
+            let is_builtin_int: i32 = row.get(5)?;
+            let created_at: String = row.get(6)?;
+            let updated_at: String = row.get(7)?;
+
+            let variables = serde_json::from_str(&variables_json)?;
+            let is_builtin = is_builtin_int != 0;
+
+            Ok(Some(Template {
+                id,
+                name,
+                description,
+                namd_config_template,
+                variables,
+                is_builtin,
+                created_at,
+                updated_at,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn list_templates(&self) -> Result<Vec<TemplateSummary>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT id, name, description, is_builtin FROM templates ORDER BY name"
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            let is_builtin_int: i32 = row.get(3)?;
+            Ok(TemplateSummary {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                is_builtin: is_builtin_int != 0,
+            })
+        })?;
+
+        let mut templates = Vec::new();
+        for row_result in rows {
+            templates.push(row_result?);
+        }
+
+        Ok(templates)
+    }
+
+    pub fn delete_template(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        let rows_affected = conn.execute(
+            "DELETE FROM templates WHERE id = ?1",
+            [id],
+        )?;
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Count how many jobs use a specific template
+    pub fn count_jobs_using_template(&self, template_id: &str) -> Result<u32> {
+        let conn = self.conn.lock().unwrap();
+
+        // Jobs stored as JSON - use json_extract to query template_id field
+        let count: u32 = conn.query_row(
+            "SELECT COUNT(*) FROM jobs WHERE json_extract(data, '$.template_id') = ?1",
+            [template_id],
+            |row| row.get(0),
+        )?;
+
+        Ok(count)
+    }
 }
 
 // Thread-safe global database instance
 use lazy_static::lazy_static;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 lazy_static! {
     static ref DATABASE: Arc<Mutex<Option<JobDatabase>>> = Arc::new(Mutex::new(None));
 }
 
+// Track if we've attempted to load default templates this session
+static DEFAULTS_LOADED: AtomicBool = AtomicBool::new(false);
+
 pub fn initialize_database(db_path: &str) -> Result<()> {
     let db = JobDatabase::new(db_path)?;
+
     let mut database_lock = DATABASE.lock().unwrap();
     *database_lock = Some(db);
+    Ok(())
+}
+
+/// Ensure default templates are loaded (idempotent - safe to call multiple times)
+/// Called on first template list to ensure defaults exist
+/// Uses atomic flag to only attempt loading once per app session
+pub fn ensure_default_templates_loaded() -> Result<()> {
+    // Check if we've already attempted to load defaults this session
+    if DEFAULTS_LOADED.load(Ordering::Relaxed) {
+        // Already loaded (or attempted) this session
+        return Ok(());
+    }
+
+    // Mark as attempted (do this first to prevent concurrent loads)
+    DEFAULTS_LOADED.store(true, Ordering::Relaxed);
+
+    // Load defaults from JSON files
+    info_log!("[Templates] First template access - checking for default templates");
+    with_database(load_default_templates)
+}
+
+/// Load default templates embedded in the binary at compile time
+fn load_default_templates(db: &JobDatabase) -> Result<()> {
+    // Embed template JSON files at compile time using include_str!
+    // Path is relative to this file: src-tauri/src/database/mod.rs
+    // Templates are at: src-tauri/templates/
+    const TEMPLATE_FILES: &[(&str, &str)] = &[
+        ("vacuum_optimization_v1", include_str!("../../templates/vacuum_optimization_v1.json")),
+        ("explicit_solvent_npt_v1", include_str!("../../templates/explicit_solvent_npt_v1.json")),
+    ];
+
+    info_log!("[Templates] Loading {} default template(s) from embedded data", TEMPLATE_FILES.len());
+
+    for (template_id, json_content) in TEMPLATE_FILES {
+        // Parse template JSON
+        let template: Template = serde_json::from_str(json_content)
+            .map_err(|e| anyhow!("Failed to parse embedded template {}: {}", template_id, e))?;
+
+        // Check if template already exists in database
+        if db.load_template(&template.id)?.is_none() {
+            // Template doesn't exist, insert it
+            db.save_template(&template)?;
+            info_log!("[Templates] Loaded: {}", template.name);
+        }
+    }
+
     Ok(())
 }
 

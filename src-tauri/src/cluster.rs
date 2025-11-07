@@ -8,7 +8,6 @@
 /// This module consolidates what was previously split between cluster_config.rs
 /// and config.rs into a unified ClusterProfile concept, making the system
 /// ready for future multi-cluster support while keeping current implementation simple.
-
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 
@@ -929,7 +928,7 @@ mod tests {
 
         // With GPU: (64 cores * 24 hours) + (1 GPU * 24 hours * 108.2) = 1536 + 2596.8 = 4133
         let cost = calculate_job_cost(64, 24.0, true, 1);
-        assert!(cost >= 4130 && cost <= 4140);
+        assert!((4130..=4140).contains(&cost));
     }
 
     #[test]

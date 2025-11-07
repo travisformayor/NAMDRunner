@@ -7,7 +7,7 @@
     id: string;
     label: string;
     icon: string;
-    view: 'jobs' | 'create';
+    view: 'jobs' | 'create' | 'templates';
     disabled?: boolean;
     badge?: string | number;
   }
@@ -26,6 +26,12 @@
       icon: 'plus',
       view: 'create' as const,
       disabled: !$isConnected
+    },
+    {
+      id: 'templates',
+      label: 'Templates',
+      icon: 'template',
+      view: 'templates' as const
     }
   ] as NavItem[];
 
@@ -45,6 +51,13 @@
         return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>`;
+      case 'template':
+        return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="9" y1="9" x2="15" y2="9"></line>
+                  <line x1="9" y1="13" x2="15" y2="13"></line>
+                  <line x1="9" y1="17" x2="13" y2="17"></line>
                 </svg>`;
       default:
         return '';
@@ -133,13 +146,19 @@
     justify-content: flex-start;
   }
 
-  .nav-item:hover:not(.disabled) {
+  .nav-item:hover:not(.disabled):not(.active) {
     background-color: var(--namd-sidebar-hover);
+    color: var(--namd-sidebar-hover-fg);
   }
 
   .nav-item.active {
     background-color: var(--namd-sidebar-active);
     color: var(--namd-sidebar-active-fg);
+  }
+
+  .nav-item.active:hover {
+    background-color: var(--namd-sidebar-active-hover);
+    color: var(--namd-sidebar-active-hover-fg);
   }
 
   .nav-item.disabled {

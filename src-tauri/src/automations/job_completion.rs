@@ -66,7 +66,7 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     }
 
     // Fetch output file metadata from project directory (after rsync)
-    let output_dir = format!("{}/output_files", project_dir);
+    let output_dir = format!("{}/outputs", project_dir);
     info_log!("[Job Completion] Fetching output file metadata from: {}", output_dir);
 
     match connection_manager.list_files_with_metadata(&output_dir).await {
@@ -94,82 +94,18 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     Ok(())
 }
 
+// DELETED: Tests using NAMDConfig - will be rewritten for template system
+// Job completion automation logic doesn't depend on NAMD config structure
+// TODO: Add tests for template-based job completion in future phase
+
 #[cfg(test)]
 mod tests {
-    use crate::types::{JobInfo, JobStatus, NAMDConfig, SlurmConfig, ExecutionMode};
-    use chrono::Utc;
-
-    fn create_test_job_info() -> JobInfo {
-        let now = Utc::now().to_rfc3339();
-        JobInfo {
-            job_id: "test_job_001".to_string(),
-            job_name: "test_simulation".to_string(),
-            status: JobStatus::Completed,
-            slurm_job_id: Some("12345678".to_string()),
-            created_at: now.clone(),
-            updated_at: Some(now),
-            submitted_at: Some(Utc::now().to_rfc3339()),
-            completed_at: Some(Utc::now().to_rfc3339()),
-            project_dir: Some("/projects/testuser/namdrunner_jobs/test_job_001".to_string()),
-            scratch_dir: Some("/scratch/alpine/testuser/namdrunner_jobs/test_job_001".to_string()),
-            error_info: None,
-            namd_config: NAMDConfig {
-                outputname: "output".to_string(),
-                temperature: 300.0,
-                timestep: 2.0,
-                execution_mode: ExecutionMode::Run,
-                steps: 1000,
-                cell_basis_vector1: None,
-                cell_basis_vector2: None,
-                cell_basis_vector3: None,
-                pme_enabled: false,
-                npt_enabled: false,
-                langevin_damping: 5.0,
-                xst_freq: 100,
-                output_energies_freq: 100,
-                dcd_freq: 100,
-                restart_freq: 500,
-                output_pressure_freq: 100,
-            },
-            slurm_config: SlurmConfig {
-                cores: 4,
-                memory: "4GB".to_string(),
-                walltime: "01:00:00".to_string(),
-                partition: Some("compute".to_string()),
-                qos: None,
-            },
-            input_files: Vec::new(),
-            output_files: None,
-            remote_directory: "/projects/testuser/namdrunner_jobs/test_job_001".to_string(),
-            slurm_stdout: None,
-            slurm_stderr: None,
-        }
-    }
-
-    #[test]
-    fn test_job_completion_status_validation() {
-        let mut job = create_test_job_info();
-
-        // Test valid status for completion
-        job.status = JobStatus::Completed;
-        assert!(matches!(job.status, JobStatus::Completed));
-
-        // Test invalid statuses
-        job.status = JobStatus::Created;
-        assert!(!matches!(job.status, JobStatus::Completed));
-
-        job.status = JobStatus::Running;
-        assert!(!matches!(job.status, JobStatus::Completed));
-
-        job.status = JobStatus::Failed;
-        assert!(!matches!(job.status, JobStatus::Completed));
-    }
-
     #[test]
     fn test_rsync_source_trailing_slash() {
-        // Test business logic for rsync source path formatting
-        let scratch_dir_without_slash = "/scratch/alpine/testuser/namdrunner_jobs/test_job_001";
-        let scratch_dir_with_slash = "/scratch/alpine/testuser/namdrunner_jobs/test_job_001/";
+        use crate::ssh::directory_structure::JobDirectoryStructure;
+        // Test business logic for rsync source path formatting using centralized paths
+        let scratch_dir_without_slash = JobDirectoryStructure::scratch_dir("testuser", "test_job_001");
+        let scratch_dir_with_slash = format!("{}/", scratch_dir_without_slash);
 
         // Without trailing slash - should add it
         let source1 = if scratch_dir_without_slash.ends_with('/') {
@@ -178,7 +114,7 @@ mod tests {
             format!("{}/", scratch_dir_without_slash)
         };
         assert!(source1.ends_with('/'));
-        assert_eq!(source1, "/scratch/alpine/testuser/namdrunner_jobs/test_job_001/");
+        assert_eq!(source1, format!("{}/", JobDirectoryStructure::scratch_dir("testuser", "test_job_001")));
 
         // With trailing slash - should keep it
         let source2 = if scratch_dir_with_slash.ends_with('/') {
@@ -187,22 +123,23 @@ mod tests {
             format!("{}/", scratch_dir_with_slash)
         };
         assert!(source2.ends_with('/'));
-        assert_eq!(source2, "/scratch/alpine/testuser/namdrunner_jobs/test_job_001/");
+        assert_eq!(source2, format!("{}/", JobDirectoryStructure::scratch_dir("testuser", "test_job_001")));
     }
 
     #[test]
     fn test_directory_mirroring_paths() {
-        // Test business logic for mirrored directory structure
-        let project_dir = "/projects/testuser/namdrunner_jobs/test_job_001";
-        let scratch_dir = "/scratch/alpine/testuser/namdrunner_jobs/test_job_001";
+        use crate::ssh::directory_structure::JobDirectoryStructure;
+        // Test business logic for mirrored directory structure using centralized paths
+        let project_dir = JobDirectoryStructure::project_dir("testuser", "test_job_001");
+        let scratch_dir = JobDirectoryStructure::scratch_dir("testuser", "test_job_001");
 
         // Both should have matching job_id component
         assert!(project_dir.ends_with("test_job_001"));
         assert!(scratch_dir.ends_with("test_job_001"));
 
         // Both should be under namdrunner_jobs
-        assert!(project_dir.contains("namdrunner_jobs"));
-        assert!(scratch_dir.contains("namdrunner_jobs"));
+        assert!(project_dir.contains(crate::ssh::directory_structure::JOB_BASE_DIRECTORY));
+        assert!(scratch_dir.contains(crate::ssh::directory_structure::JOB_BASE_DIRECTORY));
 
         // Scratch should have /scratch/alpine/ prefix
         assert!(scratch_dir.starts_with("/scratch/alpine/"));

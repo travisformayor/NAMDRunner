@@ -219,7 +219,7 @@ impl SSHConnection {
 
     /// Check if the connection is active
     pub fn is_connected(&self) -> bool {
-        self.session.as_ref().map_or(false, |s| s.authenticated())
+        self.session.as_ref().is_some_and(|s| s.authenticated())
     }
 
     /// Get the username for this connection

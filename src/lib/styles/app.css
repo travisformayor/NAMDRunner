@@ -13,10 +13,16 @@
   /* Interactive Elements */
   --namd-primary: #030213;
   --namd-primary-fg: #ffffff;
+  --namd-primary-hover: #1a1d2e;
+  --namd-primary-hover-fg: #ffffff;
   --namd-secondary: #f3f4f6;
   --namd-secondary-fg: #1f2937;
+  --namd-secondary-hover: #e5e7eb;
+  --namd-secondary-hover-fg: #1f2937;
   --namd-accent: #e9ebef;
   --namd-accent-fg: #030213;
+  --namd-accent-hover: #d1d5db;
+  --namd-accent-hover-fg: #030213;
 
   /* Status Colors */
   --namd-success: #10b981;
@@ -46,8 +52,11 @@
   --namd-sidebar-fg: #1f2937;
   --namd-sidebar-border: #e5e7eb;
   --namd-sidebar-hover: #f3f4f6;
+  --namd-sidebar-hover-fg: #1f2937;
   --namd-sidebar-active: #030213;
   --namd-sidebar-active-fg: #ffffff;
+  --namd-sidebar-active-hover: #1a1d2e;
+  --namd-sidebar-active-hover-fg: #ffffff;
 
   /* Layout */
   --namd-border-radius: 0.5rem;
@@ -98,10 +107,16 @@
   /* Interactive Elements */
   --namd-primary: #3b82f6;       /* Blue accent for primary actions */
   --namd-primary-fg: #ffffff;    /* White text on primary */
+  --namd-primary-hover: #2563eb;
+  --namd-primary-hover-fg: #ffffff;
   --namd-secondary: #4b5563;     /* Gray for secondary elements */
   --namd-secondary-fg: #f9fafb;  /* Light text on secondary */
+  --namd-secondary-hover: #6b7280;
+  --namd-secondary-hover-fg: #f9fafb;
   --namd-accent: #6b7280;        /* Hover states */
   --namd-accent-fg: #f9fafb;     /* Light text on accent */
+  --namd-accent-hover: #9ca3af;
+  --namd-accent-hover-fg: #f9fafb;
 
   /* Status Colors - Dark Theme */
   --namd-success: #10b981;
@@ -128,8 +143,11 @@
   --namd-sidebar-fg: #f9fafb;    /* High contrast text */
   --namd-sidebar-border: #374151; /* Visible border */
   --namd-sidebar-hover: #374151; /* Hover state */
+  --namd-sidebar-hover-fg: #f9fafb;
   --namd-sidebar-active: #3b82f6; /* Blue active state */
   --namd-sidebar-active-fg: #ffffff; /* White text on active */
+  --namd-sidebar-active-hover: #2563eb;
+  --namd-sidebar-active-hover-fg: #ffffff;
 }
 
 /* Base Styles */

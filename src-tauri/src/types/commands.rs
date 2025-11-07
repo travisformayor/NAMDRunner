@@ -33,9 +33,9 @@ pub struct ConnectionStatusResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateJobParams {
     pub job_name: String,
-    pub namd_config: NAMDConfig,
+    pub template_id: String,
+    pub template_values: std::collections::HashMap<String, serde_json::Value>,
     pub slurm_config: SlurmConfig,
-    pub input_files: Vec<InputFile>,
 }
 
 #[derive(Debug, Serialize)]
@@ -82,19 +82,8 @@ pub struct DeleteJobResult {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct SyncJobStatusResult {
-    pub success: bool,
-    pub job_info: Option<JobInfo>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SyncAllJobsResult {
-    pub success: bool,
-    pub jobs_updated: u32,
-    pub errors: Vec<String>,
-}
+// DELETED: SyncJobStatusResult - unused result type
+// DELETED: SyncAllJobsResult - unused result type
 
 // File management command parameters and results
 #[derive(Debug, Serialize)]
@@ -125,34 +114,63 @@ pub struct ListFilesResult {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct AutoCompleteJobsResult {
-    pub success: bool,
-    pub processed_jobs: Option<Vec<String>>,
-    pub error: Option<String>,
-}
+// DELETED: AutoCompleteJobsResult - unused result type
 
 // Job discovery result types
-#[derive(Debug, Serialize)]
-pub struct DiscoverJobsResult {
-    pub success: bool,
-    pub jobs_found: u32,
-    pub jobs_imported: u32,
-    pub error: Option<String>,
-}
+// DELETED: DiscoverJobsResult - defined locally in jobs.rs where it's used
+// DELETED: Cluster result types - commands use ApiResult and ValidationResult instead
 
-// Cluster configuration types
+// Template management result types
 #[derive(Debug, Serialize)]
-pub struct GetClusterCapabilitiesResult {
+pub struct ListTemplatesResult {
     pub success: bool,
-    pub data: Option<crate::cluster::ClusterCapabilities>,
+    pub templates: Option<Vec<crate::templates::TemplateSummary>>,
     pub error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ValidateResourceAllocationResult {
+pub struct GetTemplateResult {
+    pub success: bool,
+    pub template: Option<crate::templates::Template>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateTemplateResult {
+    pub success: bool,
+    pub template_id: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpdateTemplateResult {
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeleteTemplateResult {
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ValidateTemplateValuesResult {
+    pub valid: bool,
+    pub errors: Vec<String>,
+}
+
+// Job configuration validation result
+#[derive(Debug, Serialize)]
+pub struct JobValidationResult {
     pub is_valid: bool,
-    pub issues: Vec<String>,
-    pub warnings: Vec<String>,
-    pub suggestions: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+// Preview result types
+#[derive(Debug, Serialize)]
+pub struct PreviewResult {
+    pub success: bool,
+    pub content: Option<String>,
+    pub error: Option<String>,
 }

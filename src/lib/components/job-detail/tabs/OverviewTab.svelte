@@ -1,0 +1,219 @@
+<script lang="ts">
+  import type { JobInfo } from '../../../types/api';
+  import { getStatusBadgeClass } from '../../../utils/file-helpers';
+
+  export let job: JobInfo;
+
+  // Reactive computed values for SLURM config
+  $: slurmConfig = {
+    cores: job.slurm_config.cores,
+    memory: job.slurm_config.memory,
+    wallTime: job.slurm_config.walltime,
+    partition: job.slurm_config.partition || 'N/A',
+  };
+
+  // Extract key template values for display
+  $: steps = job.template_values?.steps || 0;
+  $: temperature = job.template_values?.temperature || 0;
+  $: timestep = job.template_values?.timestep || 0;
+
+  function getSimulationProgress(): number {
+    if (job.status === 'CREATED' || job.status === 'PENDING') return 0;
+    if (job.status === 'COMPLETED') return 100;
+    // Real-time progress tracking not implemented yet
+    return 0;
+  }
+
+  function getCompletedSteps(): number {
+    const total = typeof steps === 'number' ? steps : 0;
+    return Math.floor(total * (getSimulationProgress() / 100));
+  }
+
+  function getEstimatedTimeRemaining(): string {
+    if (job.status === 'COMPLETED') return 'Completed';
+    if (job.status === 'FAILED') return 'Failed';
+    if (job.status === 'CREATED' || job.status === 'PENDING') return 'Not started';
+    if (job.status === 'RUNNING') return 'Real-time tracking not yet available';
+    return '--';
+  }
+</script>
+
+<div class="namd-tab-panel">
+  <div class="overview-content">
+    <!-- Simulation Progress -->
+    <div class="overview-section">
+      <h3>Simulation Progress</h3>
+      <div class="progress-card">
+        <div class="progress-header">
+          <span class="progress-label">MD Steps Completed</span>
+          <span class="progress-value">{getSimulationProgress().toFixed(1)}%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: {getSimulationProgress()}%"></div>
+        </div>
+        <div class="progress-details">
+          <span class="namd-text-sm">{getCompletedSteps().toLocaleString()} / {typeof steps === 'number' ? steps.toLocaleString() : '0'} steps</span>
+          <span class="namd-text-sm">{getEstimatedTimeRemaining()}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resource Allocation -->
+    <div class="overview-section">
+      <h3>Resource Allocation</h3>
+      <div class="info-grid">
+        <div class="info-item">
+          <span class="info-label">Cores</span>
+          <span class="info-value">{slurmConfig.cores}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Memory</span>
+          <span class="info-value">{slurmConfig.memory}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Wall Time</span>
+          <span class="info-value">{slurmConfig.wallTime}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Partition</span>
+          <span class="info-value">{slurmConfig.partition}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Job Information -->
+    <div class="overview-section">
+      <h3>Job Information</h3>
+      <div class="info-grid">
+        <div class="info-item">
+          <span class="info-label">Status</span>
+          <span class="info-value namd-status-badge {getStatusBadgeClass(job.status)}">{job.status}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Template</span>
+          <span class="info-value">{job.template_id || 'N/A'}</span>
+        </div>
+        {#if typeof steps === 'number' && steps > 0}
+          <div class="info-item">
+            <span class="info-label">Simulation Steps</span>
+            <span class="info-value">{steps.toLocaleString()}</span>
+          </div>
+        {/if}
+        {#if typeof temperature === 'number' && temperature > 0}
+          <div class="info-item">
+            <span class="info-label">Temperature</span>
+            <span class="info-value">{temperature} K</span>
+          </div>
+        {/if}
+        {#if typeof timestep === 'number' && timestep > 0}
+          <div class="info-item">
+            <span class="info-label">Timestep</span>
+            <span class="info-value">{timestep} fs</span>
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Template Values -->
+    <div class="overview-section">
+      <h3>Template Configuration</h3>
+      <div class="template-values">
+        {#if job.template_values && Object.keys(job.template_values).length > 0}
+          <div class="info-grid">
+            {#each Object.entries(job.template_values) as [key, value]}
+              <div class="info-item">
+                <span class="info-label">{key}</span>
+                <span class="info-value">{typeof value === 'object' ? JSON.stringify(value) : value}</span>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="namd-text-sm">No template values available</p>
+        {/if}
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .namd-tab-panel {
+    padding: var(--namd-spacing-lg);
+  }
+
+  .overview-content {
+    max-width: 800px;
+  }
+
+  .overview-section {
+    margin-bottom: var(--namd-spacing-xl);
+  }
+
+  .overview-section h3 {
+    margin-bottom: var(--namd-spacing-md);
+    font-size: var(--namd-font-size-lg);
+    font-weight: var(--namd-font-weight-medium);
+  }
+
+  .progress-card {
+    background: var(--namd-bg-primary);
+    border: 1px solid var(--namd-border-color);
+    border-radius: var(--namd-border-radius-md);
+    padding: var(--namd-spacing-md);
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--namd-spacing-sm);
+  }
+
+  .progress-bar {
+    height: 8px;
+    background: var(--namd-bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: var(--namd-spacing-sm);
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--namd-primary);
+    transition: width 0.3s ease;
+  }
+
+  .progress-details {
+    display: flex;
+    justify-content: space-between;
+    color: var(--namd-text-secondary);
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--namd-spacing-md);
+  }
+
+  .info-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--namd-spacing-xs);
+  }
+
+  .info-label {
+    font-size: var(--namd-font-size-sm);
+    color: var(--namd-text-secondary);
+    font-weight: var(--namd-font-weight-medium);
+  }
+
+  .info-value {
+    font-size: var(--namd-font-size-md);
+    color: var(--namd-text-primary);
+  }
+
+  .template-values {
+    background: var(--namd-bg-primary);
+    border: 1px solid var(--namd-border-color);
+    border-radius: var(--namd-border-radius-md);
+    padding: var(--namd-spacing-md);
+  }
+</style>

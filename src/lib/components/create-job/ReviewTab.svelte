@@ -1,25 +1,44 @@
 <script lang="ts">
-  import type { NAMDConfig } from '../../types/api';
-
-  export let job_name: string;
-
+  export let jobName: string;
+  export let templateId: string;
+  export let templateValues: Record<string, any>;
   export let resourceConfig: {
     cores: number;
     memory: string;
-    wallTime: string;
+    walltime: string;
     partition: string;
     qos: string;
   };
-
-  export let namdConfig: NAMDConfig;
-
-  export let uploadedFiles: { name: string; size: number; type: string; path: string }[];
   export let errors: Record<string, string>;
-  export let formatFileSize: (bytes: number) => string;
+  export let uploadProgress: Map<string, { percentage: number }>;
   export let onSubmit: () => void;
   export let onCancel: () => void;
   export let isSubmitting: boolean = false;
-  export let uploadProgress: Map<string, { percentage: number }> = new Map();
+
+  // Extract file upload variables from template values
+  function getUploadedFiles(): { name: string; progress: number }[] {
+    const files: { name: string; progress: number }[] = [];
+
+    for (const [key, value] of Object.entries(templateValues)) {
+      if (typeof value === 'string' && (value.endsWith('.psf') || value.endsWith('.pdb') || value.endsWith('.prm') || value.endsWith('.exb'))) {
+        const fileName = value.includes('/') ? value.split('/').pop() || value : value;
+        files.push({
+          name: fileName,
+          progress: uploadProgress.get(fileName)?.percentage || 0
+        });
+      }
+    }
+
+    return files;
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+  }
 </script>
 
 <div class="namd-tab-panel">
@@ -27,6 +46,7 @@
     <div class="namd-section-header" style="margin-bottom: var(--namd-spacing-xl);">
       <h3 class="namd-section-title" style="font-size: var(--namd-font-size-xl); margin-bottom: var(--namd-spacing-sm);">Review Configuration</h3>
       <p class="section-description">Review your job configuration and submit when ready</p>
+
       {#if Object.keys(errors).length > 0}
         <div class="validation-summary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -69,102 +89,75 @@
         </div>
         <div class="review-item" class:error={errors.memory}>
           <span class="review-label">Memory:</span>
-          <span class="review-value">{resourceConfig.memory} GB</span>
+          <span class="review-value">{resourceConfig.memory}</span>
           {#if errors.memory}
             <span class="error-indicator">⚠</span>
           {/if}
         </div>
-        <div class="review-item" class:error={errors.wallTime}>
+        <div class="review-item" class:error={errors.walltime}>
           <span class="review-label">Wall Time:</span>
-          <span class="review-value">{resourceConfig.wallTime}</span>
-          {#if errors.wallTime}
+          <span class="review-value">{resourceConfig.walltime}</span>
+          {#if errors.walltime}
             <span class="error-indicator">⚠</span>
           {/if}
         </div>
       </div>
     </div>
 
-    <!-- Configuration Summary -->
+    <!-- Template Configuration Summary -->
     <div class="review-section">
-      <h4 class="review-section-title">NAMD Configuration</h4>
+      <h4 class="review-section-title">Configuration</h4>
       <div class="review-grid">
         <div class="review-item" class:error={errors.job_name}>
           <span class="review-label">Job Name:</span>
-          <span class="review-value">{job_name || 'Not set'}</span>
+          <span class="review-value">{jobName || 'Not set'}</span>
           {#if errors.job_name}
             <span class="error-indicator">⚠</span>
           {/if}
         </div>
-        <div class="review-item" class:error={errors.outputname}>
-          <span class="review-label">Output Name:</span>
-          <span class="review-value">{namdConfig.outputname || 'Not set'}</span>
-          {#if errors.outputname}
+        <div class="review-item" class:error={errors.template}>
+          <span class="review-label">Template:</span>
+          <span class="review-value">{templateId || 'Not selected'}</span>
+          {#if errors.template}
             <span class="error-indicator">⚠</span>
           {/if}
         </div>
-        <div class="review-item" class:error={errors.steps}>
-          <span class="review-label">Simulation Steps:</span>
-          <span class="review-value">{namdConfig.steps?.toLocaleString() || 'Not set'}</span>
-          {#if errors.steps}
-            <span class="error-indicator">⚠</span>
+        {#each Object.entries(templateValues) as [key, value]}
+          {#if typeof value !== 'string' || !value.includes('/')}
+            <div class="review-item">
+              <span class="review-label">{key}:</span>
+              <span class="review-value">{value}</span>
+            </div>
           {/if}
-        </div>
-        <div class="review-item" class:error={errors.temperature}>
-          <span class="review-label">Temperature:</span>
-          <span class="review-value">{namdConfig.temperature || 'Not set'} K</span>
-          {#if errors.temperature}
-            <span class="error-indicator">⚠</span>
-          {/if}
-        </div>
-        <div class="review-item" class:error={errors.timestep}>
-          <span class="review-label">Timestep:</span>
-          <span class="review-value">{namdConfig.timestep || 'Not set'} fs</span>
-          {#if errors.timestep}
-            <span class="error-indicator">⚠</span>
-          {/if}
-        </div>
-        <div class="review-item">
-          <span class="review-label">DCD Frequency:</span>
-          <span class="review-value">{namdConfig.dcd_freq || 'Not set'}</span>
-        </div>
+        {/each}
       </div>
     </div>
 
-    <!-- Files Summary -->
+    <!-- Input Files with Upload Progress -->
     <div class="review-section">
       <h4 class="review-section-title">Input Files</h4>
-      {#if uploadedFiles.length > 0}
-        <div class="files-summary" class:error={errors.files}>
-          {#each uploadedFiles as file}
+      {#if getUploadedFiles().length > 0}
+        <div class="files-summary">
+          {#each getUploadedFiles() as file}
             <div class="file-summary-item">
-              {#if uploadProgress.has(file.name)}
-                <div class="file-progress-bg" style="width: {uploadProgress.get(file.name)?.percentage || 0}%"></div>
-              {/if}
+              <!-- Animated progress background -->
+              <div class="file-progress-bg" style="width: {file.progress}%"></div>
+
               <div class="file-content">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
                   <polyline points="14,2 14,8 20,8"/>
                 </svg>
                 <span class="file-name">{file.name}</span>
-                <span class="file-size">({formatFileSize(file.size)})</span>
-                {#if uploadProgress.has(file.name)}
-                  <span class="file-progress-text">{uploadProgress.get(file.name)?.percentage.toFixed(0)}%</span>
+                {#if file.progress > 0}
+                  <span class="file-progress-text">{file.progress.toFixed(0)}%</span>
                 {/if}
               </div>
             </div>
           {/each}
-          {#if errors.files}
-            <div class="error-text">{errors.files}</div>
-          {/if}
         </div>
       {:else}
-        <div class="no-files" class:error={errors.files}>
-          No files uploaded
-          {#if errors.files}
-            <span class="error-indicator">⚠</span>
-            <div class="error-text">{errors.files}</div>
-          {/if}
-        </div>
+        <div class="no-files">No files to upload</div>
       {/if}
     </div>
 
@@ -184,14 +177,13 @@
         on:click={onSubmit}
         disabled={isSubmitting || Object.keys(errors).length > 0}
       >
-        {isSubmitting ? "Creating Job..." : "Create Job"}
+        {isSubmitting ? 'Creating Job...' : 'Create Job'}
       </button>
     </div>
   </div>
 </div>
 
 <style>
-
   .section-description {
     color: var(--namd-text-secondary);
     margin: 0 0 var(--namd-spacing-md) 0;
@@ -266,19 +258,11 @@
     gap: var(--namd-spacing-sm);
   }
 
-  .files-summary.error {
-    border: 1px solid var(--namd-error);
-    background-color: var(--namd-error-bg);
-    padding: var(--namd-spacing-sm);
-    border-radius: var(--namd-border-radius-sm);
-  }
-
   .file-summary-item {
     position: relative;
     overflow: hidden;
     display: flex;
     align-items: center;
-    gap: var(--namd-spacing-sm);
     padding: var(--namd-spacing-sm);
     background-color: var(--namd-bg-primary);
     border-radius: var(--namd-border-radius-sm);
@@ -309,11 +293,6 @@
     color: var(--namd-text-primary);
   }
 
-  .file-size {
-    color: var(--namd-text-secondary);
-    font-size: var(--namd-font-size-sm);
-  }
-
   .file-progress-text {
     margin-left: auto;
     font-weight: var(--namd-font-weight-semibold);
@@ -328,19 +307,6 @@
     text-align: center;
   }
 
-  .no-files.error {
-    border: 1px solid var(--namd-error);
-    background-color: var(--namd-error-bg);
-    border-radius: var(--namd-border-radius-sm);
-    color: var(--namd-error-fg);
-  }
-
-  .error-text {
-    color: var(--namd-error);
-    font-size: var(--namd-font-size-sm);
-    margin-top: var(--namd-spacing-xs);
-  }
-
   .review-actions {
     display: flex;
     justify-content: space-between;
@@ -349,5 +315,4 @@
     padding-top: var(--namd-spacing-lg);
     border-top: 1px solid var(--namd-border);
   }
-
 </style>

@@ -1,12 +1,12 @@
 use crate::types::*;
-use crate::demo::{with_demo_state, get_demo_state, advance_demo_progression, execute_with_mode, is_demo_mode};
 use crate::validation::input;
 use crate::database::with_database;
 use crate::automations;
 use crate::{info_log, debug_log, error_log};
-use chrono::Utc;
 use tauri::Emitter;
 use serde::Serialize;
+use std::collections::HashMap;
+use serde_json::Value;
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -> CreateJobResult {
@@ -26,71 +26,12 @@ pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -
     // Create params with validated job name
     let validated_params = CreateJobParams {
         job_name: clean_job_name,
-        namd_config: params.namd_config,
+        template_id: params.template_id,
+        template_values: params.template_values,
         slurm_config: params.slurm_config,
-        input_files: params.input_files,
     };
 
-    execute_with_mode(
-        create_job_demo(validated_params.clone()),
-        create_job_real(app_handle, validated_params)
-    ).await
-}
-
-async fn create_job_demo(params: CreateJobParams) -> CreateJobResult {
-    // Enhanced mock implementation - create job using mock state manager
-
-    // Get realistic delay from mock state
-    let delay = get_demo_state(|state| state.get_delay("slurm") / 2).unwrap_or(200);
-    tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-
-    // Check for simulated errors
-    let should_fail = get_demo_state(|state| state.should_simulate_error()).unwrap_or(false);
-
-    if should_fail {
-        return CreateJobResult {
-            success: false,
-            job_id: None,
-            job: None,
-            error: Some("Failed to create job: Disk quota exceeded".to_string()),
-        };
-    }
-
-    with_demo_state(|state| {
-        state.job_counter += 1;
-        let job_id = format!("job_{:03}", state.job_counter);
-        let _now = Utc::now().to_rfc3339();
-
-        let mut job_info = JobInfo::new(
-            job_id.clone(),
-            params.job_name.clone(),
-            params.namd_config.clone(),
-            params.slurm_config.clone(),
-            params.input_files.clone(),
-            format!("/projects/mockuser/namdrunner_jobs/{}", job_id),
-        );
-
-        // Set the directory paths after creation
-        job_info.project_dir = Some(format!("/projects/mockuser/namdrunner_jobs/{}", job_id));
-        job_info.scratch_dir = Some(format!("/scratch/alpine/mockuser/namdrunner_jobs/{}", job_id));
-
-        state.jobs.insert(job_id.clone(), job_info.clone());
-
-        // Note: Database not updated in demo mode (would require async context)
-        // Demo state is sufficient for testing
-
-        CreateJobResult {
-            success: true,
-            job_id: Some(job_id.clone()),
-            job: Some(job_info),
-            error: None,
-        }
-    }).unwrap_or_else(|| CreateJobResult {
-        success: false,
-        job_id: None,
-        job: None,
-        error: Some("Failed to access mock state".to_string()),
-    })
+    create_job_real(app_handle, validated_params).await
 }
 
 async fn create_job_real(app_handle: tauri::AppHandle, params: CreateJobParams) -> CreateJobResult {
@@ -135,79 +76,7 @@ pub async fn submit_job(job_id: String, app_handle: tauri::AppHandle) -> SubmitJ
         }
     };
 
-    execute_with_mode(
-        submit_job_demo(clean_job_id.clone()),
-        submit_job_real(app_handle, clean_job_id)
-    ).await
-}
-
-async fn submit_job_demo(job_id: String) -> SubmitJobResult {
-    // Enhanced mock implementation - simulate realistic job submission
-
-    // Get realistic delay from mock state
-    let delay = get_demo_state(|state| state.get_delay("slurm")).unwrap_or(500);
-    tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-
-    // Check if connected to cluster
-    let is_connected = get_demo_state(|state| {
-        matches!(state.connection_state, ConnectionState::Connected)
-    }).unwrap_or(false);
-
-    if !is_connected {
-        return SubmitJobResult {
-            success: false,
-            slurm_job_id: None,
-            submitted_at: None,
-            error: Some("Not connected to cluster".to_string()),
-        };
-    }
-
-    // Check for simulated errors
-    let should_fail = get_demo_state(|state| state.should_simulate_error()).unwrap_or(false);
-
-    if should_fail {
-        return SubmitJobResult {
-            success: false,
-            slurm_job_id: None,
-            submitted_at: None,
-            error: Some("SLURM submission failed: Insufficient resources".to_string()),
-        };
-    }
-
-    with_demo_state(|state| {
-        // Generate SLURM job ID first to avoid borrow issues
-        let slurm_job_id = state.generate_slurm_job_id();
-        let now = Utc::now().to_rfc3339();
-
-        if let Some(job) = state.jobs.get_mut(&job_id) {
-            job.status = JobStatus::Pending;
-            job.slurm_job_id = Some(slurm_job_id.clone());
-            job.submitted_at = Some(now.clone());
-            job.updated_at = Some(now.clone());
-
-            // Note: Database not updated in demo mode (would require async context)
-            // Demo state is sufficient for testing
-
-            SubmitJobResult {
-                success: true,
-                slurm_job_id: Some(slurm_job_id),
-                submitted_at: Some(now),
-                error: None,
-            }
-        } else {
-            SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some(format!("Job {} not found", job_id)),
-            }
-        }
-    }).unwrap_or_else(|| SubmitJobResult {
-        success: false,
-        slurm_job_id: None,
-        submitted_at: None,
-        error: Some("Failed to access mock state".to_string()),
-    })
+    submit_job_real(app_handle, clean_job_id).await
 }
 
 async fn submit_job_real(app_handle: tauri::AppHandle, job_id: String) -> SubmitJobResult {
@@ -234,11 +103,7 @@ async fn submit_job_real(app_handle: tauri::AppHandle, job_id: String) -> Submit
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_job_status(job_id: String) -> JobStatusResult {
-    // NOTE: Using mock state for delay simulation in development
-    // This provides realistic UI behavior during development
-    // In production, this would be replaced with actual SLURM query latency
-    let delay = get_demo_state(|state| state.get_delay("slurm") / 5).unwrap_or(100);
-    tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+    // Removed demo delay - real SLURM queries have their own latency
 
     // Retrieve job from database
     let job_id_for_db = job_id.clone();
@@ -266,9 +131,7 @@ pub async fn get_all_jobs() -> GetAllJobsResult {
     // NOTE: Using mock state for delay simulation in development
     // This provides realistic UI behavior during development
     // In production, this would be replaced with actual database query latency
-    let delay = get_demo_state(|state| state.get_delay("slurm") / 5).unwrap_or(100);
-    tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-
+    // Removed demo delay - database queries have their own latency
     // Retrieve all jobs from database
 
     match with_database(move |db| db.load_all_jobs()) {
@@ -287,71 +150,7 @@ pub async fn get_all_jobs() -> GetAllJobsResult {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn sync_jobs() -> SyncJobsResult {
-    execute_with_mode(
-        sync_jobs_demo(),
-        sync_jobs_real()
-    ).await
-}
-
-async fn sync_jobs_demo() -> SyncJobsResult {
-    // Mock implementation - simulate realistic job progression
-
-    let delay = get_demo_state(|state| state.get_delay("slurm") * 4).unwrap_or(800);
-    tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-
-    // Check if connected to cluster
-    let is_connected = get_demo_state(|state| {
-        matches!(state.connection_state, ConnectionState::Connected)
-    }).unwrap_or(false);
-
-    if !is_connected {
-        return SyncJobsResult {
-            success: false,
-            jobs: vec![],
-            jobs_updated: 0,
-            errors: vec!["Not connected to cluster".to_string()],
-        };
-    }
-
-    // Check for simulated errors
-    let should_fail = get_demo_state(|state| state.should_simulate_error()).unwrap_or(false);
-
-    if should_fail {
-        return SyncJobsResult {
-            success: false,
-            jobs: vec![],
-            jobs_updated: 0,
-            errors: vec!["Network error: Unable to contact SLURM controller".to_string()],
-        };
-    }
-
-    // In demo mode, keep job states static - don't advance progression
-    let jobs_updated = if is_demo_mode() {
-        // Demo mode: return 0 updates to maintain static demo experience
-        0
-    } else {
-        // Real mode: advance job states using the enhanced mock state manager
-        advance_demo_progression();
-
-        get_demo_state(|state| {
-            // Count how many jobs were updated in the last sync
-            state.jobs.values().filter(|job| {
-                matches!(job.status, JobStatus::Running | JobStatus::Completed | JobStatus::Failed)
-            }).count() as u32
-        }).unwrap_or(0)
-    };
-
-    // Get complete job list from demo state
-    let jobs = get_demo_state(|state| {
-        state.jobs.values().cloned().collect::<Vec<_>>()
-    }).unwrap_or_default();
-
-    SyncJobsResult {
-        success: true,
-        jobs,
-        jobs_updated,
-        errors: vec![],
-    }
+    sync_jobs_real().await
 }
 
 async fn sync_jobs_real() -> SyncJobsResult {
@@ -388,48 +187,7 @@ pub async fn delete_job(job_id: String, delete_remote: bool) -> DeleteJobResult 
         }
     };
 
-    execute_with_mode(
-        delete_job_demo(clean_job_id.clone(), delete_remote),
-        delete_job_real(clean_job_id, delete_remote)
-    ).await
-}
-
-async fn delete_job_demo(job_id: String, delete_remote: bool) -> DeleteJobResult {
-    // Enhanced mock implementation - delete job with realistic behavior
-
-    let base_delay = get_demo_state(|state| state.get_delay("slurm") / 5).unwrap_or(100);
-    let delay = if delete_remote { base_delay * 5 } else { base_delay };
-    tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-
-    // Check for simulated errors
-    let should_fail = get_demo_state(|state| state.should_simulate_error()).unwrap_or(false);
-
-    if should_fail && delete_remote {
-        return DeleteJobResult {
-            success: false,
-            error: Some("Failed to delete remote files: Permission denied".to_string()),
-        };
-    }
-
-    with_demo_state(|state| {
-        if let Some(_job_info) = state.jobs.remove(&job_id) {
-            // Note: Database not updated in demo mode (would require async context)
-            // Demo state is sufficient for testing
-
-            DeleteJobResult {
-                success: true,
-                error: None,
-            }
-        } else {
-            DeleteJobResult {
-                success: false,
-                error: Some(format!("Job {} not found", job_id)),
-            }
-        }
-    }).unwrap_or_else(|| DeleteJobResult {
-        success: false,
-        error: Some("Failed to access mock state".to_string()),
-    })
+    delete_job_real(clean_job_id, delete_remote).await
 }
 
 async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult {
@@ -514,7 +272,7 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
         // Safely delete directories with validation
         for (dir_type, dir_path) in directories_to_delete {
             // Safety check: ensure the path is within expected NAMDRunner directories
-            if !dir_path.contains("namdrunner_jobs") {
+            if !dir_path.contains(crate::ssh::directory_structure::JOB_BASE_DIRECTORY) {
                 return DeleteJobResult {
                     success: false,
                     error: Some(format!("Refusing to delete directory '{}' - not a NAMDRunner job directory", dir_path)),
@@ -632,9 +390,7 @@ pub async fn refetch_slurm_logs(job_id: String) -> RefetchLogsResult {
 #[derive(Debug, Serialize)]
 pub struct DiscoverJobsResult {
     pub success: bool,
-    #[serde(rename = "jobsFound")]
     pub jobs_found: u32,
-    #[serde(rename = "jobsImported")]
     pub jobs_imported: u32,
     pub error: Option<String>,
 }
@@ -643,39 +399,7 @@ pub struct DiscoverJobsResult {
 /// Only runs when local database is empty (0 jobs)
 #[tauri::command(rename_all = "snake_case")]
 pub async fn discover_jobs_from_server(app_handle: tauri::AppHandle) -> DiscoverJobsResult {
-    execute_with_mode(
-        discover_jobs_demo(),
-        discover_jobs_real(app_handle)
-    ).await
-}
-
-async fn discover_jobs_demo() -> DiscoverJobsResult {
-    // In mock mode, jobs are already in the database
-    // Simulate discovering a few jobs
-    let delay = get_demo_state(|state| state.get_delay("slurm") * 2).unwrap_or(400);
-    tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-
-    // Check if connected
-    let is_connected = get_demo_state(|state| {
-        matches!(state.connection_state, ConnectionState::Connected)
-    }).unwrap_or(false);
-
-    if !is_connected {
-        return DiscoverJobsResult {
-            success: false,
-            jobs_found: 0,
-            jobs_imported: 0,
-            error: Some("Not connected to cluster".to_string()),
-        };
-    }
-
-    // Simulate finding some jobs that are already in the DB
-    DiscoverJobsResult {
-        success: true,
-        jobs_found: 3,
-        jobs_imported: 0,
-        error: None,
-    }
+    discover_jobs_real(app_handle).await
 }
 
 async fn discover_jobs_real(_app_handle: tauri::AppHandle) -> DiscoverJobsResult {
@@ -705,8 +429,9 @@ async fn discover_jobs_real(_app_handle: tauri::AppHandle) -> DiscoverJobsResult
         }
     };
 
-    // Construct remote jobs directory path
-    let remote_jobs_dir = format!("/projects/{}/namdrunner_jobs", username);
+    // Construct remote jobs directory path using centralized function
+    use crate::ssh::directory_structure::JobDirectoryStructure;
+    let remote_jobs_dir = JobDirectoryStructure::project_base(&username);
 
     info_log!("[JOB DISCOVERY] Scanning remote directory: {}", remote_jobs_dir);
 
@@ -821,5 +546,137 @@ async fn discover_jobs_real(_app_handle: tauri::AppHandle) -> DiscoverJobsResult
         jobs_found,
         jobs_imported,
         error: None,
+    }
+}
+
+/// Preview SLURM script with given resource configuration
+/// Returns what the job.sbatch file will look like
+#[tauri::command(rename_all = "snake_case")]
+pub async fn preview_slurm_script(
+    job_name: String,
+    cores: u32,
+    memory: String,
+    walltime: String,
+    partition: Option<String>,
+    qos: Option<String>
+) -> PreviewResult {
+    info_log!("[Jobs] Generating SLURM script preview");
+
+    // Create minimal JobInfo for script generation
+    let job_info = crate::types::JobInfo {
+        job_id: "preview".to_string(),
+        job_name: job_name.clone(),
+        template_id: "preview_template".to_string(),
+        template_values: std::collections::HashMap::new(),
+        slurm_config: crate::types::SlurmConfig {
+            cores,
+            memory,
+            walltime,
+            partition,
+            qos,
+        },
+        slurm_job_id: None,
+        status: crate::types::JobStatus::Created,
+        project_dir: Some("/projects/user/namdrunner_jobs/preview_job".to_string()),
+        scratch_dir: None, // Not needed for preview (passed as parameter)
+        output_files: Some(vec![]),
+        slurm_stdout: None,
+        slurm_stderr: None,
+        error_info: None,
+        remote_directory: "/projects/user/namdrunner_jobs/preview_job".to_string(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        submitted_at: None,
+        updated_at: Some(chrono::Utc::now().to_rfc3339()),
+        completed_at: None,
+    };
+
+    // Generate script (pass scratch_dir directly for preview)
+    let preview_scratch_dir = "/scratch/alpine/user/job_preview";
+    match crate::slurm::script_generator::SlurmScriptGenerator::generate_namd_script(&job_info, preview_scratch_dir) {
+        Ok(script) => {
+            info_log!("[Jobs] SLURM script preview generated");
+            PreviewResult {
+                success: true,
+                content: Some(script),
+                error: None,
+            }
+        }
+        Err(e) => {
+            error_log!("[Jobs] SLURM script preview failed: {}", e);
+            PreviewResult {
+                success: false,
+                content: None,
+                error: Some(format!("Script generation error: {}", e)),
+            }
+        }
+    }
+}
+
+/// Validate complete job configuration
+/// Checks job name, template selection, template values, and resource configuration
+#[tauri::command(rename_all = "snake_case")]
+pub async fn validate_job_config(
+    job_name: String,
+    template_id: String,
+    template_values: HashMap<String, Value>,
+    cores: u32,
+    memory: String,
+    walltime: String,
+    partition: Option<String>,
+    qos: Option<String>
+) -> JobValidationResult {
+    let mut errors = Vec::new();
+
+    // Validate job name
+    if job_name.trim().is_empty() {
+        errors.push("Job name is required".to_string());
+    } else if let Err(e) = input::sanitize_job_id(&job_name) {
+        errors.push(format!("Job name invalid: {}", e));
+    }
+
+    // Validate template selection
+    if template_id.is_empty() {
+        errors.push("Template selection is required".to_string());
+    }
+
+    // Validate template values (if template selected)
+    if !template_id.is_empty() {
+        let template_validation = crate::commands::templates::validate_template_values(
+            template_id.clone(),
+            template_values.clone()
+        ).await;
+
+        errors.extend(template_validation.errors);
+    }
+
+    // Validate resource configuration
+    if cores == 0 {
+        errors.push("Cores must be greater than 0".to_string());
+    }
+
+    if memory.trim().is_empty() {
+        errors.push("Memory is required".to_string());
+    }
+
+    if walltime.trim().is_empty() || !walltime.contains(':') {
+        errors.push("Wall time must be in HH:MM:SS format".to_string());
+    }
+
+    // Validate partition and QoS if provided
+    if let Some(p) = &partition {
+        if p.trim().is_empty() {
+            errors.push("Partition cannot be empty if specified".to_string());
+        }
+    }
+
+    if let Some(q) = &qos {
+        if q.trim().is_empty() {
+            errors.push("QoS cannot be empty if specified".to_string());
+        }
+    }
+
+    JobValidationResult {
+        is_valid: errors.is_empty(),
+        errors,
     }
 }

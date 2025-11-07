@@ -1,12 +1,46 @@
 use anyhow::{Result, anyhow};
 use tauri::AppHandle;
-use std::path::Path;
+use std::collections::HashMap;
+use serde_json::Value;
 
-use crate::types::{CreateJobParams, JobInfo, InputFile};
-use crate::validation::{input, paths, files};
+use crate::types::{CreateJobParams, JobInfo, JobStatus, SlurmConfig};
+use crate::validation::{input, paths};
 use crate::ssh::get_connection_manager;
 use crate::database::with_database;
 use crate::{info_log, debug_log, error_log};
+
+/// Factory function to create a new JobInfo with business logic (status, timestamps)
+///
+/// This is the correct way to create new jobs with proper initial state.
+pub fn create_job_info(
+    job_id: String,
+    job_name: String,
+    template_id: String,
+    template_values: HashMap<String, Value>,
+    slurm_config: SlurmConfig,
+    remote_directory: String,
+) -> JobInfo {
+    JobInfo {
+        job_id,
+        job_name,
+        status: JobStatus::Created,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        updated_at: None,
+        submitted_at: None,
+        completed_at: None,
+        slurm_job_id: None,
+        project_dir: None,
+        scratch_dir: None,
+        error_info: None,
+        slurm_stdout: None,
+        slurm_stderr: None,
+        template_id,
+        template_values,
+        slurm_config,
+        output_files: None,
+        remote_directory,
+    }
+}
 
 /// Simplified job creation automation that follows NAMDRunner's direct function patterns
 /// This replaces the complex AutomationStep trait system with a simple async function
@@ -72,135 +106,106 @@ pub async fn execute_job_creation_with_progress(
             })?;
     }
 
-    progress_callback("Validating required files...");
+    progress_callback("Loading template...");
 
-    // Validate that required NAMD files are present (.pdb, .psf, .prm)
-    let file_names: Vec<String> = params.input_files.iter()
-        .map(|f| f.remote_name.clone().unwrap_or_else(|| {
-            Path::new(&f.local_path)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "unknown".to_string())
-        }))
-        .collect();
+    // Load template from database (before moving params)
+    let template_id_for_db = params.template_id.clone();
+    let template = crate::database::with_database(|db| {
+        db.load_template(&template_id_for_db)
+    })?
+        .ok_or_else(|| anyhow!("Template not found: {}", params.template_id))?;
 
-    files::validate_required_namd_files(&file_names)
-        .map_err(|e| {
-            error_log!("[Job Creation] Required file validation failed: {}", e);
-            anyhow!("{}", e)
-        })?;
-    info_log!("[Job Creation] Required NAMD files validated successfully");
+    info_log!("[Job Creation] Loaded template: {}", template.name);
 
     progress_callback("Uploading input files...");
 
-    // Upload input files and collect metadata
-    let mut input_files_with_metadata = Vec::new();
-    if !params.input_files.is_empty() {
-        info_log!("[Job Creation] Uploading {} input files", params.input_files.len());
+    // Upload files from template_values
+    // Extract FileUpload variables from template and upload their files
+    let mut template_values_for_rendering = params.template_values.clone();
 
-        for (i, file) in params.input_files.iter().enumerate() {
-            // Use the remote_name if provided, otherwise use the file name from local_path
-            let remote_name = file.remote_name.as_ref()
-                .map(|s| s.as_str())
-                .unwrap_or_else(|| {
-                    Path::new(&file.local_path)
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("unknown_file")
-                });
+    for (var_key, var_def) in &template.variables {
+        // Check if this is a FileUpload variable
+        if matches!(var_def.var_type, crate::templates::VariableType::FileUpload { .. }) {
+            // Get the file path from template_values
+            if let Some(file_path_value) = params.template_values.get(var_key) {
+                if let Some(local_file_path) = file_path_value.as_str() {
+                    if !local_file_path.is_empty() {
+                        // Extract filename from local path
+                        let filename = std::path::Path::new(local_file_path)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .ok_or_else(|| anyhow!("Invalid filename in {}: {}", var_key, local_file_path))?;
 
-            progress_callback(&format!("Uploading file {} of {}: {}", i + 1, params.input_files.len(), remote_name));
-            info_log!("[Job Creation] Uploading file {} of {}: {}", i + 1, params.input_files.len(), remote_name);
+                        progress_callback(&format!("Uploading file: {}", filename));
+                        info_log!("[Job Creation] Uploading file for {}: {} -> {}", var_key, local_file_path, filename);
 
-            // Validate file before upload
-            validate_upload_file(file)?;
-            debug_log!("[Job Creation] Validation passed for: {}", remote_name);
+                        // Construct remote path
+                        let remote_path = crate::ssh::JobDirectoryStructure::full_input_path(&project_dir, filename);
 
-            // Construct remote path using centralized helper
-            let remote_path = crate::ssh::JobDirectoryStructure::full_input_path(&project_dir, remote_name);
+                        // Upload file
+                        connection_manager.upload_file_with_progress(local_file_path, &remote_path, Some(app_handle.clone())).await
+                            .map_err(|e| {
+                                error_log!("[Job Creation] Failed to upload file {}: {}", filename, e);
+                                anyhow!("Could not upload file '{}': {}", filename, e)
+                            })?;
 
-            // Upload file using ConnectionManager with progress events
-            connection_manager.upload_file_with_progress(&file.local_path, &remote_path, Some(app_handle.clone())).await
-                .map_err(|e| {
-                    error_log!("[Job Creation] Failed to upload file {}: {}", remote_name, e);
-                    anyhow!("Could not upload file '{}' to cluster: {}", remote_name, e)
-                })?;
-            info_log!("[Job Creation] Successfully uploaded: {} -> {}", file.local_path, remote_path);
+                        info_log!("[Job Creation] Successfully uploaded: {} -> {}", local_file_path, remote_path);
 
-            // Get file size from remote after successful upload
-            let file_size = match connection_manager.stat_file(&remote_path).await {
-                Ok(stat) => {
-                    debug_log!("[Job Creation] File size for {}: {} bytes", remote_name, stat.size);
-                    Some(stat.size)
+                        // Update template_values with just the filename (not full path)
+                        // The renderer will prepend "input_files/" when rendering the template
+                        template_values_for_rendering.insert(var_key.clone(), Value::String(filename.to_string()));
+                    }
                 }
-                Err(e) => {
-                    error_log!("[Job Creation] Failed to stat file {}: {}", remote_name, e);
-                    None
-                }
-            };
-
-            // Create InputFile with metadata
-            input_files_with_metadata.push(InputFile {
-                name: file.name.clone(),
-                local_path: file.local_path.clone(),
-                remote_name: file.remote_name.clone(),
-                file_type: file.file_type.clone(),
-                size: file_size,
-                uploaded_at: Some(chrono::Utc::now().to_rfc3339()),
-            });
+            }
         }
     }
 
+    progress_callback("Rendering template...");
+
+    // Render NAMD config from template with uploaded filenames
+    let namd_config_content = crate::templates::render_template(&template, &template_values_for_rendering)?;
+    info_log!("[Job Creation] Rendered NAMD config ({} bytes)", namd_config_content.len());
+
     progress_callback("Creating job metadata...");
 
-    // Create JobInfo with ONLY project directory set
+    // Create JobInfo using factory function (sets Created status and timestamp)
     // scratch_dir remains None until job submission
-    let mut job_info = JobInfo::new(
+    let mut job_info = create_job_info(
         job_id.clone(),
         clean_job_name,
-        params.namd_config,
+        params.template_id,
+        params.template_values,
         params.slurm_config,
-        input_files_with_metadata,
         project_dir.clone(),
     );
 
     // Set only project directory (this fixes the workflow separation issue)
     job_info.project_dir = Some(project_dir.clone());
     // job_info.scratch_dir remains None - set during submission only
+    info_log!("[Job Creation] Rendered NAMD config ({} bytes)", namd_config_content.len());
 
     progress_callback("Generating SLURM batch script...");
 
     // Generate SLURM script using script generator
-    // Note: Script generator requires scratch_dir to be set temporarily for working directory
-    // We'll set a placeholder that will be replaced during submission
-    let temp_scratch_dir = paths::scratch_directory(&username, &job_id)?;
-    job_info.scratch_dir = Some(temp_scratch_dir.clone());
-
-    let slurm_script = crate::slurm::script_generator::SlurmScriptGenerator::generate_namd_script(&job_info)?;
+    // Pass scratch directory directly (job_info.scratch_dir remains None until submission)
+    let scratch_dir = paths::scratch_directory(&username, &job_id)?;
+    let slurm_script = crate::slurm::script_generator::SlurmScriptGenerator::generate_namd_script(&job_info, &scratch_dir)?;
     info_log!("[Job Creation] Generated SLURM script ({} bytes)", slurm_script.len());
-
-    // Clear scratch_dir again - it will be set properly during submission
-    job_info.scratch_dir = None;
 
     // Upload script to scripts subdirectory
     let script_path = crate::ssh::JobDirectoryStructure::full_script_path(&project_dir, "job.sbatch");
-    crate::ssh::metadata::upload_content(&connection_manager, &slurm_script, &script_path).await
+    crate::ssh::metadata::upload_content(connection_manager, &slurm_script, &script_path).await
         .map_err(|e| {
             error_log!("[Job Creation] Failed to upload SLURM script: {}", e);
             anyhow!("Failed to upload SLURM script: {}", e)
         })?;
     debug_log!("[Job Creation] SLURM script uploaded to: {}", script_path);
 
-    progress_callback("Generating NAMD configuration...");
+    progress_callback("Uploading NAMD configuration...");
 
-    // Generate NAMD config
-    let namd_config_content = crate::slurm::script_generator::SlurmScriptGenerator::generate_namd_config(&job_info)?;
-    info_log!("[Job Creation] Generated NAMD config ({} bytes)", namd_config_content.len());
-
-    // Upload config to scripts subdirectory
+    // Upload rendered config to scripts subdirectory
     let config_path = crate::ssh::JobDirectoryStructure::full_script_path(&project_dir, "config.namd");
-    crate::ssh::metadata::upload_content(&connection_manager, &namd_config_content, &config_path).await
+    crate::ssh::metadata::upload_content(connection_manager, &namd_config_content, &config_path).await
         .map_err(|e| {
             error_log!("[Job Creation] Failed to upload NAMD config: {}", e);
             anyhow!("Failed to upload NAMD config: {}", e)
@@ -221,7 +226,7 @@ pub async fn execute_job_creation_with_progress(
     progress_callback("Creating job metadata...");
 
     info_log!("[Job Creation] Creating job metadata at: {}/job_info.json", project_dir);
-    crate::ssh::metadata::upload_job_metadata(&connection_manager, &job_info, &project_dir, "Job Creation").await
+    crate::ssh::metadata::upload_job_metadata(connection_manager, &job_info, &project_dir, "Job Creation").await
         .map_err(|e| {
             error_log!("[Job Creation] Failed to upload job metadata: {}", e);
             anyhow!("Failed to create job metadata: {}", e)
@@ -234,22 +239,5 @@ pub async fn execute_job_creation_with_progress(
     Ok((job_id, job_info))
 }
 
-/// Validate a file upload request using centralized validation
-fn validate_upload_file(file: &InputFile) -> Result<()> {
-    // Convert to centralized validation format
-    let validation_file = files::InputFile {
-        local_path: file.local_path.clone(),
-        remote_name: file.remote_name.clone(),
-        file_type: match file.local_path.to_lowercase() {
-            path if path.ends_with(".pdb") => files::FileType::PDB,
-            path if path.ends_with(".psf") => files::FileType::PSF,
-            path if path.ends_with(".prm") || path.ends_with(".par") || path.ends_with(".str") => files::FileType::Parameter,
-            path if path.ends_with(".conf") || path.ends_with(".namd") => files::FileType::Config,
-            _ => files::FileType::Other,
-        },
-    };
-
-    // Use centralized validation
-    files::validate_upload_file(&validation_file)
-}
-
+// File validation will be handled by template validation
+// TODO: Implement template-based file validation in Step 7

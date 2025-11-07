@@ -48,10 +48,16 @@ pub fn validate_resource_allocation(
     partition_id: String,
     qos_id: String,
 ) -> crate::validation::job_validation::ValidationResult {
-    crate::validation::job_validation::validate_resource_allocation(
+    let config = crate::types::core::SlurmConfig {
         cores,
-        &memory,
-        &walltime,
+        memory,
+        walltime,
+        partition: Some(partition_id.clone()),
+        qos: Some(qos_id.clone()),
+    };
+
+    crate::validation::job_validation::validate_resource_allocation(
+        &config,
         &partition_id,
         &qos_id,
     )

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { logger } from '../utils/logger';
 import type { ICoreClient } from './coreClient';
 import type {
   ConnectParams,
@@ -28,9 +29,8 @@ import type {
 export class TauriCoreClient implements ICoreClient {
   // Connection management
   async connect(params: ConnectParams): Promise<ConnectResult> {
-    if (typeof window !== 'undefined' && window.sshConsole) {
-      window.sshConsole.addDebug(`[SSH] Starting connection attempt to ${params.host} as ${params.username}`);
-    }
+    logger.debug('SSH', `Starting connection attempt to ${params.host} as ${params.username}`);
+
     try {
       // Pass parameters as nested object under 'params' key
       const result = await invoke<ConnectResult>('connect_to_cluster', {
@@ -40,17 +40,15 @@ export class TauriCoreClient implements ICoreClient {
           password: params.password
         }
       });
-      if (typeof window !== 'undefined' && window.sshConsole) {
-        window.sshConsole.addDebug(`[SSH] Connection result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
-        if (!result.success && result.error) {
-          window.sshConsole.addDebug(`[SSH] Connection error: ${result.error}`);
-        }
+
+      logger.debug('SSH', `Connection result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+      if (!result.success && result.error) {
+        logger.debug('SSH', `Connection error: ${result.error}`);
       }
+
       return result;
     } catch (error) {
-      if (typeof window !== 'undefined' && window.sshConsole) {
-        window.sshConsole.addDebug(`[SSH] Connection threw exception: ${error}`);
-      }
+      logger.debug('SSH', `Connection threw exception: ${error}`);
       // Convert exception to ConnectResult instead of throwing
       return {
         success: false,
@@ -97,6 +95,10 @@ export class TauriCoreClient implements ICoreClient {
   }
 
   // File management
+  async selectInputFile(): Promise<any> {
+    return invoke('select_input_file');
+  }
+
   async detectFileType(filename: string): Promise<string> {
     return invoke('detect_file_type', { filename });
   }
