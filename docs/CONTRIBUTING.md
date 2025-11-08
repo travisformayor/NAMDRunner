@@ -304,6 +304,31 @@ async function createJob(params: CreateJobParams): Promise<Result<string>> {
 - **Reactive Data Flow**: Use Svelte's reactive statements with utility functions
 - **Consistent Design System**: Follow unified styling patterns across all components
 
+### Design System Usage
+
+> **For complete design system specifications, component details, and theming**, see [`docs/DESIGN.md`](DESIGN.md)
+
+**Key Principles:**
+- Use `--namd-*` CSS custom properties for all colors, spacing, typography (never hardcode colors)
+- Use `.namd-button` classes for buttons (never create custom `.btn` styles)
+- Use `Dialog.svelte` primitive for modals (never duplicate backdrop/overlay code)
+- Use `AlertDialog`/`ConfirmDialog` instead of native `alert()`/`confirm()` for theme consistency
+
+**Quick Reference:**
+```svelte
+<!-- Buttons -->
+<button class="namd-button namd-button--primary">Save</button>
+<button class="namd-button namd-button--destructive">Delete</button>
+
+<!-- Modals - Compose Dialog primitive -->
+<Dialog {open} size="md" {onClose}>
+  <svelte:fragment slot="body">Content</svelte:fragment>
+</Dialog>
+
+<!-- Alerts - Use AlertDialog instead of alert() -->
+<AlertDialog {open} title="Success" message="Done!" variant="success" {onClose} />
+```
+
 ### Connection-Aware UI
 - **Disable destructive actions when disconnected**: Delete job, sync, file downloads
 - **Confirmation dialogs for data loss**: Warn users before permanent deletions
@@ -313,7 +338,7 @@ async function createJob(params: CreateJobParams): Promise<Result<string>> {
 
 ## Service Development Patterns
 
-### 1. Utility Function Design
+### Utility Function Design
 **Pure Functions**: Utility functions should be pure, predictable, and side-effect free.
 
 ```typescript
@@ -370,7 +395,7 @@ pub fn get_cluster_capabilities() -> ClusterCapabilities {
 // In Component B: const partitionLimits = { amilan: { maxCores: 64 } };
 ```
 
-### 2. Frontend Stores Architecture
+### Frontend Stores Architecture
 
 **Stores are pure caching layers** with no business logic. All business logic lives in the Rust backend.
 
@@ -446,6 +471,38 @@ export async function loadClusterCapabilities() {
 
 For high-level architecture overview, see [docs/ARCHITECTURE.md#frontend-architecture](ARCHITECTURE.md#frontend-architecture)
 
+### Template System Patterns
+
+> **For template architecture and variable types**, see [`docs/ARCHITECTURE.md#template-system`](ARCHITECTURE.md) and [`docs/DB.md#template-schema`](DB.md#template-schema)
+
+**Key Developer Patterns:**
+
+**Use Shared Extraction Utilities:**
+```typescript
+// ✅ Correct: Use shared extraction utility
+import { extractVariablesFromTemplate } from '$lib/utils/template-utils';
+const variables = extractVariablesFromTemplate(templateText);
+
+// ❌ Wrong: Duplicate extraction logic
+const variables = [...templateText.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]);
+```
+
+**Template Value Handling:**
+- Store `template_id` + `template_values` in jobs
+- FileUpload values: filenames only (path prepending happens during rendering)
+- Type conversions: Boolean → "yes"/"no", Number → string (backend handles this)
+
+### Database Initialization and Management
+
+> **For complete database architecture, paths, and operation details**, see [`docs/DB.md`](DB.md)
+
+**Key Patterns:**
+- Initialize database in `.setup()` hook (AppHandle required for platform-specific paths)
+- Use `database::get_database_path(app_handle)` for path resolution
+- Use SQLite Backup API for online backups (not direct file copy)
+- Hold `DATABASE` lock during restore/reset operations
+- Close connection before file operations, reopen after
+
 ### Anti-Patterns to Avoid
 
 #### Critical Anti-Patterns (From NAMDRunner Experience)
@@ -471,6 +528,9 @@ For high-level architecture overview, see [docs/ARCHITECTURE.md#frontend-archite
 - **CSS Duplication**: Use centralized `namd-*` classes instead of duplicating styles across components
 - **Hardcoded Styling**: Use CSS custom properties and design system classes, not hardcoded colors
 - **Over-Complex Component APIs**: Keep component interfaces focused and simple
+- **Duplicate Modal Logic**: Never recreate backdrop/overlay/escape handling - always compose Dialog primitive
+- **Native alert()/confirm()**: Use AlertDialog/ConfirmDialog components for theme consistency
+- **Custom Button Classes**: Never create component-specific `.btn` styles - use `.namd-button` design system classes
 
 > **For detailed UI patterns, design system usage, and component examples**, see [`docs/DESIGN.md`](DESIGN.md)
 
@@ -541,15 +601,15 @@ println!("[SLURM] Submitting job: {}", job_name);
 - Use secure memory handling for sensitive data
 - Clean up connections and clear credentials properly
 
-### 2. Service Architecture
+### Service Architecture
 **Direct Dependencies**: Services use direct imports rather than complex dependency injection.
 
 > **For SSH/SFTP service patterns and testing approaches**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
 
-### 3. Path Management
+### Path Management
 Use centralized path validation functions from `validation::paths` module. Never construct paths directly. See `src-tauri/src/validation.rs` for safe path utilities like `project_directory()` and `scratch_directory()`. For job directory structure, use `ssh::JobDirectoryStructure` constants.
 
-### 4. State Management
+### State Management
 Use state machines for complex state management with validated transitions.
 
 ### Performance Guidelines

@@ -4,7 +4,9 @@ This document defines all data persistence patterns for NAMDRunner, including SQ
 
 ## Table of Contents
 - [Database Architecture](#database-architecture)
+- [Database Location](#database-location)
 - [SQLite Schema](#sqlite-schema)
+- [Database Management](#database-management)
 - [JSON Metadata Schema](#json-metadata-schema)
   - [job_info.json (Server-Side)](#job_infojson-server-side)
   - [Template Schema](#template-schema)
@@ -31,6 +33,35 @@ This document defines all data persistence patterns for NAMDRunner, including SQ
 - **Local SQLite Templates Table**: Template definitions - embedded defaults loaded on first use, custom templates added by users
 - **Cluster (job_info.json)**: Single source of truth for job metadata (includes template_id and template_values)
 - **Sync Pattern**: Download from cluster → cache in SQLite → display in UI
+
+## Database Location
+
+Database initialization occurs during app startup in the `.setup()` hook, where the `AppHandle` is available for platform-specific path resolution.
+
+**Development Builds:**
+- Path: `./namdrunner_dev.db` (current working directory)
+- Detected via `cfg!(debug_assertions)`
+- Allows easy inspection during development
+
+**Production Builds:**
+- Path resolved via Tauri's `app_data_dir()` API
+- Linux: `~/.local/share/namdrunner/namdrunner.db`
+- Windows: `%APPDATA%\namdrunner\namdrunner.db`
+- macOS: `~/Library/Application Support/namdrunner/namdrunner.db`
+- Directory created automatically if missing
+
+**Path Resolution:**
+```rust
+pub fn get_database_path(app_handle: &tauri::AppHandle) -> Result<PathBuf> {
+    if cfg!(debug_assertions) {
+        Ok(PathBuf::from("./namdrunner_dev.db"))
+    } else {
+        let app_data_dir = app_handle.path().app_data_dir()?;
+        std::fs::create_dir_all(&app_data_dir)?;
+        Ok(app_data_dir.join("namdrunner.db"))
+    }
+}
+```
 
 ## SQLite Schema
 
@@ -87,6 +118,73 @@ ensure_default_templates_loaded()?;  // Idempotent - loads defaults if not alrea
 ```
 
 **That's it.** No manual serialization, no column lists, no migrations.
+
+## Database Management
+
+The application provides built-in database management operations accessible through the Settings page.
+
+### Operations
+
+**Get Database Info:**
+- Returns current database file path and size
+- Used for display in Settings UI
+- Path determined during app initialization
+
+**Backup Database:**
+- Opens OS file save dialog for user to choose backup location
+- Uses SQLite Backup API (`rusqlite::backup::Backup`) for safe online backups
+- Creates consistent snapshot even while database is in use
+- No application restart required
+
+**Restore Database:**
+- Opens OS file dialog for user to select backup file
+- Validates source file is a valid SQLite database
+- Closes current connection, replaces database file, reopens connection
+- Atomic operation - holds `DATABASE` lock throughout
+- Frontend automatically reloads all stores (jobs, templates, settings)
+- No application restart required
+
+**Reset Database:**
+- Deletes current database file
+- Reinitializes with fresh schema
+- Atomic operation - holds `DATABASE` lock throughout
+- Frontend automatically reloads all stores
+- Safe even with running jobs - sync auto-discovers from cluster metadata
+- No application restart required
+
+### Connection Management
+
+Database connections are managed through the global `DATABASE` instance:
+
+```rust
+lazy_static! {
+    pub static ref DATABASE: Arc<Mutex<Option<JobDatabase>>> = Arc::new(Mutex::new(None));
+    static ref DATABASE_PATH: Arc<Mutex<Option<PathBuf>>> = Arc::new(Mutex::new(None));
+}
+
+pub fn reinitialize_database(db_path: &str) -> Result<()> {
+    let mut database_lock = DATABASE.lock().unwrap();
+
+    // Drop old connection (closes SQLite)
+    *database_lock = None;
+
+    // Create new connection
+    let db = JobDatabase::new(db_path)?;
+    *database_lock = Some(db);
+
+    // Update tracked path
+    let mut path_lock = DATABASE_PATH.lock().unwrap();
+    *path_lock = Some(PathBuf::from(db_path));
+
+    Ok(())
+}
+```
+
+**Key Points:**
+- Connection reinitializiation is safe - proper locking prevents concurrent access
+- All operations atomic (connection closed before file operation, reopened after)
+- Backup uses SQLite Backup API for consistency (no file-level copy during active use)
+- Frontend state reloads automatically after restore/reset
 
 ## JSON Metadata Schema
 
@@ -397,9 +495,17 @@ pub enum NAMDFileType {
 2. **Synchronous is fine** - SQLite operations are microseconds, no async overhead needed
 3. **No connection pooling** - single-threaded desktop app, one connection is enough
 4. **Graceful degradation** - old DB? Delete it, recreate with new schema
+5. **Initialize in `.setup()` hook** - ensures `AppHandle` available for platform-specific paths
+6. **Use SQLite Backup API** - for consistent snapshots during active use
+
+### Database Management
+1. **Backup before major changes** - users can backup via Settings page
+2. **Reset is safe** - sync auto-discovers jobs from cluster, templates can be recreated
+3. **Restore is atomic** - holds lock throughout operation, prevents concurrent access
+4. **No app restart needed** - connection reinitializes cleanly after restore/reset
 
 ### Schema Changes
-1. **No migrations** - users delete old DB file
+1. **No migrations** - users delete old DB file or use Reset feature
 2. **Add fields freely** - serde handles missing fields with `#[serde(default)]`
 3. **Breaking changes OK** - development phase, no backward compatibility burden
 
@@ -413,7 +519,7 @@ pub enum NAMDFileType {
 1. **Server is source of truth** - SQLite is just a cache
 2. **Sync resolves conflicts** - download from server overwrites local
 3. **No complex sync logic** - simple replace-on-sync pattern
-4. **User can always re-sync** - if local DB corrupt, just sync again
+4. **User can always re-sync** - if local DB corrupt, just sync or reset
 
 ---
 

@@ -36,6 +36,7 @@ NAMDRunner is a desktop application for managing NAMD molecular dynamics simulat
   - Jobs (default view, shows badge with total job count)
   - Create Job (disabled when disconnected)
   - Templates
+  - Settings (database management)
 - **Breadcrumbs**: Secondary navigation for drilling into details
   - Example: `Jobs > Job Details`
   - Example: `Templates > Edit Template`
@@ -51,7 +52,7 @@ NAMDRunner is a desktop application for managing NAMD molecular dynamics simulat
 - **Page Title**: "Jobs"
 - **Sync Status**: `Last synced: 5 minutes ago [Sync Now] [Auto-sync: ☐ every _5_ min]`
   - Gray text when disconnected: "Offline - showing cached data from [timestamp]"
-- **Actions**: [Create New Job] button (disabled when disconnected)
+- **Actions**: [Create Job] button (disabled when disconnected)
 
 #### Table Structure
 **Columns** (sortable by clicking headers):
@@ -118,7 +119,7 @@ Delete Job: [job_name]?
 ### 3. Create Job Page
 
 #### Breadcrumb
-`Jobs > Create New Job`
+`Jobs > Create Job`
 
 #### Tab Interface (3 tabs)
 The create job page uses a 3-tab interface for organizing job configuration:
@@ -197,8 +198,8 @@ The create job page uses a 3-tab interface for organizing job configuration:
 ```
 
 #### Template Cards
-- **Built-in Templates**: Light blue border highlight
-- **Custom Templates**: Standard border
+- **Built-in Templates**: Badge indicator, improved contrast with secondary background
+- **Custom Templates**: Standard styling
 - **Hover State**: Elevated shadow effect
 - **Empty State**: Centered message encouraging template creation
 
@@ -210,7 +211,39 @@ The create job page uses a 3-tab interface for organizing job configuration:
 
 ---
 
-### 5. Template Editor Page
+### 5. Settings Page
+
+#### Breadcrumb
+`Settings`
+
+#### Page Layout
+```
+[Page Header]
+- Title: "Settings"
+
+[Database Management Section]
+- Database Location: /full/path/to/namdrunner.db (read-only display)
+- Database Size: 2.3 MB (formatted display)
+- Action buttons:
+  [Backup Database] - Opens save dialog, creates copy
+  [Restore Database] - Warning dialog → file dialog → replaces DB
+  [Reset Database] - Warning dialog → deletes and recreates DB
+```
+
+#### Database Operations
+- **Backup**: Opens OS save dialog, uses SQLite Backup API for safe online backup
+- **Restore**: Shows warning with ConfirmDialog (destructive style), opens file dialog, validates backup, replaces database, reinitializes connection
+- **Reset**: Shows warning with ConfirmDialog (destructive style), deletes database file, recreates schema, reloads stores
+- **Post-Operation**: AlertDialog shows success/error messages, all stores reload automatically
+
+#### Database Paths
+- **Production Linux**: `~/.local/share/namdrunner/namdrunner.db`
+- **Production Windows**: `%APPDATA%\namdrunner\namdrunner.db`
+- **Development**: `./namdrunner_dev.db` (project root)
+
+---
+
+### 6. Template Editor Page
 
 #### Breadcrumb
 `Templates > Create Template` or `Templates > Edit Template`
@@ -321,17 +354,38 @@ Variables are automatically detected from template text using regex pattern:
 
 ### Common UI Components
 
-**ConfirmDialog**
-- Unified confirmation dialog used throughout the app
-- Props: isOpen, title, message, confirmText, cancelText, confirmStyle
-- confirmStyle: 'destructive' (red) or default
-- Used for: template deletion, job deletion
+NAMDRunner uses a composition-based modal system with a single primitive component and specialized wrappers.
+
+**Dialog** (Primitive Component)
+- The only base modal component in the system
+- Located: `src/lib/components/ui/Dialog.svelte`
+- Features: Backdrop overlay, escape key handler, click-outside to close, z-index management
+- Props: `open`, `size` (sm/md/lg), `onClose`, `showCloseButton`
+- Slots: `header`, `body` (default), `footer`
+- All other modals use Dialog internally via composition
+
+**AlertDialog** (Replaces native `alert()`)
+- Wrapper around Dialog for simple notifications
+- Located: `src/lib/components/ui/AlertDialog.svelte`
+- Props: `open`, `title`, `message`, `variant`, `onClose`
+- Variants: `success`, `error`, `warning`, `info` (with colored icons)
+- Used for: Settings page notifications, operation feedback
+- Single OK button to dismiss
+
+**ConfirmDialog** (Confirmation Dialogs)
+- Wrapper around Dialog for confirmation actions
+- Located: `src/lib/components/ui/ConfirmDialog.svelte`
+- Props: `isOpen`, `title`, `message`, `confirmText`, `cancelText`, `confirmStyle`, `onConfirm`, `onCancel`
+- confirmStyle: `'destructive'` (red) or `'primary'` (blue)
+- Used for: template deletion, job deletion, database operations
+- Two buttons: Cancel (secondary) and Confirm (primary/destructive)
 
 **PreviewModal**
-- Modal for displaying preview content
+- Wrapper around Dialog for displaying code/text previews
+- Located: `src/lib/components/ui/PreviewModal.svelte`
 - Used for: SLURM script preview, NAMD config preview, template testing
-- Props: isOpen, title, content, onClose
-- Content displayed in monospace font with scrolling
+- Props: `isOpen`, `title`, `content`, `onClose`
+- Content displayed in monospace font with `--namd-code-bg` background
 
 ---
 
@@ -339,16 +393,19 @@ Variables are automatically detected from template text using regex pattern:
 
 ### CSS Variables and Theming
 
-NAMDRunner uses CSS custom properties (variables) for consistent theming and easy dark mode support. All variables use the `--namd-*` prefix.
+NAMDRunner uses CSS custom properties (variables) for consistent theming and easy dark mode support. All variables use the `--namd-*` prefix and are defined in `src/lib/styles/app.css`.
 
 **Core Color Categories:**
 - `--namd-bg-*`: Background colors (primary, secondary, muted)
 - `--namd-text-*`: Text colors (primary, secondary, muted)
-- `--namd-primary-*`: Primary action colors and variants
+- `--namd-primary-*`: Primary action colors and variants (light: `#2563eb`, dark: `#3b82f6`)
 - `--namd-secondary-*`: Secondary action colors
+- `--namd-accent-*`: Accent colors for hover states
 - `--namd-success/warning/error/info-*`: Status colors with background/foreground variants
 - `--namd-sidebar-*`: Sidebar-specific colors including active states
 - `--namd-border*`: Border colors and shadows
+- `--namd-code-bg`: Background for code/monospace content
+- `--namd-input-disabled-bg`: Disabled input background
 
 **Layout Variables:**
 - `--namd-border-radius*`: Border radius tokens (sm, base, lg)
@@ -356,9 +413,10 @@ NAMDRunner uses CSS custom properties (variables) for consistent theming and eas
 - `--namd-font-size-*`: Typography scale
 - `--namd-font-weight-*`: Font weights
 - `--namd-shadow-*`: Box shadow tokens
+- `--namd-z-*`: Z-index layers (dropdown, modal, popover, tooltip)
 
 **Dark Theme:**
-Uses `[data-theme="dark"]` selector to override variables. Toggle via `uiStore.setTheme()`.
+Uses `[data-theme="dark"]` selector to override variables. Toggle via `uiStore.setTheme()`. All colors are defined for both light and dark themes to ensure proper contrast and readability.
 
 #### Naming Convention
 **Consistent Naming**: Use `namd-*` prefix for all custom CSS classes.
@@ -388,24 +446,48 @@ Uses `[data-theme="dark"]` selector to override variables. Toggle via `uiStore.s
 
 Component-specific styles are allowed but should use CSS variables for colors, spacing, and other themeable values.
 
+#### Button System
+
+NAMDRunner uses a centralized button system defined in `app.css`. All components use these classes instead of custom button styles.
+
+**Base Button Class:**
+```css
+.namd-button {
+  /* Base styles: flex layout, padding, border-radius, transitions */
+}
+```
+
+**Button Variants:**
+- `.namd-button--primary` - Primary actions (blue background)
+- `.namd-button--secondary` - Secondary actions (gray background with border)
+- `.namd-button--destructive` - Dangerous actions (red background)
+- `.namd-button--ghost` - Transparent background, text-colored
+- `.namd-button--outline` - Transparent background with border
+
+**Button Sizes:**
+- `.namd-button--sm` - Small buttons (reduced padding and font size)
+- `.namd-button--lg` - Large buttons (increased padding and font size)
+
+**Usage Pattern:**
+```svelte
+<button class="namd-button namd-button--primary">Create</button>
+<button class="namd-button namd-button--secondary">Cancel</button>
+<button class="namd-button namd-button--destructive">Delete</button>
+<button class="namd-button namd-button--sm namd-button--outline">Edit</button>
+```
+
 #### Component Class Examples
 ```css
 /* Status badges */
-.namd-status-badge {
-  padding: 0.25rem 0.5rem;
+.namd-badge {
+  padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
   border-radius: 9999px;
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: var(--namd-font-size-xs);
 }
 
-.namd-status-badge--running {
-  background-color: #dbeafe;
-  color: #1d4ed8;
-}
-
-.namd-status-badge--completed {
-  background-color: #d1fae5;
-  color: #065f46;
+.namd-badge--success {
+  background-color: var(--namd-success-bg);
+  color: var(--namd-success-fg);
 }
 
 /* Form fields */
@@ -416,59 +498,31 @@ Component-specific styles are allowed but should use CSS variables for colors, s
 .namd-label {
   display: block;
   margin-bottom: 0.25rem;
-  font-weight: 500;
+  font-weight: var(--namd-font-weight-medium);
 }
 
 .namd-input {
   width: 100%;
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
+  border: 1px solid var(--namd-border);
+  border-radius: var(--namd-border-radius-sm);
+  background: var(--namd-bg-primary);
+  color: var(--namd-text-primary);
 }
 
 .namd-input.error {
-  border-color: #ef4444;
+  border-color: var(--namd-error-border);
+  background-color: var(--namd-error-bg);
+}
+
+.namd-input:disabled {
+  background-color: var(--namd-input-disabled-bg);
 }
 
 .namd-error-text {
-  color: #ef4444;
-  font-size: 0.875rem;
+  color: var(--namd-error-fg);
+  font-size: var(--namd-font-size-xs);
   margin-top: 0.25rem;
-}
-
-/* Tabs */
-.namd-tabs-nav {
-  display: flex;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.namd-tabs-nav--grid {
-  display: grid;
-}
-
-.namd-tabs-nav--grid-5 {
-  grid-template-columns: repeat(5, 1fr);
-}
-
-.namd-tab-button {
-  padding: 0.75rem 1rem;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-}
-
-.namd-tab-button.active {
-  border-bottom-color: #3b82f6;
-  color: #3b82f6;
-}
-
-.namd-tab-content {
-  padding: 1rem;
-}
-
-.namd-tab-panel {
-  /* Panel-specific styles */
 }
 ```
 
@@ -543,7 +597,7 @@ NAMDRunner uses Svelte stores for global state management instead of prop drilli
 **`stores/ui.ts`** - View navigation and UI state
 ```typescript
 interface UIState {
-  currentView: 'jobs' | 'create' | 'templates' | 'template-edit';
+  currentView: 'jobs' | 'create' | 'templates' | 'template-edit' | 'settings';
   selectedJobId: string | null;
   selectedTemplateId: string | null;
   templateEditorMode: 'create' | 'edit';
@@ -620,6 +674,24 @@ validateResourceRequest(cores, memory, walltime, partition, qos)
 calculateJobCost(cores, walltimeHours, hasGpu, gpuCount)
 estimateQueueTime(cores, partition)
 walltimeToHours(walltime)  // Parse HH:MM:SS to hours
+```
+
+**`stores/settings.ts`** - Settings and database management
+```typescript
+// Database information
+settingsStore.loadDatabaseInfo()  // Get path and size
+settingsStore.backupDatabase()    // OS save dialog, create backup
+settingsStore.restoreDatabase()   // OS file dialog, replace database
+settingsStore.resetDatabase()     // Delete and recreate database
+
+// Stores
+export const databaseInfo = writable<DatabaseInfo | null>(null);
+export const isLoading = writable(false);
+
+// Features:
+// - Auto-reloads database info after restore/reset
+// - Integrates with logger for user feedback
+// - Post-operation store reloading (jobs, templates)
 ```
 
 ### Component Reactive Patterns
@@ -729,7 +801,8 @@ components/
 │   ├── CreateJobPage.svelte       # Create job 3-tab interface
 │   ├── JobDetailPage.svelte       # Job detail tabs
 │   ├── TemplatesPage.svelte       # Template grid with actions
-│   └── TemplateEditorPage.svelte  # Template create/edit form
+│   ├── TemplateEditorPage.svelte  # Template create/edit form
+│   └── SettingsPage.svelte        # Database management
 ├── create-job/
 │   ├── CreateJobTabs.svelte       # 3-tab container with validation
 │   ├── ResourcesTab.svelte        # Presets + manual config + validation
@@ -749,8 +822,10 @@ components/
 │   ├── JobsTable.svelte           # Table with sortable columns
 │   └── SyncControls.svelte        # Sync status/controls
 └── ui/
-    ├── ConfirmDialog.svelte       # Unified confirmation dialogs
-    ├── PreviewModal.svelte        # Preview display modal
+    ├── Dialog.svelte              # Base modal primitive (composition root)
+    ├── AlertDialog.svelte         # Notification dialog (replaces alert())
+    ├── ConfirmDialog.svelte       # Confirmation dialogs with Cancel/Confirm
+    ├── PreviewModal.svelte        # Code/text preview display
     └── FormField.svelte           # Reusable form field wrapper
 ```
 
@@ -839,23 +914,38 @@ components/
 
 ---
 
-## Deleted Components and Features
+## Design System Architecture
 
-These components were removed during Phase 7.1 refactor:
+### Modal System
 
-**Removed Components:**
-- `ConfigurationTab.svelte` (create-job): Replaced by dynamic form system
-- `FilesTab.svelte` (create-job): Integrated into ConfigureTab
-- `JobPresets.svelte`: Replaced by preset pills in ResourcesTab
-- `CompactQosSelector.svelte`, `PartitionSelector.svelte`, `ResourceValidator.svelte`: Consolidated into ResourcesTab
-- `LogsPanel.svelte`: Footer panel for SSH/SLURM operation logs
-- `ConfigurationTab.svelte` (job-detail): Removed, template values shown in OverviewTab
-- `InputFilesTab.svelte` (job-detail): Removed, file info shown in template values
+NAMDRunner uses a composition-based modal architecture with a single primitive:
 
-**Removed Features:**
-- Demo mode toggle: Removed from ConnectionDropdown and session store
-- Hardcoded NAMD configuration form: Replaced by template-driven dynamic forms
-- Separate files tab in job creation: Files now integrated with template configuration
+**Primitive:**
+- `Dialog.svelte` - The only base modal component
+- Features: Backdrop, escape key, click-outside, z-index, size variants
+- Slots: header, body, footer
+
+**Wrappers:**
+- `AlertDialog.svelte` - Simple notifications (success/error/warning/info)
+- `ConfirmDialog.svelte` - Confirmation actions with Cancel/Confirm buttons
+- `PreviewModal.svelte` - Code/text preview with monospace display
+
+All modals use Dialog internally via composition. No duplicate modal code exists.
+
+### Button System
+
+All buttons use centralized `.namd-button` classes from `app.css`:
+- Variants: `--primary`, `--secondary`, `--destructive`, `--ghost`, `--outline`
+- Sizes: `--sm`, `--lg`
+- No component-specific button styles exist
+
+### Theme System
+
+All colors defined as CSS variables in `app.css`:
+- Light and dark themes fully supported
+- Primary color: `#2563eb` (light), `#3b82f6` (dark)
+- Components use variables exclusively (no hardcoded colors)
+- Special variables: `--namd-code-bg`, `--namd-input-disabled-bg`, `--namd-error-*`
 
 ---
 

@@ -29,6 +29,9 @@
   - [Backend (App Core)](#backend-app-core)
   - [SLURM Integration](#slurm-integration)
   - [Why This Stack](#why-this-stack)
+  - [Application Lifecycle](#application-lifecycle)
+  - [Architectural Patterns](#architectural-patterns)
+  - [Database Architecture](#database-architecture)
 - [System Design](#system-design)
   - [End-to-End Workflow](#end-to-end-workflow)
     - [Primary Workflow (Job Lifecycle)](#primary-workflow-job-lifecycle)
@@ -170,6 +173,24 @@ NAMDRunner integrates with SLURM workload managers for job submission and monito
 * **Maintainability**: typed boundaries (TS ↔ Rust), clear module seams, small binary.
 * **UI velocity**: Svelte's component model is simple, predictable, and testable.
 
+### Application Lifecycle
+
+NAMDRunner follows a structured initialization sequence in `src-tauri/src/lib.rs`:
+
+1. **Logging initialization** - First, before Tauri builder (`logging::init_logging()`)
+2. **Tauri builder** - Plugin registration and app configuration
+3. **Setup hook** - Critical initialization requiring `AppHandle`:
+   - Set logging bridge to frontend (`logging::set_app_handle()`)
+   - Resolve database path (`database::get_database_path(app.handle())`)
+   - Initialize database with platform-specific path
+4. **Command registration** - All 30+ IPC commands registered in `invoke_handler!`
+5. **Template loading** - Default templates loaded lazily on first `list_templates` call (ensures frontend ready for logs)
+
+**Why `.setup()` hook for database:**
+- Tauri `AppHandle` only available after builder construction
+- `app_data_dir()` API requires `AppHandle` for platform-specific path resolution
+- Ensures proper directory creation before database initialization
+
 ### Architectural Patterns
 
 **Manager Separation:**
@@ -203,13 +224,22 @@ Frontend tests use Vitest mocking for isolated component testing:
 
 ### Database Architecture
 
-NAMDRunner uses SQLite for local data persistence with job lifecycle management and status tracking.
+NAMDRunner uses SQLite for local data persistence with platform-specific user data directory paths.
+
+**Database Initialization:**
+- **Platform-specific paths** using Tauri's `app_data_dir()` API
+  - Linux: `~/.local/share/namdrunner/namdrunner.db`
+  - Windows: `%APPDATA%\namdrunner\namdrunner.db`
+  - Development: `./namdrunner_dev.db`
+- **Setup hook initialization** - Database created in `.setup()` hook where `AppHandle` is available
+- **Path resolution** - `database::get_database_path(app_handle)` centralizes all path logic
 
 **Key Features:**
 - **Local SQLite cache** for job metadata (document-store pattern)
 - **Thread-safe global database** with singleton pattern
 - **Atomic operations** integrated with automation chains
 - **Zero-migration schema** using JSON serialization
+- **Template storage** - Normalized schema with JSON variable definitions
 
 > **For complete database schemas, implementation patterns, and data management details**, see [`docs/DB.md`](DB.md)
 
@@ -341,7 +371,8 @@ src/
 │   │   ├── jobs.ts              # Job state management with real-time updates
 │   │   ├── templateStore.ts     # Template state management
 │   │   ├── clusterConfig.ts     # Cluster capabilities cache (from backend)
-│   │   ├── ui.ts                # UI state and preferences
+│   │   ├── settings.ts          # Database info and management operations
+│   │   ├── ui.ts                # UI state, navigation, and view preferences
 │   │   └── session.test.ts      # Store unit tests
 │   ├── components/              # Svelte UI components
 │   │   ├── layout/              # Layout and infrastructure components
@@ -362,8 +393,12 @@ src/
 │   │   ├── jobs/                # Job listing and management components
 │   │   ├── pages/               # Page-level components
 │   │   │   ├── TemplatesPage.svelte      # Template management page
-│   │   │   └── TemplateEditorPage.svelte # Template editor page
+│   │   │   ├── TemplateEditorPage.svelte # Template editor page
+│   │   │   └── SettingsPage.svelte       # Settings and database management
 │   │   ├── ui/                  # Reusable UI components
+│   │   │   ├── Dialog.svelte             # Base modal primitive
+│   │   │   ├── AlertDialog.svelte        # Success/Error/Warning notifications
+│   │   │   ├── ConfirmDialog.svelte      # Confirmation dialog
 │   │   │   └── PreviewModal.svelte       # Template preview modal
 │   │   └── AppShell.svelte      # Main application shell
 │   ├── types/                   # Additional TypeScript types
@@ -397,7 +432,8 @@ src-tauri/
 │   │   ├── cluster.rs          # Cluster configuration and validation commands
 │   │   ├── jobs.rs             # Job lifecycle commands (create/submit/sync/delete/complete)
 │   │   ├── files.rs            # File management commands
-│   │   └── templates.rs        # Template management commands (list/get/create/update/delete/validate)
+│   │   ├── templates.rs        # Template management commands (list/get/create/update/delete/validate)
+│   │   └── database.rs         # Database management commands (info/backup/restore/reset)
 │   ├── automations/            # Job lifecycle automation system
 │   │   ├── mod.rs              # Automation module exports
 │   │   ├── job_creation.rs     # Job creation automation with progress tracking
@@ -457,8 +493,19 @@ NAMDRunner implements a backend-first architecture where all business logic, val
 - **Single backend calls** - No multi-step orchestration (e.g., sync returns complete job list including discovered jobs)
 - **Presentational components** - UI components handle display logic only
 
+**Design System:**
+NAMDRunner uses a centralized design system with comprehensive theming support.
+
+- **Centralized CSS variables** - All colors defined in `app.css` with light/dark theme support
+- **Unified component patterns** - Single primitive components extended through composition
+  - `Dialog.svelte` - Base modal primitive (escape key, click-outside, z-index management)
+  - `AlertDialog.svelte` - Success/Error/Warning/Info notifications
+  - `ConfirmDialog.svelte` - Confirmation dialogs with destructive action support
+  - Button system: `.namd-button` classes (primary, secondary, destructive variants)
+- **Theme consistency** - All interactive elements use `--namd-*` CSS variables (no hardcoded colors)
+
 **Frontend Responsibilities:**
-- Reactive state caching via Svelte stores ([`clusterConfig.ts`](../src/lib/stores/clusterConfig.ts), [`jobs.ts`](../src/lib/stores/jobs.ts), [`session.ts`](../src/lib/stores/session.ts))
+- Reactive state caching via Svelte stores ([`jobs.ts`](../src/lib/stores/jobs.ts), [`session.ts`](../src/lib/stores/session.ts), [`templateStore.ts`](../src/lib/stores/templateStore.ts), [`settings.ts`](../src/lib/stores/settings.ts))
 - UI presentation and user interaction
 - Progress event handling from backend
 - Display formatting (status badges, file icons, etc.)
@@ -609,17 +656,19 @@ The application provides a complete set of commands for job management and clust
 
 #### Available Commands
 
-NAMDRunner provides 25+ Tauri commands organized into four main categories:
+NAMDRunner provides 30+ Tauri commands organized into five main categories:
 - **Connection Management** (3 commands): SSH connectivity and session management
 - **Job Lifecycle** (9 commands): Create, submit, monitor, sync, complete, cleanup operations
 - **File Management** (6 commands): Upload, download, listing, and file operations
 - **Template Management** (7 commands): List, get, create, update, delete, validate, preview templates
+- **Database Management** (4 commands): Info, backup, restore, reset operations
 
 **Key Features:**
 - **Consistent return types** for uniform error handling
 - **Real-time progress tracking** via Tauri event system
 - **Template-based job configuration** with dynamic validation
 - **Comprehensive automation** with job completion and results preservation
+- **Database management** with online backup using SQLite Backup API
 
 > **For complete command interfaces, parameter types, and response schemas**, see [`docs/API.md`](API.md)
 
@@ -641,7 +690,13 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
   - Template rendering: `src-tauri/src/templates/renderer.rs::render_template()` (regex-based variable substitution)
   - Template validation: `src-tauri/src/templates/validation.rs::validate_values()` (type checking, required fields)
   - Template commands: `src-tauri/src/commands/templates.rs` (7 IPC commands)
-  - Default templates: Embedded JSON files loaded via `include_str!` macro
+  - Default templates: Embedded JSON files loaded via `include_str!` macro on first `list_templates` call
+  - Variable types: Number (min/max/default), Text (default), Boolean (default, rendered as "yes"/"no"), FileUpload (extensions, prepends "input_files/")
+- **Database Management** - User-accessible database operations
+  - Database commands: `src-tauri/src/commands/database.rs` (4 IPC commands: info, backup, restore, reset)
+  - Online backup: SQLite Backup API for safe backups while app running
+  - Connection management: `database::reinitialize_database()` safely closes and reopens connections
+  - Path resolution: `database::get_database_path()` centralizes platform-specific path logic
 - **SSH/SFTP Integration** - Complete secure cluster connectivity and file operations
   > **For SSH/SFTP security patterns and connection management**, see [`docs/SSH.md`](SSH.md)
   - Connection management: `src-tauri/src/ssh/manager.rs::ConnectionManager` (singleton with retry logic)
@@ -682,11 +737,14 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
   - Template state: `src/lib/stores/templateStore.ts` (template management)
   - Session state: `src/lib/stores/session.ts` (connection status, session info)
   - Cluster config: `src/lib/stores/clusterConfig.ts` (caches backend cluster capabilities)
+  - Settings state: `src/lib/stores/settings.ts` (database info, backup/restore/reset operations)
 - **Component Architecture** - Focused, composable UI components
   > **For UI/UX design patterns and component specifications**, see [`docs/DESIGN.md`](DESIGN.md)
   - App shell: `src/lib/components/AppShell.svelte`
   - Job creation: `src/lib/components/create-job/` (3-tab workflow with dynamic forms)
   - Template management: `src/lib/components/templates/` (template editor, variable editor)
+  - Settings page: `src/lib/components/pages/SettingsPage.svelte` (database management UI)
+  - UI primitives: `src/lib/components/ui/` (Dialog, AlertDialog, ConfirmDialog, PreviewModal)
   - Layout components: `src/lib/components/layout/` directory
   - Page components: `src/lib/components/pages/` directory
 

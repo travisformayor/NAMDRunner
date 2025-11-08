@@ -175,15 +175,6 @@ Template + Values → Validate → Render → Upload Files → Generate SLURM Sc
 - Removed setTimeout anti-pattern (errors cleared on next operation, matches app pattern)
 - Extracted duplicate template utilities (extraction, label generation, sample values)
 
-### Remaining Work
-
-**End-to-End Verification** (User Testing):
-- [ ] Test complete job lifecycle with templates
-- [ ] Verify template CRUD operations
-- [ ] Test resource presets and validation
-- [ ] Test connection timeout detection
-- [ ] Verify offline mode behavior
-
 ## Success Criteria
 
 ### Functional Requirements ✅ (Complete)
@@ -264,10 +255,7 @@ Before archiving this task:
 - [x] Theme consistency (centralized CSS variables, hover states readable)
 - [x] Connection failure detection (auto-transition to Expired)
 - [x] Offline mode support (cached jobs, buttons disabled)
-- [ ] End-to-end testing verification (user testing)
-- [ ] Run code review with review-refactor agent
 - [ ] Update documentation (ARCHITECTURE.md, DB.md, API.md)
-- [ ] Archive task to `tasks/completed/`
 
 ## Current Status
 

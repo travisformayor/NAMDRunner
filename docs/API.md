@@ -15,8 +15,10 @@ This document defines all interfaces and data contracts for NAMDRunner, consolid
   - [Request/Response Types](#requestresponse-types)
 - [File Management Commands](#file-management-commands)
   - [IPC Interface](#ipc-interface-2)
-- [Template Management Commands](#template-management-commands)
+- [Database Management Commands](#database-management-commands)
   - [IPC Interface](#ipc-interface-3)
+- [Template Management Commands](#template-management-commands)
+  - [IPC Interface](#ipc-interface-4)
   - [Template Rendering](#template-rendering)
   - [Default Templates](#default-templates)
 - [Error Handling Strategy](#error-handling-strategy)
@@ -387,6 +389,42 @@ interface ListFilesResult {
 }
 ```
 
+## Database Management Commands
+
+### IPC Interface
+```typescript
+interface IDatabaseCommands {
+  // Get database path and size information
+  get_database_info(): Promise<DatabaseInfoResult>;
+
+  // Backup database to user-selected location
+  backup_database(): Promise<DatabaseOperationResult>;
+
+  // Restore database from user-selected backup file
+  restore_database(): Promise<DatabaseOperationResult>;
+
+  // Reset database (delete all data and recreate schema)
+  reset_database(): Promise<DatabaseOperationResult>;
+}
+
+interface DatabaseInfoResult {
+  success: boolean;
+  path?: string;          // Full path to database file
+  size_bytes?: number;    // Database file size in bytes
+  error?: string;
+}
+
+interface DatabaseOperationResult {
+  success: boolean;
+  message?: string;       // Success message (e.g., "Backup saved to /path/to/backup.db")
+  error?: string;
+}
+```
+
+**Implementation**: [src-tauri/src/commands/database.rs](../src-tauri/src/commands/database.rs)
+
+> **For platform-specific database paths, operational details, and connection management**, see [`docs/DB.md`](DB.md)
+
 ## Template Management Commands
 
 ### IPC Interface
@@ -693,10 +731,26 @@ pub struct ValidationResult {
     pub suggestions: Vec<String>,
 }
 
+// Database management result types
+#[derive(Debug, Serialize)]
+pub struct DatabaseInfoResult {
+    pub success: bool,
+    pub path: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DatabaseOperationResult {
+    pub success: bool,
+    pub message: Option<String>,
+    pub error: Option<String>,
+}
+
 // Additional result types follow same pattern...
 ```
 
-**Location**: [src-tauri/src/types/commands.rs](../src-tauri/src/types/commands.rs), [src-tauri/src/types/core.rs](../src-tauri/src/types/core.rs)
+**Location**: [src-tauri/src/types/commands.rs](../src-tauri/src/types/commands.rs), [src-tauri/src/types/core.rs](../src-tauri/src/types/core.rs), [src-tauri/src/commands/database.rs](../src-tauri/src/commands/database.rs)
 
 ## SLURM Integration
 
