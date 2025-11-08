@@ -237,13 +237,14 @@ NAMDRunner uses SQLite for local data persistence with job lifecycle management 
 
 #### Directory Structure
 
-Jobs use a standard three-subdirectory structure (`input_files/`, `scripts/`, `outputs/`) centrally defined in `ssh/directory_structure.rs`.
+Jobs use a standard two-subdirectory structure (`input_files/`, `outputs/`) centrally defined in `ssh/directory_structure.rs`. Job scripts (config.namd, job.sbatch) reside in the job root directory.
 
 ```
 {job_id}/
 ├── job_info.json
+├── config.namd                 # Generated NAMD config (in job root)
+├── job.sbatch                  # Generated SLURM script (in job root)
 ├── input_files/                # User-uploaded files
-├── scripts/                    # Generated job scripts
 ├── outputs/                    # NAMD output files
 ├── namd_output.log
 ├── {job_name}_{slurm_id}.out
@@ -571,7 +572,7 @@ NAMDRunner uses a **template-based configuration system** where NAMD simulation 
 2. Frontend validates all variables have values
 3. Backend validates values match types and constraints (missing any variable causes error)
 4. Backend renders template by replacing `{{key}}` with formatted values
-5. Rendered NAMD config written to `scripts/config.namd` on cluster
+5. Rendered NAMD config written to `config.namd` in job root directory on cluster
 
 **Default Templates:**
 - `vacuum_optimization_v1` - Large periodic box, PME disabled, ENM restraints

@@ -139,7 +139,7 @@ The `execute_job_creation_with_progress` function handles the complete job creat
 
 2. **Create Project Directory Structure**
    - Create: `/projects/$USER/namdrunner_jobs/{job_id}/`
-   - Create subdirectories: `input_files/`, `scripts/`, `outputs/`
+   - Create subdirectories: `input_files/`, `outputs/`
    - Only creates project directories (scratch directories created during submission)
 
 3. **Load and Process Template**
@@ -164,11 +164,11 @@ The `execute_job_creation_with_progress` function handles the complete job creat
 6. **Generate SLURM Batch Script**
    - Use `SlurmScriptGenerator::generate_namd_script(&job_info, &scratch_dir)` to create job.sbatch
    - Scratch directory path passed as parameter (not stored in JobInfo until submission)
-   - Upload script to `scripts/job.sbatch`
+   - Upload script to job root: `job.sbatch`
    - Script configures SLURM resources, modules, and NAMD execution
 
 7. **Upload NAMD Configuration**
-   - Upload rendered config to `scripts/config.namd`
+   - Upload rendered config to job root: `config.namd`
    - Config includes simulation parameters, input files, and output settings
 
 8. **Create Job Metadata**
@@ -213,13 +213,14 @@ The `execute_job_submission_with_progress` function handles the complete job sub
    - Uses single `rsync -az` command to sync entire directory structure
    - Preserves complete directory layout with all subdirectories:
      - `input_files/` - All NAMD input files
-     - `scripts/` - SLURM batch script and NAMD configuration
+     - `config.namd` - NAMD configuration (in job root)
+     - `job.sbatch` - SLURM batch script (in job root)
      - `outputs/` - Empty initially, populated during job execution
      - `job_info.json` - Job metadata
    - **Why rsync**: Single cluster-side operation is much faster than per-file SFTP transfers, supports delta sync for resubmissions
 
 3. **Submit to SLURM**:
-   - Execute `sbatch` using the mirrored script in scratch location: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/scripts/job.sbatch`
+   - Execute `sbatch` using the mirrored script in scratch location: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/job.sbatch`
    - SLURM job now owns scratch directory - app does not touch it during execution
    - Parse SLURM job ID from output
    - Handle submission errors with proper timeout
@@ -232,15 +233,14 @@ The `execute_job_submission_with_progress` function handles the complete job sub
 **Directory Structure After Submission**:
 ```
 /projects/$USER/namdrunner_jobs/job_123/          /scratch/alpine/$USER/namdrunner_jobs/job_123/
+├── job_info.json                                  ├── job_info.json
+├── config.namd                                    ├── config.namd
+├── job.sbatch                                     ├── job.sbatch
 ├── input_files/                                   ├── input_files/
 │   ├── structure.pdb                              │   ├── structure.pdb
 │   ├── structure.psf                              │   ├── structure.psf
 │   └── parameters.prm                             │   └── parameters.prm
-├── scripts/                                       ├── scripts/
-│   ├── job.sbatch                                 │   ├── job.sbatch
-│   └── config.namd                                │   └── config.namd
-├── outputs/ (empty)                               ├── outputs/ (SLURM writes here during execution)
-└── job_info.json                                  └── job_info.json
+└── outputs/ (empty)                               └── outputs/ (SLURM writes here during execution)
 
         ↑ APP AREA                                         ↑ SLURM AREA
     (App reads/writes here)                        (App hands off, SLURM owns during execution)

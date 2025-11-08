@@ -96,10 +96,10 @@ cd {{ working_dir }}
 # NAMD config generated from templates - contains actual uploaded file names with input_files/ prefix
 # Do NOT use +setcpuaffinity with OpenMPI-compiled NAMD (Alpine uses OpenMPI)
 # OpenMPI handles CPU affinity automatically - manual affinity flags cause binding conflicts
-mpirun -np $SLURM_NTASKS namd3 scripts/config.namd > namd_output.log
-#      │             │     │                        │
-#      │             │     │                        └─ NAMD output log
-#      │             │     └─ NAMD config file (template-generated)
+mpirun -np $SLURM_NTASKS namd3 config.namd > namd_output.log
+#      │             │     │                  │
+#      │             │     │                  └─ NAMD output log
+#      │             │     └─ NAMD config file (template-generated, in job root)
 #      │             └─ SLURM environment variable (set at runtime based on --ntasks)
 #      └─ MPI launcher (recommended over srun on Alpine)
 ```
@@ -484,13 +484,12 @@ Jobs are identified by working directory pattern:
 /projects/$USER/namdrunner_jobs/
 └── job_001/
     ├── job_info.json
+    ├── config.namd           # Template-generated NAMD config (in job root)
+    ├── job.sbatch            # SLURM batch script (in job root)
     ├── input_files/
     │   ├── structure.psf
     │   ├── coordinates.pdb
     │   └── parameters.prm
-    ├── scripts/
-    │   ├── config.namd      # Template-generated NAMD config
-    │   └── job.sbatch        # SLURM batch script
     └── outputs/
 
 /scratch/alpine/$USER/namdrunner_jobs/

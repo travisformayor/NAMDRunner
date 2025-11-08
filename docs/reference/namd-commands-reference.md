@@ -178,7 +178,7 @@ Alpine cluster uses OpenMPI-compiled NAMD 3.0.1:
 
 ```bash
 # Execute NAMD with MPI (OpenMPI handles CPU affinity automatically, do not use +setcpuaffinity)
-mpirun -np $SLURM_NTASKS namd3 scripts/config.namd > namd_output.log
+mpirun -np $SLURM_NTASKS namd3 config.namd > namd_output.log
 ```
 
 **Important Notes:**
@@ -247,14 +247,13 @@ mpirun -np $SLURM_NTASKS namd3 config.namd > namd_output.log
 /projects/$USER/namdrunner_jobs/
 └── {job_id}/
     ├── job_info.json           # Job metadata
+    ├── config.namd             # Rendered from template (in job root)
+    ├── job.sbatch              # Generated SLURM script (in job root)
     ├── input_files/            # Uploaded input files
     │   ├── {user_filename}.pdb
     │   ├── {user_filename}.psf
     │   ├── {user_filename}.prm
     │   └── {user_filename}.exb
-    ├── scripts/
-    │   ├── config.namd         # Rendered from template
-    │   └── job.sbatch          # Generated SLURM script
     └── outputs/                # After job completion
         ├── {job_name}_{slurm_job_id}.out
         ├── {job_name}_{slurm_job_id}.err
@@ -273,8 +272,8 @@ mpirun -np $SLURM_NTASKS namd3 config.namd > namd_output.log
 ```
 
 ### File Naming Conventions
-- **NAMD config**: `scripts/config.namd` (rendered from template)
-- **SLURM script**: `scripts/job.sbatch` (generated)
+- **NAMD config**: `config.namd` (rendered from template, in job root)
+- **SLURM script**: `job.sbatch` (generated, in job root)
 - **NAMD log**: `namd_output.log` (in working directory)
 - **SLURM stdout**: `{job_name}_{slurm_job_id}.out` (in outputs/)
 - **SLURM stderr**: `{job_name}_{slurm_job_id}.err` (in outputs/)

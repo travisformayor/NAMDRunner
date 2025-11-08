@@ -331,27 +331,61 @@ See: [phase-6-8-pragmatic-testing.md](tasks/completed/phase-6-8-pragmatic-testin
 
 **Goal**: Replace hardcoded NAMD configuration with flexible template system where templates are stored in database and users can create/edit simulation templates via UI.
 
-**Current State**: NAMDConfig struct with hardcoded fields, file type auto-detection, ConfigurationTab with hardcoded form fields
-
 **Implementation**:
-- [ ] **Database Foundation**: Templates table, modified jobs table (template_id + template_values)
-- [ ] **Data Structures**: Template, VariableDefinition, VariableType (Number, Text, Boolean, FileUpload)
-- [ ] **Template Renderer**: Handlebars/string replacement for `{{variable}}` substitution
-- [ ] **JobInfo Refactor**: Remove NAMDConfig struct entirely, remove demo mode entirely
-- [ ] **Default Templates**: vacuum_optimization_v1.json, explicit_solvent_npt_v1.json
-- [ ] **Template IPC Commands**: list, get, create, update, delete, validate
-- [ ] **Templates Page UI**: New sidebar section for template management
-- [ ] **Template Editor UI**: Create/edit templates with variable definitions
-- [ ] **Dynamic Job Form**: Replaces ConfigurationTab, files as form fields
-- [ ] **Validation & Integration**: End-to-end testing with real cluster submission
+- [x] **Database Foundation**: Templates table, modified jobs table (template_id + template_values)
+- [x] **Data Structures**: Template, VariableDefinition, VariableType (Number, Text, Boolean, FileUpload)
+- [x] **Template Renderer**: Regex-based variable substitution for `{{variable}}` patterns
+- [x] **JobInfo Refactor**: Removed NAMDConfig struct entirely, removed demo mode entirely
+- [x] **Default Templates**: vacuum_optimization_v1.json, explicit_solvent_npt_v1.json (embedded in binary)
+- [x] **Template IPC Commands**: list, get, create, update, delete, validate, preview
+- [x] **Templates Page UI**: Unified template list with built-in badges, delete functionality
+- [x] **Template Editor UI**: Full-page editor with auto-variable detection, variable metadata editor
+- [x] **Dynamic Job Form**: 3-tab interface (Resources, Configure, Review) with dynamic form from template
+- [ ] **End-to-End Verification**: User testing of complete job lifecycle with templates
 
 **Why**: Hardcoded NAMDConfig prevents supporting different simulation types without code changes. Template-as-data enables runtime modification and user extensibility.
 
 **No Backwards Compatibility**: All existing jobs are test data - will delete old database before running new app. No migration code.
 
-See: [phase-7-template-system-refactor.md](tasks/active/phase-7-template-system-refactor.md)
+See: [phase-7-1-template-system-refactor.md](tasks/active/phase-7-1-template-system-refactor.md)
 
-### Milestone 7.2: Request Rate Limiting & Queue Management
+### Milestone 7.2: Settings Page with Database Management
+
+**Goal**: Fix AppImage database path bug and add Settings page with database management (backup, restore, reset)
+
+**Current Problem**:
+- Production builds use wrong database path (`./namdrunner.db`)
+- AppImage completely broken (tries to create DB in read-only mount)
+- RPM/DEB work by accident (CWD resolution, not robust)
+
+**Implementation**:
+- [ ] **Database Path Migration**: Move initialization to `.setup()` hook, use `app_data_dir()` API
+  - [ ] `get_database_path()` - Returns OS-specific path (Linux: `~/.local/share/namdrunner/`, Windows: `%APPDATA%\namdrunner\`)
+  - [ ] `reinitialize_database()` - Close and reopen connection (for restore/reset)
+  - [ ] Development builds still use `./namdrunner_dev.db` (unchanged)
+  - [ ] Ground-up refactor with zero tech debt
+
+- [ ] **Database Management Commands** (`commands/database.rs`):
+  - [ ] `get_database_info()` - Returns path and file size
+  - [ ] `backup_database()` - SQLite Backup API for safe online backup
+  - [ ] `restore_database()` - File dialog, validate, replace DB, reinitialize
+  - [ ] `reset_database()` - Delete and recreate with fresh schema
+
+- [ ] **Settings Page UI**:
+  - [ ] New Settings page in sidebar navigation
+  - [ ] Display database location and size
+  - [ ] Backup button (opens save dialog)
+  - [ ] Restore button (warning dialog → file dialog → replace)
+  - [ ] Reset button (warning dialog → delete all data)
+  - [ ] Reuses existing `ConfirmDialog` component
+
+**Why**: AppImage is completely broken without this fix. Settings page provides user control over database management.
+
+**No Migration Code**: App not released yet, user will reset database manually.
+
+See: [phase-7-2-settings-page-database-management.md](tasks/active/phase-7-2-settings-page-database-management.md)
+
+### Milestone 7.3: Request Rate Limiting & Queue Management
 
 **Goal:** Prevent cluster abuse and provide graceful degradation under load
 
@@ -392,7 +426,7 @@ pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Resu
 **Why:**
 - Prevents accidental bugs from DOS'ing cluster, but we dont want that event to silently fail so report it in the SSH Console.
 
-### Milestone 7.3: Job Chaining (Future)
+### Milestone 7.4: Job Chaining (Future)
 
 **Note**: Job chaining design is in progress. See [tasks/planning/MultiJob_And_Templates.md](tasks/planning/MultiJob_And_Templates.md) for current design exploration.
 
@@ -402,26 +436,22 @@ pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Resu
 
 ### Phase 7 Complete When:
 - Template system operational (users can create/edit templates via UI)
+- Settings page with database management functional (AppImage working)
 - Rate limiting prevents cluster abuse
-- **Template-based job creation ready for users**
+- **Template-based job creation ready for users with production-ready builds**
 - Job chaining design finalized (implementation in future phase)
 
 ## Phase 8: Multi-Cluster & Settings
-*Settings page and multi-cluster support*
+*Settings page extensions and multi-cluster support*
 
-### Milestone 8.1: Settings Page Infrastructure
+### Milestone 8.1: Settings Page Extensions
+**Note**: Basic Settings page with database management implemented in Phase 7.2. This milestone extends it with cluster configuration and user preferences.
+
 - [ ] **Settings Database & UI**
   - [ ] Settings database schema for cluster configs and user preferences
-  - [ ] Settings page UI with forms for configuration
+  - [ ] Extend Settings page with tabs/sections for configuration
   - [ ] User preferences (default values, UI behavior)
   - [ ] Export/import settings functionality
-  - [ ] **Local Database Management**:
-    - [ ] "Delete Local Cache" button to clear local job database
-    - [ ] Works when connected or disconnected to server
-    - [ ] Only deletes local DB, never touches server metadata
-    - [ ] After deletion, clicking "Sync Now" rebuilds cache from server metadata
-    - [ ] Warning dialog: "This will delete all local job data. Server metadata will not be affected. Click Sync to restore from server."
-    - [ ] Useful for troubleshooting database corruption or starting fresh
 - [ ] **Cluster Configuration Management**
   - [ ] User-editable cluster configuration (builds on cluster_config.rs Rust constants)
   - [ ] Configurable cluster connection settings (login server, port)

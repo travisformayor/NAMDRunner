@@ -265,13 +265,12 @@ interface OutputFile {
 /projects/$USER/namdrunner_jobs/
 └── {job_id}/
     ├── job_info.json           # Complete job metadata (this schema)
+    ├── config.namd             # Generated NAMD config (in job root)
+    ├── job.sbatch              # Generated SLURM script (in job root)
     ├── input_files/
     │   ├── structure.pdb
     │   ├── structure.psf
     │   └── parameters.prm
-    ├── scripts/
-    │   ├── config.namd         # Generated NAMD config
-    │   └── job.sbatch          # Generated SLURM script
     ├── outputs/                # Created after job completion (rsync from scratch)
     │   ├── output.dcd          # Trajectory
     │   ├── restart.coor        # Restart files
@@ -283,16 +282,18 @@ interface OutputFile {
 
 /scratch/alpine/$USER/namdrunner_jobs/
 └── {job_id}/                   # Working directory during execution
-    ├── config.namd             # Symlinked/copied from project
+    ├── config.namd             # Copied from project
     ├── job.sbatch
-    ├── structure.pdb
-    ├── structure.psf
-    ├── parameters.prm
-    ├── namd_output.log
-    ├── output.dcd              # Generated during run
-    ├── restart.coor
-    ├── restart.vel
-    └── restart.xsc
+    ├── input_files/
+    │   ├── structure.pdb
+    │   ├── structure.psf
+    │   └── parameters.prm
+    ├── outputs/
+    │   ├── output.dcd          # Generated during run
+    │   ├── restart.coor
+    │   ├── restart.vel
+    │   └── restart.xsc
+    └── namd_output.log
 ```
 
 **Key Points:**
@@ -302,8 +303,8 @@ interface OutputFile {
 - **Metadata fetching**: Input file sizes fetched after upload, output file sizes fetched after job completion
 
 ### File Naming Conventions
-- **SLURM script**: `scripts/job.sbatch`
-- **NAMD config**: `scripts/config.namd`
+- **SLURM script**: `job.sbatch` (in job root)
+- **NAMD config**: `config.namd` (in job root)
 - **Job metadata**: `job_info.json` (in job root)
 - **SLURM Stdout**: `logs/{job_name}_{slurm_job_id}.out`
 - **SLURM Stderr**: `logs/{job_name}_{slurm_job_id}.err`

@@ -354,13 +354,12 @@ module load namd/3.0.1_cpu
 /projects/$USER/namdrunner_jobs/
 └── {job_id}/
     ├── job_info.json           # Job metadata
+    ├── config.namd             # Generated NAMD config (in job root)
+    ├── job.sbatch              # Generated SLURM script (in job root)
     ├── input_files/            # User-uploaded input files
     │   ├── structure.pdb
     │   ├── structure.psf
     │   └── parameters.prm
-    ├── scripts/                # Generated job scripts
-    │   ├── config.namd
-    │   └── job.sbatch
     ├── outputs/                # NAMD output files (after job completion)
     │   ├── sim.dcd             # Trajectory
     │   ├── sim.coor            # Restart files
