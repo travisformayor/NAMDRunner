@@ -15,36 +15,29 @@ pub mod templates;
 // mod security_tests;
 pub use types::*;
 
-fn initialize_database() -> anyhow::Result<()> {
-    // Determine database path based on environment
-    let db_path = if cfg!(debug_assertions) {
-        // In development, use a local database file
-        "./namdrunner_dev.db"
-    } else {
-        // In production, use a path in the user's data directory
-        // For now, use a simple path - this could be improved with proper OS-specific paths
-        "./namdrunner.db"
-    };
-
-    database::initialize_database(db_path)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logging system first
     logging::init_logging();
-
-    // Initialize database on startup
-    if let Err(e) = initialize_database() {
-        eprintln!("Failed to initialize database: {}", e);
-        std::process::exit(1);
-    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Set up logging bridge to frontend
             logging::set_app_handle(app.handle().clone());
+
+            // Initialize database with app handle (for OS-specific path resolution)
+            let db_path = database::get_database_path(app.handle())
+                .map_err(|e| {
+                    eprintln!("Failed to resolve database path: {}", e);
+                    e
+                })?;
+
+            database::initialize_database(db_path.to_str().unwrap())
+                .map_err(|e| {
+                    eprintln!("Failed to initialize database: {}", e);
+                    e
+                })?;
 
             // Default templates are loaded on-demand when list_templates is first called
             // This ensures logs appear in frontend (setup hook runs before frontend connects)
@@ -86,8 +79,14 @@ pub fn run() {
             commands::templates::delete_template,
             commands::templates::validate_template_values,
             commands::templates::preview_namd_config,
+            commands::templates::preview_template_with_defaults,
             commands::jobs::preview_slurm_script,
             commands::jobs::validate_job_config,
+            // Database management
+            commands::database::get_database_info,
+            commands::database::backup_database,
+            commands::database::restore_database,
+            commands::database::reset_database,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

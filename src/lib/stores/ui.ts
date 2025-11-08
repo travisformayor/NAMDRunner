@@ -1,7 +1,7 @@
 import { writable, derived } from 'svelte/store';
 import { logger } from '../utils/logger';
 
-export type View = 'jobs' | 'create' | 'templates' | 'template-edit';
+export type View = 'jobs' | 'create' | 'templates' | 'template-edit' | 'settings';
 
 interface UIState {
   currentView: View;
@@ -91,8 +91,14 @@ export const breadcrumbs = derived(
   ([$ui]) => {
     const items: BreadcrumbItem[] = [];
 
-    // Determine top-level page (Jobs or Templates)
-    if ($ui.currentView === 'templates' || $ui.currentView === 'template-edit') {
+    // Determine top-level page (Jobs, Templates, or Settings)
+    if ($ui.currentView === 'settings') {
+      // Settings page
+      items.push({
+        label: 'Settings',
+        onClick: undefined
+      });
+    } else if ($ui.currentView === 'templates' || $ui.currentView === 'template-edit') {
       // Templates hierarchy
       const onClick = ($ui.currentView !== 'templates') ?
         () => uiStore.setView('templates') : undefined;

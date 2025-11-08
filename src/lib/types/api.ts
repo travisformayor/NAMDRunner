@@ -266,3 +266,22 @@ export interface NAMDRunnerError {
   details?: string;
   retryable: boolean;
 }
+
+// Database management
+export interface DatabaseInfo {
+  path: string;
+  size_bytes: number;
+}
+
+export interface DatabaseInfoResult {
+  success: boolean;
+  path?: string;
+  size_bytes?: number;
+  error?: string;
+}
+
+export interface DatabaseOperationResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}

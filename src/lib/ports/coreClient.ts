@@ -17,6 +17,8 @@ import type {
   ListFilesResult,
   GetClusterCapabilitiesResult,
   ValidateResourceAllocationResult,
+  DatabaseInfoResult,
+  DatabaseOperationResult,
   JobId,
 } from '../types/api';
 
@@ -53,4 +55,10 @@ export interface ICoreClient {
   downloadJobOutput(job_id: JobId, file_path: string): Promise<DownloadResult>;
   downloadAllOutputs(job_id: JobId): Promise<DownloadResult>;
   listJobFiles(job_id: JobId): Promise<ListFilesResult>;
+
+  // Database management
+  getDatabaseInfo(): Promise<DatabaseInfoResult>;
+  backupDatabase(): Promise<DatabaseOperationResult>;
+  restoreDatabase(): Promise<DatabaseOperationResult>;
+  resetDatabase(): Promise<DatabaseOperationResult>;
 }

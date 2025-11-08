@@ -61,36 +61,36 @@
 
   .loading {
     text-align: center;
-    padding: 2rem;
-    font-size: 1rem;
-    color: var(--text-secondary, #666);
+    padding: var(--namd-spacing-xl);
+    font-size: var(--namd-font-size-base);
+    color: var(--namd-text-secondary);
   }
 
   .error-message {
-    background: var(--error-light, #ffebee);
-    border: 1px solid var(--error, #d32f2f);
-    color: var(--error-dark, #c62828);
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
+    background: var(--namd-error-bg);
+    border: 1px solid var(--namd-error-border);
+    color: var(--namd-error-fg);
+    padding: var(--namd-spacing-md);
+    border-radius: var(--namd-border-radius);
+    margin-bottom: var(--namd-spacing-lg);
   }
 
   .btn {
-    padding: 0.5rem 1rem;
+    padding: var(--namd-spacing-sm) var(--namd-spacing-md);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--namd-border-radius-sm);
     cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: background 0.2s;
+    font-size: var(--namd-font-size-sm);
+    font-weight: var(--namd-font-weight-medium);
+    transition: all 0.15s ease;
   }
 
   .btn-secondary {
-    background: var(--secondary, #f5f5f5);
-    color: var(--text-primary, #333);
+    background: var(--namd-secondary);
+    color: var(--namd-secondary-fg);
   }
 
   .btn-secondary:hover {
-    background: var(--secondary-dark, #e0e0e0);
+    background: var(--namd-secondary-hover);
   }
 </style>

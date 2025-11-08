@@ -20,6 +20,8 @@ import type {
   ListFilesResult,
   GetClusterCapabilitiesResult,
   ValidateResourceAllocationResult,
+  DatabaseInfoResult,
+  DatabaseOperationResult,
   JobId,
 } from '../types/api';
 
@@ -154,5 +156,22 @@ export class TauriCoreClient implements ICoreClient {
       has_gpu,
       gpu_count
     });
+  }
+
+  // Database management
+  async getDatabaseInfo(): Promise<DatabaseInfoResult> {
+    return invoke('get_database_info');
+  }
+
+  async backupDatabase(): Promise<DatabaseOperationResult> {
+    return invoke('backup_database');
+  }
+
+  async restoreDatabase(): Promise<DatabaseOperationResult> {
+    return invoke('restore_database');
+  }
+
+  async resetDatabase(): Promise<DatabaseOperationResult> {
+    return invoke('reset_database');
   }
 }

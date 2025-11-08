@@ -4,7 +4,8 @@ use crate::templates::{Template, TemplateSummary};
 use anyhow::{Result, anyhow};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use crate::info_log;
+use crate::{info_log, debug_log};
+use tauri::Manager;
 
 /// Simple document-store database for jobs and templates
 /// Stores JobInfo and Template as JSON - no complex schema, no migrations needed
@@ -231,20 +232,84 @@ impl JobDatabase {
 // Thread-safe global database instance
 use lazy_static::lazy_static;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::PathBuf;
 
 lazy_static! {
-    static ref DATABASE: Arc<Mutex<Option<JobDatabase>>> = Arc::new(Mutex::new(None));
+    pub static ref DATABASE: Arc<Mutex<Option<JobDatabase>>> = Arc::new(Mutex::new(None));
+    static ref DATABASE_PATH: Arc<Mutex<Option<PathBuf>>> = Arc::new(Mutex::new(None));
 }
 
 // Track if we've attempted to load default templates this session
 static DEFAULTS_LOADED: AtomicBool = AtomicBool::new(false);
 
+/// Get the database file path (development vs production)
+pub fn get_database_path(app_handle: &tauri::AppHandle) -> Result<PathBuf> {
+    if cfg!(debug_assertions) {
+        // Development: current directory
+        Ok(PathBuf::from("./namdrunner_dev.db"))
+    } else {
+        // Production: OS-specific app data directory
+        let app_data_dir = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| anyhow!("Failed to resolve app data directory: {}", e))?;
+
+        // Ensure directory exists
+        std::fs::create_dir_all(&app_data_dir)?;
+
+        Ok(app_data_dir.join("namdrunner.db"))
+    }
+}
+
 pub fn initialize_database(db_path: &str) -> Result<()> {
+    info_log!("[Database] Initializing database: {}", db_path);
+
     let db = JobDatabase::new(db_path)?;
 
     let mut database_lock = DATABASE.lock().unwrap();
     *database_lock = Some(db);
+
+    // Track current path
+    let mut path_lock = DATABASE_PATH.lock().unwrap();
+    *path_lock = Some(PathBuf::from(db_path));
+
     Ok(())
+}
+
+/// Close and reinitialize database connection
+/// Used for restore and reset operations
+pub fn reinitialize_database(db_path: &str) -> Result<()> {
+    info_log!("[Database] Reinitializing database connection: {}", db_path);
+
+    let mut database_lock = DATABASE.lock().unwrap();
+
+    // Drop old connection (closes SQLite connection)
+    if database_lock.is_some() {
+        debug_log!("[Database] Closing existing connection");
+        *database_lock = None;
+        // Old JobDatabase is dropped here, closing the Connection
+    }
+
+    // Create new connection
+    debug_log!("[Database] Opening new connection");
+    let db = JobDatabase::new(db_path)?;
+    *database_lock = Some(db);
+
+    // Update tracked path
+    let mut path_lock = DATABASE_PATH.lock().unwrap();
+    *path_lock = Some(PathBuf::from(db_path));
+
+    // Reset default templates flag (force reload for new DB)
+    DEFAULTS_LOADED.store(false, Ordering::Relaxed);
+
+    info_log!("[Database] Database reinitialized successfully");
+    Ok(())
+}
+
+/// Get current database file path (for displaying in UI)
+/// Returns None if database not initialized
+pub fn get_current_database_path() -> Option<PathBuf> {
+    DATABASE_PATH.lock().unwrap().clone()
 }
 
 /// Ensure default templates are loaded (idempotent - safe to call multiple times)

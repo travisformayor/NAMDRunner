@@ -9,6 +9,7 @@
   import CreateJobPage from './pages/CreateJobPage.svelte';
   import TemplatesPage from './pages/TemplatesPage.svelte';
   import TemplateEditorPage from './pages/TemplateEditorPage.svelte';
+  import SettingsPage from './pages/SettingsPage.svelte';
   import { currentView, selectedJobId, uiStore } from '../stores/ui';
   import { clusterConfig } from '../stores/clusterConfig';
   import { initializeTemplateStore } from '../stores/templateStore';
@@ -71,7 +72,9 @@
 
     <!-- Content -->
     <div class="content-area">
-      {#if $currentView === 'jobs' && $selectedJobId}
+      {#if $currentView === 'settings'}
+        <SettingsPage />
+      {:else if $currentView === 'jobs' && $selectedJobId}
         <JobDetailPage />
       {:else if $currentView === 'create'}
         <CreateJobPage />
