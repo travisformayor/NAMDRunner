@@ -180,8 +180,8 @@
     </div>
 
     <div class="form-actions">
-      <button type="button" class="btn btn-secondary" on:click={handleCancel}>Cancel</button>
-      <button type="submit" class="btn btn-primary">Save Variable</button>
+      <button type="button" class="namd-button namd-button--secondary" on:click={handleCancel}>Cancel</button>
+      <button type="submit" class="namd-button namd-button--primary">Save Variable</button>
     </div>
   </form>
 </div>
@@ -248,33 +248,5 @@
     margin-top: var(--namd-spacing-xl);
     padding-top: var(--namd-spacing-lg);
     border-top: 1px solid var(--namd-border);
-  }
-
-  .btn {
-    padding: var(--namd-spacing-sm) var(--namd-spacing-md);
-    border: none;
-    border-radius: var(--namd-border-radius-sm);
-    cursor: pointer;
-    font-size: var(--namd-font-size-sm);
-    font-weight: var(--namd-font-weight-medium);
-    transition: all 0.15s ease;
-  }
-
-  .btn-primary {
-    background: var(--namd-primary);
-    color: var(--namd-primary-fg);
-  }
-
-  .btn-primary:hover {
-    background: var(--namd-primary-hover);
-  }
-
-  .btn-secondary {
-    background: var(--namd-secondary);
-    color: var(--namd-secondary-fg);
-  }
-
-  .btn-secondary:hover {
-    background: var(--namd-secondary-hover);
   }
 </style>

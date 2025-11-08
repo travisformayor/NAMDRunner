@@ -219,7 +219,6 @@ pub async fn validate_template_values(
     template_id: String,
     values: HashMap<String, Value>,
 ) -> ValidateTemplateValuesResult {
-    info_log!("[Templates] Validating values for template: {}", template_id);
 
     // Load template
     let template = match with_database(|db| db.load_template(&template_id)) {
@@ -243,9 +242,7 @@ pub async fn validate_template_values(
     // Use extracted validation logic (testable without database)
     let errors = crate::templates::validate_values(&template, &values);
     let valid = errors.is_empty();
-    if valid {
-        info_log!("[Templates] Validation passed for template: {}", template_id);
-    } else {
+    if !valid {
         error_log!("[Templates] Validation failed with {} errors", errors.len());
     }
 

@@ -127,7 +127,7 @@ export const breadcrumbs = derived(
 
       // Add job sub-pages
       if ($ui.currentView === 'create') {
-        items.push({ label: 'Create New Job', onClick: undefined });
+        items.push({ label: 'Create Job', onClick: undefined });
       } else if ($ui.currentView === 'jobs' && $ui.selectedJobId) {
         items.push({ label: 'Job Details', onClick: undefined });
       }

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { logger } from '$lib/utils/logger';
   import { createTemplate, updateTemplate, deleteTemplate, templatesError } from '$lib/stores/templateStore';
@@ -10,12 +9,13 @@
   import VariableEditor from './VariableEditor.svelte';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import PreviewModal from '../ui/PreviewModal.svelte';
-
-  const dispatch = createEventDispatcher();
+  import Dialog from '../ui/Dialog.svelte';
 
   // Props
   export let template: Template | null = null;
   export let mode: 'create' | 'edit' = 'create';
+  export let onSaved: (template: Template) => void = () => {};
+  export let onCancel: () => void = () => {};
 
   let id = template?.id ?? '';
   let name = template?.name ?? '';
@@ -26,7 +26,7 @@
   let error: string | null = null;
 
   // Sync variables object with template text (debounced)
-  let debounceTimer: number;
+  let debounceTimer: ReturnType<typeof setTimeout>;
   function syncVariablesWithTemplate() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
@@ -99,7 +99,7 @@
     isSaving = false;
 
     if (success) {
-      dispatch('saved', templateData);
+      onSaved(templateData);
     } else {
       // Use specific error from store (backend provides details)
       error = $templatesError || 'Failed to save template';
@@ -107,7 +107,7 @@
   }
 
   function handleCancel() {
-    dispatch('cancel');
+    onCancel();
   }
 
   function handleDelete() {
@@ -123,7 +123,7 @@
     showDeleteConfirm = false;
 
     if (success) {
-      dispatch('cancel'); // Navigate back after deletion
+      onCancel(); // Navigate back after deletion
     }
   }
 
@@ -269,7 +269,7 @@
                 <span class="variable-type">{getVariableTypeName(varDef.var_type)}</span>
               </div>
               <div class="variable-actions">
-                <button type="button" class="btn btn-xs" on:click={() => handleEditVariable(key)}>Edit</button>
+                <button type="button" class="namd-button namd-button--secondary namd-button--sm" on:click={() => handleEditVariable(key)}>Edit</button>
               </div>
             </div>
           {/each}
@@ -282,19 +282,19 @@
     <div class="form-actions">
       <div class="form-actions-left">
         {#if mode === 'edit'}
-          <button type="button" class="btn btn-danger" on:click={handleDelete}>
+          <button type="button" class="namd-button namd-button--destructive" on:click={handleDelete}>
             Delete Template
           </button>
         {/if}
       </div>
       <div class="form-actions-right">
-        <button type="button" class="btn btn-secondary" on:click={handleCancel}>
+        <button type="button" class="namd-button namd-button--secondary" on:click={handleCancel}>
           Cancel
         </button>
-        <button type="button" class="btn btn-secondary" on:click={handleTestTemplate} disabled={isGeneratingPreview}>
+        <button type="button" class="namd-button namd-button--secondary" on:click={handleTestTemplate} disabled={isGeneratingPreview}>
           {isGeneratingPreview ? 'Generating Preview...' : 'Test Template'}
         </button>
-        <button type="submit" class="btn btn-primary" disabled={isSaving}>
+        <button type="submit" class="namd-button namd-button--primary" disabled={isSaving}>
           {isSaving ? 'Saving...' : 'Save Template'}
         </button>
       </div>
@@ -303,30 +303,15 @@
 </div>
 
 <!-- Variable Editor Modal -->
-{#if showVariableEditor}
-  <div
-    class="modal-overlay"
-    role="presentation"
-    on:click={handleVariableCancel}
-    on:keydown={(e) => e.key === 'Escape' && handleVariableCancel()}
-  >
-    <div
-      class="modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Variable Editor"
-      tabindex="-1"
-      on:click|stopPropagation
-      on:keydown|stopPropagation
-    >
-      <VariableEditor
-        variable={editingVariable}
-        on:save={handleVariableSaved}
-        on:cancel={handleVariableCancel}
-      />
-    </div>
-  </div>
-{/if}
+<Dialog open={showVariableEditor} size="md" onClose={handleVariableCancel}>
+  <svelte:fragment slot="body">
+    <VariableEditor
+      variable={editingVariable}
+      on:save={handleVariableSaved}
+      on:cancel={handleVariableCancel}
+    />
+  </svelte:fragment>
+</Dialog>
 
 <!-- Test Template Preview -->
 <PreviewModal
@@ -445,39 +430,6 @@
     gap: 1rem;
   }
 
-  .btn {
-    padding: var(--namd-spacing-sm) var(--namd-spacing-md);
-    border: none;
-    border-radius: var(--namd-border-radius-sm);
-    cursor: pointer;
-    font-size: var(--namd-font-size-sm);
-    font-weight: var(--namd-font-weight-medium);
-    transition: all 0.15s ease;
-  }
-
-  .btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .btn-primary {
-    background: var(--namd-primary);
-    color: var(--namd-primary-fg);
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--namd-primary-hover);
-  }
-
-  .btn-secondary {
-    background: var(--namd-secondary);
-    color: var(--namd-secondary-fg);
-  }
-
-  .btn-secondary:hover {
-    background: var(--namd-secondary-hover);
-  }
-
   /* Variable Management */
   .variables-header {
     display: flex;
@@ -491,11 +443,6 @@
     font-size: var(--namd-font-size-sm);
     margin-bottom: 0;
     color: var(--namd-text-primary);
-  }
-
-  .btn-xs {
-    padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
-    font-size: var(--namd-font-size-xs);
   }
 
   .variables-list {
@@ -549,39 +496,5 @@
   .variable-actions {
     display: flex;
     gap: var(--namd-spacing-sm);
-  }
-
-  .btn-danger {
-    background: var(--namd-error);
-    color: white;
-  }
-
-  .btn-danger:hover {
-    opacity: 0.9;
-  }
-
-  /* Modals */
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--namd-z-modal);
-  }
-
-  .modal {
-    background: var(--namd-bg-primary);
-    border: 1px solid var(--namd-border);
-    border-radius: var(--namd-border-radius);
-    padding: var(--namd-spacing-xl);
-    max-width: 600px;
-    width: 90%;
-    max-height: 90vh;
-    overflow-y: auto;
   }
 </style>

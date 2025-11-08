@@ -82,8 +82,8 @@
           cores: resourceConfig.cores,
           memory: resourceConfig.memory,
           walltime: resourceConfig.walltime,
-          partition: resourceConfig.partition || undefined,
-          qos: resourceConfig.qos || undefined
+          ...(resourceConfig.partition && { partition: resourceConfig.partition }),
+          ...(resourceConfig.qos && { qos: resourceConfig.qos })
         }
       };
 

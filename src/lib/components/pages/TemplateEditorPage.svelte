@@ -39,13 +39,13 @@
     <div class="loading">Loading template...</div>
   {:else if error}
     <div class="error-message">{error}</div>
-    <button class="btn btn-secondary" on:click={handleCancel}>Back to Templates</button>
+    <button class="namd-button namd-button--secondary" on:click={handleCancel}>Back to Templates</button>
   {:else}
     <TemplateEditor
       template={template}
       mode={$templateEditorMode}
-      on:saved={handleSaved}
-      on:cancel={handleCancel}
+      onSaved={handleSaved}
+      onCancel={handleCancel}
     />
   {/if}
 </div>
@@ -73,24 +73,5 @@
     padding: var(--namd-spacing-md);
     border-radius: var(--namd-border-radius);
     margin-bottom: var(--namd-spacing-lg);
-  }
-
-  .btn {
-    padding: var(--namd-spacing-sm) var(--namd-spacing-md);
-    border: none;
-    border-radius: var(--namd-border-radius-sm);
-    cursor: pointer;
-    font-size: var(--namd-font-size-sm);
-    font-weight: var(--namd-font-weight-medium);
-    transition: all 0.15s ease;
-  }
-
-  .btn-secondary {
-    background: var(--namd-secondary);
-    color: var(--namd-secondary-fg);
-  }
-
-  .btn-secondary:hover {
-    background: var(--namd-secondary-hover);
   }
 </style>

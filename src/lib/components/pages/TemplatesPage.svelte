@@ -70,7 +70,7 @@
 <div class="templates-page">
   <div class="page-header">
     <h1>Simulation Templates</h1>
-    <button class="btn btn-primary" on:click={handleCreateNew}>
+    <button class="namd-button namd-button--primary" on:click={handleCreateNew}>
       <span class="icon">+</span>
       Create Template
     </button>
@@ -101,13 +101,13 @@
           </div>
           <p class="template-description">{template.description}</p>
           <div class="template-actions">
-            <button class="btn btn-secondary btn-sm" on:click={() => handleEdit(template)}>
+            <button class="namd-button namd-button--secondary namd-button--sm" on:click={() => handleEdit(template)}>
               Edit
             </button>
-            <button class="btn btn-secondary btn-sm" on:click={() => handleDuplicate(template)}>
+            <button class="namd-button namd-button--secondary namd-button--sm" on:click={() => handleDuplicate(template)}>
               Duplicate
             </button>
-            <button class="btn btn-danger btn-sm" on:click={() => confirmDelete(template)}>
+            <button class="namd-button namd-button--destructive namd-button--sm" on:click={() => confirmDelete(template)}>
               Delete
             </button>
           </div>
@@ -161,16 +161,13 @@
     border: 1px solid var(--namd-border);
     border-radius: var(--namd-border-radius);
     padding: var(--namd-spacing-lg);
-    background: var(--namd-bg-primary);
+    background: var(--namd-bg-secondary);
+    box-shadow: var(--namd-shadow-sm);
     transition: box-shadow 0.2s;
   }
 
   .template-card:hover {
     box-shadow: var(--namd-shadow-md);
-  }
-
-  .template-card.built-in {
-    border-color: var(--namd-info);
   }
 
   .template-header {
@@ -232,50 +229,7 @@
     color: var(--namd-error);
   }
 
-  /* Button Styles */
-  .btn {
-    padding: var(--namd-spacing-sm) var(--namd-spacing-md);
-    border: none;
-    border-radius: var(--namd-border-radius-sm);
-    cursor: pointer;
-    font-size: var(--namd-font-size-sm);
-    font-weight: var(--namd-font-weight-medium);
-    transition: all 0.15s ease;
-  }
-
-  .btn-primary {
-    background: var(--namd-primary);
-    color: var(--namd-primary-fg);
-  }
-
-  .btn-primary:hover {
-    background: var(--namd-primary-hover);
-  }
-
-  .btn-secondary {
-    background: var(--namd-secondary);
-    color: var(--namd-secondary-fg);
-  }
-
-  .btn-secondary:hover {
-    background: var(--namd-secondary-hover);
-  }
-
-  .btn-danger {
-    background: var(--namd-error);
-    color: white;
-  }
-
-  .btn-danger:hover {
-    opacity: 0.9;
-  }
-
-  .btn-sm {
-    padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
-    font-size: var(--namd-font-size-xs);
-  }
-
   .icon {
-    margin-right: 0.5rem;
+    margin-right: var(--namd-spacing-xs);
   }
 </style>

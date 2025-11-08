@@ -11,18 +11,18 @@
   --namd-text-muted: #9ca3af;
 
   /* Interactive Elements */
-  --namd-primary: #030213;
+  --namd-primary: #2563eb;
   --namd-primary-fg: #ffffff;
-  --namd-primary-hover: #1a1d2e;
+  --namd-primary-hover: #1d4ed8;
   --namd-primary-hover-fg: #ffffff;
   --namd-secondary: #f3f4f6;
   --namd-secondary-fg: #1f2937;
   --namd-secondary-hover: #e5e7eb;
   --namd-secondary-hover-fg: #1f2937;
   --namd-accent: #e9ebef;
-  --namd-accent-fg: #030213;
+  --namd-accent-fg: #2563eb;
   --namd-accent-hover: #d1d5db;
-  --namd-accent-hover-fg: #030213;
+  --namd-accent-hover-fg: #2563eb;
 
   /* Status Colors */
   --namd-success: #10b981;
@@ -33,6 +33,7 @@
   --namd-warning-fg: #92400e;
   --namd-warning-border: #fbbf24;
   --namd-error: #ef4444;
+  --namd-error-hover: #dc2626;
   --namd-error-bg: #fef2f2;
   --namd-error-fg: #991b1b;
   --namd-error-border: #f87171;
@@ -53,10 +54,14 @@
   --namd-sidebar-border: #e5e7eb;
   --namd-sidebar-hover: #f3f4f6;
   --namd-sidebar-hover-fg: #1f2937;
-  --namd-sidebar-active: #030213;
+  --namd-sidebar-active: #2563eb;
   --namd-sidebar-active-fg: #ffffff;
-  --namd-sidebar-active-hover: #1a1d2e;
+  --namd-sidebar-active-hover: #1d4ed8;
   --namd-sidebar-active-hover-fg: #ffffff;
+
+  /* Code and Input Backgrounds */
+  --namd-code-bg: #f5f5f5;
+  --namd-input-disabled-bg: #f9fafb;
 
   /* Layout */
   --namd-border-radius: 0.5rem;
@@ -127,6 +132,7 @@
   --namd-warning-fg: #fbbf24;     /* Light amber text */
   --namd-warning-border: #d97706;  /* Amber border */
   --namd-error: #ef4444;
+  --namd-error-hover: #dc2626;
   --namd-error-bg: #7f1d1d;       /* Dark red background */
   --namd-error-fg: #fca5a5;       /* Light red text */
   --namd-error-border: #dc2626;   /* Bright red border */
@@ -148,6 +154,10 @@
   --namd-sidebar-active-fg: #ffffff; /* White text on active */
   --namd-sidebar-active-hover: #2563eb;
   --namd-sidebar-active-hover-fg: #ffffff;
+
+  /* Code and Input Backgrounds */
+  --namd-code-bg: #1f2937;
+  --namd-input-disabled-bg: #374151;
 }
 
 /* Base Styles */

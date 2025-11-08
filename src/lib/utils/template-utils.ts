@@ -17,7 +17,7 @@ export function extractVariablesFromTemplate(templateText: string): string[] {
   let match;
   while ((match = regex.exec(templateText)) !== null) {
     const varName = match[1];
-    if (!firstOccurrence.has(varName)) {
+    if (varName && !firstOccurrence.has(varName)) {
       // Track first occurrence only (handles duplicates)
       firstOccurrence.set(varName, match.index);
     }

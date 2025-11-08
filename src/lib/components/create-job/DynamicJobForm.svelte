@@ -19,19 +19,25 @@
 
   // Separate variables by type, preserving template text order
   $: fileVariables = selectedTemplate
-    ? extractVariablesFromTemplate(selectedTemplate.namd_config_template)
-        .map(key => [key, selectedTemplate.variables[key]] as [string, any])
-        .filter(([_, v]) => v && getVariableTypeName(v.var_type) === 'FileUpload')
+    ? (() => {
+        const template = selectedTemplate;
+        return extractVariablesFromTemplate(template.namd_config_template)
+          .map(key => [key, template.variables[key]] as [string, any])
+          .filter(([_, v]) => v && getVariableTypeName(v.var_type) === 'FileUpload');
+      })()
     : [];
 
   $: parameterVariables = selectedTemplate
-    ? extractVariablesFromTemplate(selectedTemplate.namd_config_template)
-        .map(key => [key, selectedTemplate.variables[key]] as [string, any])
-        .filter(([_, v]) => {
-          if (!v) return false;
-          const type = getVariableTypeName(v.var_type);
-          return type === 'Number' || type === 'Text' || type === 'Boolean';
-        })
+    ? (() => {
+        const template = selectedTemplate;
+        return extractVariablesFromTemplate(template.namd_config_template)
+          .map(key => [key, template.variables[key]] as [string, any])
+          .filter(([_, v]) => {
+            if (!v) return false;
+            const type = getVariableTypeName(v.var_type);
+            return type === 'Number' || type === 'Text' || type === 'Boolean';
+          });
+      })()
     : [];
 
   onMount(async () => {
@@ -89,7 +95,7 @@
         templateValues[key] = selected.path;
       }
     } catch (error) {
-      logger.error('[DynamicJobForm] File selection error:', error);
+      logger.error('[DynamicJobForm]', 'File selection error', error);
     }
   }
 
@@ -188,7 +194,7 @@
               />
               <button
                 type="button"
-                class="btn btn-secondary"
+                class="namd-button namd-button--secondary"
                 on:click={() => handleFileSelect(key)}
               >
                 Browse...
@@ -352,27 +358,29 @@
 
   .form-control {
     width: 100%;
-    padding: 0.5rem;
-    border: 1px solid var(--border-color, #ddd);
-    border-radius: 4px;
-    font-size: 0.875rem;
+    padding: var(--namd-spacing-sm);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius-sm);
+    font-size: var(--namd-font-size-sm);
     font-family: inherit;
+    background-color: var(--namd-bg-primary);
+    color: var(--namd-text-primary);
   }
 
   .form-control:focus {
     outline: none;
-    border-color: var(--primary, #1976d2);
-    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+    border-color: var(--namd-primary);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
   }
 
   .file-input-group {
     display: flex;
-    gap: 0.5rem;
+    gap: var(--namd-spacing-sm);
   }
 
   .file-display {
     flex: 1;
-    background: var(--input-disabled-bg, #f5f5f5);
+    background: var(--namd-input-disabled-bg);
   }
 
   .parameters-grid {
@@ -433,49 +441,25 @@
     margin-top: 2rem;
   }
 
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: background 0.2s;
-  }
-
-  .btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    background: var(--secondary, #f5f5f5);
-    color: var(--text-primary, #333);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--secondary-dark, #e0e0e0);
-  }
-
   /* Error States */
   .has-error label {
-    color: var(--error, #d32f2f);
+    color: var(--namd-error);
   }
 
   .form-control.error {
-    border-color: var(--error, #d32f2f);
-    background: var(--error-light, #ffebee);
+    border-color: var(--namd-error);
+    background: var(--namd-error-bg);
   }
 
   .form-control.error:focus {
-    border-color: var(--error, #d32f2f);
-    box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.1);
+    border-color: var(--namd-error);
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
   }
 
   .error-text {
-    margin: 0.25rem 0 0 0;
-    font-size: 0.75rem;
-    color: var(--error, #d32f2f);
-    font-weight: 500;
+    margin: var(--namd-spacing-xs) 0 0 0;
+    font-size: var(--namd-font-size-xs);
+    color: var(--namd-error);
+    font-weight: var(--namd-font-weight-medium);
   }
 </style>

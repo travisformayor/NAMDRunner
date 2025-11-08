@@ -354,8 +354,6 @@ pub async fn download_all_outputs(job_id: String) -> DownloadResult {
     download_all_outputs_real(job_id).await
 }
 
-// DELETED: download_all_outputs_demo - demo mode removed
-
 async fn download_all_outputs_real(job_id: String) -> DownloadResult {
     use rfd::FileDialog;
 

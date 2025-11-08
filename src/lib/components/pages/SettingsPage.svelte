@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { settingsStore } from '$lib/stores/settings';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
+  import AlertDialog from '../ui/AlertDialog.svelte';
   import { logger } from '$lib/utils/logger';
   import { jobsStore } from '$lib/stores/jobs';
   import { loadTemplates } from '$lib/stores/templateStore';
@@ -13,6 +14,19 @@
   // Dialog states
   let showRestoreWarning = false;
   let showResetWarning = false;
+
+  // Alert dialog state
+  let showAlert = false;
+  let alertTitle = '';
+  let alertMessage = '';
+  let alertVariant: 'success' | 'error' | 'warning' | 'info' = 'info';
+
+  function showAlertDialog(title: string, message: string, variant: 'success' | 'error' | 'warning' | 'info' = 'info') {
+    alertTitle = title;
+    alertMessage = message;
+    alertVariant = variant;
+    showAlert = true;
+  }
 
   // Load database info on mount
   onMount(() => {
@@ -37,7 +51,7 @@
       // Success feedback shown via logger
     } else if (result.error !== 'Backup cancelled') {
       // Show error (cancelled is user action, not an error)
-      alert(`Backup failed: ${result.error}`);
+      showAlertDialog('Backup Failed', `Backup failed: ${result.error}`, 'error');
     }
   }
 
@@ -56,9 +70,9 @@
       // Reload all stores after restore
       await jobsStore.loadFromDatabase();
       await loadTemplates();
-      alert('Database restored successfully. All data has been reloaded.');
+      showAlertDialog('Database Restored', 'Database restored successfully. All data has been reloaded.', 'success');
     } else if (result.error !== 'Restore cancelled') {
-      alert(`Restore failed: ${result.error}`);
+      showAlertDialog('Restore Failed', `Restore failed: ${result.error}`, 'error');
     }
   }
 
@@ -77,9 +91,9 @@
       // Reload all stores after reset
       await jobsStore.loadFromDatabase();
       await loadTemplates();
-      alert('Database reset successfully. All data has been cleared.');
+      showAlertDialog('Database Reset', 'Database reset successfully. All data has been cleared.', 'success');
     } else {
-      alert(`Reset failed: ${result.error}`);
+      showAlertDialog('Reset Failed', `Reset failed: ${result.error}`, 'error');
     }
   }
 </script>
@@ -103,11 +117,11 @@
       </div>
 
       <div class="db-actions">
-        <button class="btn btn-secondary" on:click={handleBackup}> Backup Database </button>
+        <button class="namd-button namd-button--secondary" on:click={handleBackup}> Backup Database </button>
 
-        <button class="btn btn-secondary" on:click={handleRestoreClick}> Restore Database </button>
+        <button class="namd-button namd-button--secondary" on:click={handleRestoreClick}> Restore Database </button>
 
-        <button class="btn btn-destructive" on:click={handleResetClick}> Reset Database </button>
+        <button class="namd-button namd-button--destructive" on:click={handleResetClick}> Reset Database </button>
       </div>
     {:else}
       <p class="error">Failed to load database information</p>
@@ -139,6 +153,15 @@
   onCancel={() => (showResetWarning = false)}
 />
 
+<!-- Alert Dialog -->
+<AlertDialog
+  open={showAlert}
+  title={alertTitle}
+  message={alertMessage}
+  variant={alertVariant}
+  onClose={() => (showAlert = false)}
+/>
+
 <style>
   .settings-page {
     padding: 2rem;
@@ -146,17 +169,17 @@
   }
 
   .settings-section {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
+    background: var(--namd-bg-primary);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius);
+    padding: var(--namd-spacing-lg);
+    margin-bottom: var(--namd-spacing-lg);
   }
 
   .settings-section h2 {
-    margin: 0 0 1rem 0;
-    font-size: 1.25rem;
-    color: var(--color-text-primary);
+    margin: 0 0 var(--namd-spacing-md) 0;
+    font-size: var(--namd-font-size-xl);
+    color: var(--namd-text-primary);
   }
 
   .db-info {
@@ -171,64 +194,37 @@
   }
 
   .label {
-    font-weight: 600;
-    color: var(--color-text-secondary);
+    font-weight: var(--namd-font-weight-semibold);
+    color: var(--namd-text-secondary);
     min-width: 80px;
   }
 
   .path {
-    background: var(--color-background);
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 0.9rem;
+    background: var(--namd-bg-muted);
+    padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
+    border-radius: var(--namd-border-radius-sm);
+    font-family: var(--namd-font-mono);
+    font-size: var(--namd-font-size-sm);
     word-break: break-all;
   }
 
   .value {
-    color: var(--color-text-primary);
+    color: var(--namd-text-primary);
   }
 
   .db-actions {
     display: flex;
-    gap: 0.75rem;
+    gap: var(--namd-spacing-sm);
     flex-wrap: wrap;
-  }
-
-  .btn {
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    border: none;
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-
-  .btn-secondary {
-    background: var(--color-primary);
-    color: white;
-  }
-
-  .btn-secondary:hover {
-    background: var(--color-primary-hover);
-  }
-
-  .btn-destructive {
-    background: var(--color-danger);
-    color: white;
-  }
-
-  .btn-destructive:hover {
-    background: var(--color-danger-hover);
   }
 
   .loading,
   .error {
-    color: var(--color-text-secondary);
+    color: var(--namd-text-secondary);
     font-style: italic;
   }
 
   .error {
-    color: var(--color-danger);
+    color: var(--namd-error);
   }
 </style>

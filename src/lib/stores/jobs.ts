@@ -65,11 +65,11 @@ function createJobsStore() {
           update(state => ({
             ...state,
             jobs: result.jobs || [],
-            hasEverSynced: result.jobs && result.jobs.length > 0
+            hasEverSynced: !!(result.jobs && result.jobs.length > 0)
           }));
         }
       } catch (error) {
-        logger.error('[Jobs] Failed to load from database:', error);
+        logger.error('[Jobs]', 'Failed to load from database', error);
       }
     },
 
