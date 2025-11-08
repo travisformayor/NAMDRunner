@@ -36,7 +36,7 @@
         <line x1="12" y1="5" x2="12" y2="19"></line>
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
-      Create New Job
+      Create Job
     </button>
   </div>
 
@@ -63,13 +63,6 @@
           <p class="empty-description">
             You haven't created any jobs yet. Click "Create Job" to submit your first NAMD simulation.
           </p>
-          <button
-            class="namd-button namd-button--primary"
-            on:click={handleCreateJob}
-          >
-            <span class="button-icon">➕</span>
-            Create Your First Job
-          </button>
         </div>
       {/if}
     {:else}

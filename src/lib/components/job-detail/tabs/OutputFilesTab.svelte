@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { JobInfo } from '../../../types/api';
+  import { CoreClientFactory } from '../../../ports/clientFactory';
   import { getFileIcon, getTypeLabel, getTypeColor, getFileDescription, getFileExtension, formatFileSize } from '../../../utils/file-helpers';
   import { isConnected } from '../../../stores/session';
 

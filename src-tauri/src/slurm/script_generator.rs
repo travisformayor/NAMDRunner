@@ -97,7 +97,7 @@ impl SlurmScriptGenerator {
 
     fn build_namd_execution(_cores: u32) -> String {
         "\n# Execute NAMD with MPI (OpenMPI handles CPU affinity automatically)\n\
-             mpirun -np $SLURM_NTASKS namd3 scripts/config.namd > namd_output.log".to_string()
+             mpirun -np $SLURM_NTASKS namd3 config.namd > namd_output.log".to_string()
     }
 
     // DELETED: All NAMD config section builders - replaced by template system

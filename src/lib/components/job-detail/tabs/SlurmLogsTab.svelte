@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { JobInfo } from '../../../types/api';
+  import { CoreClientFactory } from '../../../ports/clientFactory';
   import { isConnected } from '../../../stores/session';
 
   export let job: JobInfo;

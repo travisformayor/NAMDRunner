@@ -39,13 +39,13 @@
     <div class="loading">Loading template...</div>
   {:else if error}
     <div class="error-message">{error}</div>
-    <button class="btn btn-secondary" on:click={handleCancel}>Back to Templates</button>
+    <button class="namd-button namd-button--secondary" on:click={handleCancel}>Back to Templates</button>
   {:else}
     <TemplateEditor
       template={template}
       mode={$templateEditorMode}
-      on:saved={handleSaved}
-      on:cancel={handleCancel}
+      onSaved={handleSaved}
+      onCancel={handleCancel}
     />
   {/if}
 </div>
@@ -61,36 +61,17 @@
 
   .loading {
     text-align: center;
-    padding: 2rem;
-    font-size: 1rem;
-    color: var(--text-secondary, #666);
+    padding: var(--namd-spacing-xl);
+    font-size: var(--namd-font-size-base);
+    color: var(--namd-text-secondary);
   }
 
   .error-message {
-    background: var(--error-light, #ffebee);
-    border: 1px solid var(--error, #d32f2f);
-    color: var(--error-dark, #c62828);
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
-  }
-
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: background 0.2s;
-  }
-
-  .btn-secondary {
-    background: var(--secondary, #f5f5f5);
-    color: var(--text-primary, #333);
-  }
-
-  .btn-secondary:hover {
-    background: var(--secondary-dark, #e0e0e0);
+    background: var(--namd-error-bg);
+    border: 1px solid var(--namd-error-border);
+    color: var(--namd-error-fg);
+    padding: var(--namd-spacing-md);
+    border-radius: var(--namd-border-radius);
+    margin-bottom: var(--namd-spacing-lg);
   }
 </style>

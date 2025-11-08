@@ -51,7 +51,7 @@ export async function loadTemplates(): Promise<void> {
     }
   } catch (error) {
     templatesError.set(`Error loading templates: ${error}`);
-    logger.error('[TemplateStore] Failed to load templates:', error);
+    logger.error('[TemplateStore]', 'Failed to load templates', error);
   } finally {
     templatesLoading.set(false);
   }
@@ -76,7 +76,7 @@ export async function loadTemplate(templateId: string): Promise<Template | null>
     }
   } catch (error) {
     templatesError.set(`Error loading template: ${error}`);
-    logger.error('[TemplateStore] Failed to load template:', error);
+    logger.error('[TemplateStore]', 'Failed to load template', error);
     return null;
   } finally {
     templatesLoading.set(false);
@@ -103,7 +103,7 @@ export async function createTemplate(template: Template): Promise<boolean> {
     }
   } catch (error) {
     templatesError.set(`Error creating template: ${error}`);
-    logger.error('[TemplateStore] Failed to create template:', error);
+    logger.error('[TemplateStore]', 'Failed to create template', error);
     return false;
   } finally {
     templatesLoading.set(false);
@@ -134,7 +134,7 @@ export async function updateTemplate(templateId: string, template: Template): Pr
     }
   } catch (error) {
     templatesError.set(`Error updating template: ${error}`);
-    logger.error('[TemplateStore] Failed to update template:', error);
+    logger.error('[TemplateStore]', 'Failed to update template', error);
     return false;
   } finally {
     templatesLoading.set(false);
@@ -165,7 +165,7 @@ export async function deleteTemplate(templateId: string): Promise<boolean> {
     }
   } catch (error) {
     templatesError.set(`Error deleting template: ${error}`);
-    logger.error('[TemplateStore] Failed to delete template:', error);
+    logger.error('[TemplateStore]', 'Failed to delete template', error);
     return false;
   } finally {
     templatesLoading.set(false);
@@ -190,7 +190,7 @@ export async function validateTemplateValues(
       errors: result.errors
     };
   } catch (error) {
-    logger.error('[TemplateStore] Failed to validate values:', error);
+    logger.error('[TemplateStore]', 'Failed to validate values', error);
     return {
       valid: false,
       errors: [`Validation error: ${error}`]

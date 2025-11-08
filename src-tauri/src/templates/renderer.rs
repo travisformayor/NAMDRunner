@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 /// Render a template by substituting {{variables}} with actual values
-/// File paths get "input_files/" prepended automatically
+/// File paths are extracted to filenames and get "input_files/" prepended automatically
 pub fn render_template(
     template: &Template,
     values: &HashMap<String, Value>,
@@ -20,10 +20,17 @@ pub fn render_template(
         // Convert value to string based on variable type
         let value_str = match &var_def.var_type {
             VariableType::FileUpload { .. } => {
-                // File uploads: prepend input_files/ to filename
-                let filename = value.as_str()
+                // File uploads: extract filename from potential full path, then prepend input_files/
+                let file_path = value.as_str()
                     .ok_or_else(|| anyhow!("Variable {} must be a string (filename)", key))?;
-                format!("input_files/{}", filename)
+
+                // Extract filename from full path if present (handles both "/home/user/file.psf" and "file.psf")
+                let filename = std::path::Path::new(file_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(file_path);  // Fallback to original if extraction fails
+
+                format!("{}/{}", crate::ssh::JobDirectoryStructure::INPUT_FILES, filename)
             }
             VariableType::Number { .. } => {
                 // Numbers: convert to string

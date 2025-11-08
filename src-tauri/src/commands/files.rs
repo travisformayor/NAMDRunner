@@ -354,8 +354,6 @@ pub async fn download_all_outputs(job_id: String) -> DownloadResult {
     download_all_outputs_real(job_id).await
 }
 
-// DELETED: download_all_outputs_demo - demo mode removed
-
 async fn download_all_outputs_real(job_id: String) -> DownloadResult {
     use rfd::FileDialog;
 
@@ -591,10 +589,6 @@ fn get_directories_to_list(job_info: &JobInfo) -> Vec<(String, String)> {
             crate::ssh::JobDirectoryStructure::INPUT_FILES.to_string()
         ));
         directories.push((
-            format!("{}/{}", project_dir, crate::ssh::JobDirectoryStructure::SCRIPTS),
-            crate::ssh::JobDirectoryStructure::SCRIPTS.to_string()
-        ));
-        directories.push((
             format!("{}/{}", project_dir, crate::ssh::JobDirectoryStructure::OUTPUTS),
             crate::ssh::JobDirectoryStructure::OUTPUTS.to_string()
         ));
@@ -621,9 +615,6 @@ fn classify_file_type(filename: &str, relative_prefix: &str) -> FileType {
     }
     if relative_prefix == JobDirectoryStructure::OUTPUTS {
         return FileType::Output;
-    }
-    if relative_prefix == JobDirectoryStructure::SCRIPTS {
-        return FileType::Config;
     }
 
     // For root directory files, classify by extension and name

@@ -17,7 +17,7 @@ export function extractVariablesFromTemplate(templateText: string): string[] {
   let match;
   while ((match = regex.exec(templateText)) !== null) {
     const varName = match[1];
-    if (!firstOccurrence.has(varName)) {
+    if (varName && !firstOccurrence.has(varName)) {
       // Track first occurrence only (handles duplicates)
       firstOccurrence.set(varName, match.index);
     }
@@ -38,25 +38,4 @@ export function generateLabel(varName: string): string {
     .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
-}
-
-/**
- * Generate a sample value for template preview
- * Uses variable's default value or generates appropriate sample
- */
-export function getSampleValue(varDef: VariableDefinition): string {
-  const typeName = getVariableTypeName(varDef.var_type);
-
-  if (typeName === 'Number' && 'Number' in varDef.var_type) {
-    return String(varDef.var_type.Number.default);
-  } else if (typeName === 'Text' && 'Text' in varDef.var_type) {
-    return varDef.var_type.Text.default;
-  } else if (typeName === 'Boolean' && 'Boolean' in varDef.var_type) {
-    return varDef.var_type.Boolean.default ? 'yes' : 'no';
-  } else if (typeName === 'FileUpload' && 'FileUpload' in varDef.var_type) {
-    const extensions = varDef.var_type.FileUpload.extensions;
-    const firstExt = extensions[0] || '.dat';
-    return `${varDef.key}${firstExt}`;
-  }
-  return '';
 }

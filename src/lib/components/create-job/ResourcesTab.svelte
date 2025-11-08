@@ -1,6 +1,7 @@
 <script lang="ts">
-    import { logger } from '$lib/utils/logger';
-import { invoke } from '@tauri-apps/api/core';
+  import { logger } from '$lib/utils/logger';
+  import { invoke } from '@tauri-apps/api/core';
+  import type { PreviewResult } from '$lib/types/api';
   import { jobPresets, partitions, allQosOptions, validateResourceRequest, calculateJobCost, estimateQueueTime, walltimeToHours } from '$lib/stores/clusterConfig';
   import type { JobPreset } from '$lib/types/cluster';
   import PreviewModal from '../ui/PreviewModal.svelte';
@@ -62,7 +63,7 @@ import { invoke } from '@tauri-apps/api/core';
     isGeneratingScript = true;
 
     try {
-      const result = await invoke('preview_slurm_script', {
+      const result = await invoke<PreviewResult>('preview_slurm_script', {
         job_name: 'preview_job',
         cores: resourceConfig.cores,
         memory: resourceConfig.memory,
@@ -75,10 +76,10 @@ import { invoke } from '@tauri-apps/api/core';
         scriptPreviewContent = result.content;
         showScriptPreview = true;
       } else {
-        logger.error('[ResourcesTab] Script preview failed:', result.error);
+        logger.error('[ResourcesTab]', `Script preview failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
-      logger.error('[ResourcesTab] Script preview error:', error);
+      logger.error('[ResourcesTab]', 'Script preview error', error);
     } finally {
       isGeneratingScript = false;
     }

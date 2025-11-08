@@ -1,18 +1,21 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { logger } from '$lib/utils/logger';
   import { createTemplate, updateTemplate, deleteTemplate, templatesError } from '$lib/stores/templateStore';
   import type { Template } from '$lib/types/template';
+  import type { PreviewResult } from '$lib/types/api';
   import { getVariableTypeName } from '$lib/types/template';
-  import { extractVariablesFromTemplate, generateLabel, getSampleValue } from '$lib/utils/template-utils';
+  import { extractVariablesFromTemplate, generateLabel } from '$lib/utils/template-utils';
   import VariableEditor from './VariableEditor.svelte';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import PreviewModal from '../ui/PreviewModal.svelte';
-
-  const dispatch = createEventDispatcher();
+  import Dialog from '../ui/Dialog.svelte';
 
   // Props
   export let template: Template | null = null;
   export let mode: 'create' | 'edit' = 'create';
+  export let onSaved: (template: Template) => void = () => {};
+  export let onCancel: () => void = () => {};
 
   let id = template?.id ?? '';
   let name = template?.name ?? '';
@@ -23,7 +26,7 @@
   let error: string | null = null;
 
   // Sync variables object with template text (debounced)
-  let debounceTimer: number;
+  let debounceTimer: ReturnType<typeof setTimeout>;
   function syncVariablesWithTemplate() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
@@ -60,6 +63,7 @@
   // Test template state
   let showTestPreview = false;
   let testPreviewContent = '';
+  let isGeneratingPreview = false;
 
   // Delete confirmation state
   let showDeleteConfirm = false;
@@ -95,7 +99,7 @@
     isSaving = false;
 
     if (success) {
-      dispatch('saved', templateData);
+      onSaved(templateData);
     } else {
       // Use specific error from store (backend provides details)
       error = $templatesError || 'Failed to save template';
@@ -103,7 +107,7 @@
   }
 
   function handleCancel() {
-    dispatch('cancel');
+    onCancel();
   }
 
   function handleDelete() {
@@ -119,7 +123,7 @@
     showDeleteConfirm = false;
 
     if (success) {
-      dispatch('cancel'); // Navigate back after deletion
+      onCancel(); // Navigate back after deletion
     }
   }
 
@@ -156,18 +160,30 @@
     editingVariableKey = null;
   }
 
-  function handleTestTemplate() {
-    // Generate preview with sample values
-    let preview = namdConfigTemplate;
-
-    for (const [key, varDef] of Object.entries(variables)) {
-      const sampleValue = getSampleValue(varDef);
-      const placeholder = `{{${key}}}`;
-      preview = preview.replaceAll(placeholder, sampleValue);
+  async function handleTestTemplate() {
+    if (!id) {
+      error = 'Please save the template before testing';
+      return;
     }
 
-    testPreviewContent = preview;
-    showTestPreview = true;
+    isGeneratingPreview = true;
+
+    try {
+      const result = await invoke<PreviewResult>('preview_template_with_defaults', { template_id: id });
+
+      if (result.success && result.content) {
+        testPreviewContent = result.content;
+        showTestPreview = true;
+      } else {
+        error = result.error || 'Failed to generate preview';
+        logger.error('[TemplateEditor]', `Preview failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      error = 'Failed to generate preview';
+      logger.error('[TemplateEditor]', 'Preview error', err);
+    } finally {
+      isGeneratingPreview = false;
+    }
   }
 </script>
 
@@ -253,7 +269,7 @@
                 <span class="variable-type">{getVariableTypeName(varDef.var_type)}</span>
               </div>
               <div class="variable-actions">
-                <button type="button" class="btn btn-xs" on:click={() => handleEditVariable(key)}>Edit</button>
+                <button type="button" class="namd-button namd-button--secondary namd-button--sm" on:click={() => handleEditVariable(key)}>Edit</button>
               </div>
             </div>
           {/each}
@@ -266,19 +282,19 @@
     <div class="form-actions">
       <div class="form-actions-left">
         {#if mode === 'edit'}
-          <button type="button" class="btn btn-danger" on:click={handleDelete}>
+          <button type="button" class="namd-button namd-button--destructive" on:click={handleDelete}>
             Delete Template
           </button>
         {/if}
       </div>
       <div class="form-actions-right">
-        <button type="button" class="btn btn-secondary" on:click={handleCancel}>
+        <button type="button" class="namd-button namd-button--secondary" on:click={handleCancel}>
           Cancel
         </button>
-        <button type="button" class="btn btn-secondary" on:click={handleTestTemplate}>
-          Test Template
+        <button type="button" class="namd-button namd-button--secondary" on:click={handleTestTemplate} disabled={isGeneratingPreview}>
+          {isGeneratingPreview ? 'Generating Preview...' : 'Test Template'}
         </button>
-        <button type="submit" class="btn btn-primary" disabled={isSaving}>
+        <button type="submit" class="namd-button namd-button--primary" disabled={isSaving}>
           {isSaving ? 'Saving...' : 'Save Template'}
         </button>
       </div>
@@ -287,30 +303,15 @@
 </div>
 
 <!-- Variable Editor Modal -->
-{#if showVariableEditor}
-  <div
-    class="modal-overlay"
-    role="presentation"
-    on:click={handleVariableCancel}
-    on:keydown={(e) => e.key === 'Escape' && handleVariableCancel()}
-  >
-    <div
-      class="modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Variable Editor"
-      tabindex="-1"
-      on:click|stopPropagation
-      on:keydown|stopPropagation
-    >
-      <VariableEditor
-        variable={editingVariable}
-        on:save={handleVariableSaved}
-        on:cancel={handleVariableCancel}
-      />
-    </div>
-  </div>
-{/if}
+<Dialog open={showVariableEditor} size="md" onClose={handleVariableCancel}>
+  <svelte:fragment slot="body">
+    <VariableEditor
+      variable={editingVariable}
+      on:save={handleVariableSaved}
+      on:cancel={handleVariableCancel}
+    />
+  </svelte:fragment>
+</Dialog>
 
 <!-- Test Template Preview -->
 <PreviewModal
@@ -339,79 +340,84 @@
   }
 
   h2 {
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--namd-spacing-lg);
+    color: var(--namd-text-primary);
+    font-size: var(--namd-font-size-2xl);
   }
 
   .form-group {
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--namd-spacing-lg);
   }
 
   .form-group label {
     display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-    font-size: 0.875rem;
+    margin-bottom: var(--namd-spacing-sm);
+    font-weight: var(--namd-font-weight-medium);
+    font-size: var(--namd-font-size-sm);
+    color: var(--namd-text-primary);
   }
 
   .required {
-    color: var(--error, #d32f2f);
+    color: var(--namd-error);
   }
 
   .form-control {
     width: 100%;
-    padding: 0.5rem;
-    border: 1px solid var(--border-color, #ddd);
-    border-radius: 4px;
-    font-size: 0.875rem;
+    padding: var(--namd-spacing-sm);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius-sm);
+    font-size: var(--namd-font-size-sm);
     font-family: inherit;
+    background-color: var(--namd-bg-primary);
+    color: var(--namd-text-primary);
   }
 
   .form-control:focus {
     outline: none;
-    border-color: var(--primary, #1976d2);
-    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+    border-color: var(--namd-primary);
   }
 
   .code-editor {
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 0.8125rem;
+    font-family: var(--namd-font-mono);
+    font-size: var(--namd-font-size-xs);
   }
 
   .help-text {
-    margin: 0.25rem 0 0 0;
-    font-size: 0.75rem;
-    color: var(--text-secondary, #666);
+    margin: var(--namd-spacing-xs) 0 0 0;
+    font-size: var(--namd-font-size-xs);
+    color: var(--namd-text-secondary);
   }
 
   .help-text code {
-    background: var(--code-bg, #f5f5f5);
+    background: var(--namd-bg-muted);
     padding: 0.125rem 0.25rem;
-    border-radius: 2px;
+    border-radius: var(--namd-border-radius-sm);
     font-size: 0.875em;
+    color: var(--namd-text-primary);
   }
 
   .help-text-inline {
-    font-size: 0.75rem;
-    color: var(--text-secondary, #666);
+    font-size: var(--namd-font-size-xs);
+    color: var(--namd-text-secondary);
     font-style: italic;
   }
 
   .error-message {
-    background: var(--error-light, #ffebee);
-    border: 1px solid var(--error, #d32f2f);
-    color: var(--error-dark, #c62828);
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
+    background: var(--namd-error-bg);
+    border: 1px solid var(--namd-error-border);
+    color: var(--namd-error-fg);
+    padding: var(--namd-spacing-md);
+    border-radius: var(--namd-border-radius);
+    margin-bottom: var(--namd-spacing-lg);
   }
 
   .form-actions {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 2rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--border-color, #e0e0e0);
+    margin-top: var(--namd-spacing-xl);
+    padding-top: var(--namd-spacing-lg);
+    border-top: 1px solid var(--namd-border);
   }
 
   .form-actions-left {
@@ -424,61 +430,24 @@
     gap: 1rem;
   }
 
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: background 0.2s;
-  }
-
-  .btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .btn-primary {
-    background: var(--primary, #1976d2);
-    color: white;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--primary-dark, #1565c0);
-  }
-
-  .btn-secondary {
-    background: var(--secondary, #f5f5f5);
-    color: var(--text-primary, #333);
-  }
-
-  .btn-secondary:hover {
-    background: var(--secondary-dark, #e0e0e0);
-  }
-
   /* Variable Management */
   .variables-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    margin-bottom: var(--namd-spacing-md);
   }
 
   .variables-header .section-label {
-    font-weight: 500;
-    font-size: 0.875rem;
+    font-weight: var(--namd-font-weight-medium);
+    font-size: var(--namd-font-size-sm);
     margin-bottom: 0;
-  }
-
-  .btn-xs {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
+    color: var(--namd-text-primary);
   }
 
   .variables-list {
-    border: 1px solid var(--border-color, #ddd);
-    border-radius: 4px;
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius);
     overflow: hidden;
   }
 
@@ -486,8 +455,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--border-color, #e0e0e0);
+    padding: var(--namd-spacing-sm) var(--namd-spacing-md);
+    border-bottom: 1px solid var(--namd-border);
+    background: var(--namd-bg-primary);
   }
 
   .variable-item:last-child {
@@ -497,63 +467,34 @@
   .variable-info {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: var(--namd-spacing-sm);
+  }
+
+  .variable-info strong {
+    color: var(--namd-text-primary);
   }
 
   .variable-key {
-    font-family: 'Monaco', 'Menlo', monospace;
-    font-size: 0.8125rem;
-    background: var(--code-bg, #f5f5f5);
-    padding: 0.125rem 0.375rem;
-    border-radius: 3px;
-    color: var(--text-secondary, #666);
+    font-family: var(--namd-font-mono);
+    font-size: var(--namd-font-size-xs);
+    background: var(--namd-bg-muted);
+    padding: 0.125rem var(--namd-spacing-xs);
+    border-radius: var(--namd-border-radius-sm);
+    color: var(--namd-text-secondary);
   }
 
   .variable-type {
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
-    border-radius: 3px;
-    background: var(--primary-light, #e3f2fd);
-    color: var(--primary, #1976d2);
+    font-size: var(--namd-font-size-xs);
+    padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
+    border-radius: var(--namd-border-radius-sm);
+    background: var(--namd-info-bg);
+    color: var(--namd-info-fg);
     text-transform: uppercase;
-    font-weight: 600;
+    font-weight: var(--namd-font-weight-semibold);
   }
 
   .variable-actions {
     display: flex;
-    gap: 0.5rem;
-  }
-
-  .btn-danger {
-    background: var(--error, #d32f2f);
-    color: white;
-  }
-
-  .btn-danger:hover {
-    background: var(--error-dark, #c62828);
-  }
-
-  /* Modals */
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-
-  .modal {
-    background: var(--card-bg, white);
-    border-radius: 8px;
-    padding: 2rem;
-    max-width: 600px;
-    width: 90%;
-    max-height: 90vh;
-    overflow-y: auto;
+    gap: var(--namd-spacing-sm);
   }
 </style>

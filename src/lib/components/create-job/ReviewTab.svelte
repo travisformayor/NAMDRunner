@@ -11,34 +11,16 @@
   };
   export let errors: Record<string, string>;
   export let uploadProgress: Map<string, { percentage: number }>;
+  export let uploadFileList: string[] = [];
   export let onSubmit: () => void;
   export let onCancel: () => void;
   export let isSubmitting: boolean = false;
 
-  // Extract file upload variables from template values
-  function getUploadedFiles(): { name: string; progress: number }[] {
-    const files: { name: string; progress: number }[] = [];
-
-    for (const [key, value] of Object.entries(templateValues)) {
-      if (typeof value === 'string' && (value.endsWith('.psf') || value.endsWith('.pdb') || value.endsWith('.prm') || value.endsWith('.exb'))) {
-        const fileName = value.includes('/') ? value.split('/').pop() || value : value;
-        files.push({
-          name: fileName,
-          progress: uploadProgress.get(fileName)?.percentage || 0
-        });
-      }
-    }
-
-    return files;
-  }
-
-  function formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-  }
+  // Build file list with progress (backend tells us which files exist)
+  $: filesWithProgress = uploadFileList.map(fileName => ({
+    name: fileName,
+    progress: uploadProgress.get(fileName)?.percentage || 0
+  }));
 </script>
 
 <div class="namd-tab-panel">
@@ -136,9 +118,9 @@
     <!-- Input Files with Upload Progress -->
     <div class="review-section">
       <h4 class="review-section-title">Input Files</h4>
-      {#if getUploadedFiles().length > 0}
+      {#if filesWithProgress.length > 0}
         <div class="files-summary">
-          {#each getUploadedFiles() as file}
+          {#each filesWithProgress as file}
             <div class="file-summary-item">
               <!-- Animated progress background -->
               <div class="file-progress-bg" style="width: {file.progress}%"></div>

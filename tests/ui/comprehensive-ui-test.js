@@ -127,7 +127,7 @@ async function comprehensiveUITest() {
     await page.locator('button:has-text("Create Job")').click();
     await page.waitForTimeout(500);
 
-    const createJobHeader = await page.locator('.page-title:has-text("Create New Job")').isVisible();
+    const createJobHeader = await page.locator('.page-title:has-text("Create Job")').isVisible();
     if (createJobHeader) {
       results.tests.push({ name: 'Create Job Page Loads', status: 'PASS' });
       await page.screenshot({

@@ -248,10 +248,40 @@ export interface ValidateResourceAllocationResult {
   suggestions: string[];
 }
 
+export interface PreviewResult {
+  success: boolean;
+  content?: string;
+  error?: string;
+}
+
+export interface JobValidationResult {
+  is_valid: boolean;
+  errors: string[];
+}
+
 // Error handling
 export interface NAMDRunnerError {
   category: 'Network' | 'Authentication' | 'Validation' | 'FileSystem' | 'SLURM' | 'Internal';
   message: string;
   details?: string;
   retryable: boolean;
+}
+
+// Database management
+export interface DatabaseInfo {
+  path: string;
+  size_bytes: number;
+}
+
+export interface DatabaseInfoResult {
+  success: boolean;
+  path?: string;
+  size_bytes?: number;
+  error?: string;
+}
+
+export interface DatabaseOperationResult {
+  success: boolean;
+  message?: string;
+  error?: string;
 }

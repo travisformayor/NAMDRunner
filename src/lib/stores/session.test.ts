@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { sessionActions, connectionState, isConnected } from './session';
 import { CoreClientFactory } from '../ports/clientFactory';
-import type { ICoreClient, ConnectResult, DisconnectResult } from '../ports/coreClient';
+import type { ICoreClient } from '../ports/coreClient';
+import type { ConnectResult, DisconnectResult } from '../types/api';
 
 // Mock the CoreClientFactory
 vi.mock('../ports/clientFactory', () => ({
@@ -30,15 +31,22 @@ describe('Session Store', () => {
       getAllJobs: vi.fn(),
       syncJobs: vi.fn(),
       deleteJob: vi.fn(),
-      refetchLogs: vi.fn(),
-      uploadFile: vi.fn(),
+      refetchSlurmLogs: vi.fn(),
+      selectInputFile: vi.fn(),
+      detectFileType: vi.fn(),
+      uploadJobFiles: vi.fn(),
+      downloadJobOutput: vi.fn(),
       downloadAllOutputs: vi.fn(),
-      listFiles: vi.fn(),
+      listJobFiles: vi.fn(),
       getClusterCapabilities: vi.fn(),
       validateResourceAllocation: vi.fn(),
       calculateJobCost: vi.fn(),
       estimateQueueTimeForJob: vi.fn(),
-      suggestQosForPartition: vi.fn()
+      suggestQosForPartition: vi.fn(),
+      getDatabaseInfo: vi.fn(),
+      backupDatabase: vi.fn(),
+      restoreDatabase: vi.fn(),
+      resetDatabase: vi.fn()
     };
 
     // Mock CoreClientFactory to return our mock client
@@ -57,8 +65,7 @@ describe('Session Store', () => {
         host: 'test.host',
         username: 'testuser',
         connected_at: new Date().toISOString()
-      },
-      error: null
+      }
     };
     vi.mocked(mockClient.connect).mockResolvedValue(successResult);
 
@@ -77,7 +84,6 @@ describe('Session Store', () => {
   it('should handle connection failure', async () => {
     const failureResult: ConnectResult = {
       success: false,
-      session_info: null,
       error: 'Authentication failed'
     };
     vi.mocked(mockClient.connect).mockResolvedValue(failureResult);
@@ -97,8 +103,7 @@ describe('Session Store', () => {
         host: 'test.host',
         username: 'testuser',
         connected_at: new Date().toISOString()
-      },
-      error: null
+      }
     };
     vi.mocked(mockClient.connect).mockResolvedValue(connectResult);
 
@@ -108,8 +113,7 @@ describe('Session Store', () => {
 
     // Then disconnect
     const disconnectResult: DisconnectResult = {
-      success: true,
-      error: null
+      success: true
     };
     vi.mocked(mockClient.disconnect).mockResolvedValue(disconnectResult);
 
@@ -125,7 +129,6 @@ describe('Session Store', () => {
     // Trigger an error
     const failureResult: ConnectResult = {
       success: false,
-      session_info: null,
       error: 'Connection error'
     };
     vi.mocked(mockClient.connect).mockResolvedValue(failureResult);
