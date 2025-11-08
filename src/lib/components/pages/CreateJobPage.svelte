@@ -27,7 +27,9 @@
   let errors: Record<string, string> = {};
   let isSubmitting = false;
   let uploadProgress: Map<string, { percentage: number }> = new Map();
+  let uploadFileList: string[] = [];
   let unlistenUpload: (() => void) | undefined;
+  let unlistenFileList: (() => void) | undefined;
 
   // Get defaults from cluster config
   $: defaultPartition = $partitions.find(p => p.is_default) || $partitions[0];
@@ -40,6 +42,13 @@
       resourceConfig.qos = defaultQos.id;
     }
 
+    // Listen for file upload list (emitted before uploads start)
+    unlistenFileList = await listen('file-upload-list', (event) => {
+      const fileList = event.payload as string[];
+      uploadFileList = fileList;
+      logger.debug('[CreateJob]', `Received file upload list: ${fileList.join(', ')}`);
+    });
+
     // Listen for file upload progress
     unlistenUpload = await listen('file-upload-progress', (event) => {
       const progress = event.payload as any;
@@ -51,6 +60,9 @@
   onDestroy(() => {
     if (unlistenUpload) {
       unlistenUpload();
+    }
+    if (unlistenFileList) {
+      unlistenFileList();
     }
   });
 
@@ -102,6 +114,7 @@
       bind:resourceConfig
       bind:errors
       {uploadProgress}
+      {uploadFileList}
       onSubmit={handleSubmit}
       onCancel={handleCancel}
       {isSubmitting}

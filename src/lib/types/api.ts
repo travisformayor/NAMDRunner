@@ -248,6 +248,17 @@ export interface ValidateResourceAllocationResult {
   suggestions: string[];
 }
 
+export interface PreviewResult {
+  success: boolean;
+  content?: string;
+  error?: string;
+}
+
+export interface JobValidationResult {
+  is_valid: boolean;
+  errors: string[];
+}
+
 // Error handling
 export interface NAMDRunnerError {
   category: 'Network' | 'Authentication' | 'Validation' | 'FileSystem' | 'SLURM' | 'Internal';

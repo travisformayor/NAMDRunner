@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractVariablesFromTemplate, generateLabel, getSampleValue } from './template-utils';
-import type { VariableDefinition } from '$lib/types/template';
+import { extractVariablesFromTemplate, generateLabel } from './template-utils';
 
 describe('extractVariablesFromTemplate', () => {
   it('finds variables in order of first occurrence', () => {
@@ -77,91 +76,5 @@ describe('generateLabel', () => {
 
   it('handles empty string', () => {
     expect(generateLabel('')).toBe('');
-  });
-});
-
-describe('getSampleValue', () => {
-  it('uses Number default value', () => {
-    const varDef: VariableDefinition = {
-      key: 'temperature',
-      label: 'Temperature',
-      var_type: { Number: { min: 200, max: 400, default: 300 } },
-      required: true,
-      help_text: null
-    };
-
-    expect(getSampleValue(varDef)).toBe('300');
-  });
-
-  it('uses Text default value', () => {
-    const varDef: VariableDefinition = {
-      key: 'output_name',
-      label: 'Output Name',
-      var_type: { Text: { default: 'simulation' } },
-      required: true,
-      help_text: null
-    };
-
-    expect(getSampleValue(varDef)).toBe('simulation');
-  });
-
-  it('converts Boolean true to "yes"', () => {
-    const varDef: VariableDefinition = {
-      key: 'pme_enabled',
-      label: 'PME Enabled',
-      var_type: { Boolean: { default: true } },
-      required: true,
-      help_text: null
-    };
-
-    expect(getSampleValue(varDef)).toBe('yes');
-  });
-
-  it('converts Boolean false to "no"', () => {
-    const varDef: VariableDefinition = {
-      key: 'pme_enabled',
-      label: 'PME Enabled',
-      var_type: { Boolean: { default: false } },
-      required: true,
-      help_text: null
-    };
-
-    expect(getSampleValue(varDef)).toBe('no');
-  });
-
-  it('generates filename with variable name + first extension', () => {
-    const varDef: VariableDefinition = {
-      key: 'structure_file',
-      label: 'Structure File',
-      var_type: { FileUpload: { extensions: ['.psf', '.pdb'] } },
-      required: true,
-      help_text: null
-    };
-
-    expect(getSampleValue(varDef)).toBe('structure_file.psf');
-  });
-
-  it('uses first extension for FileUpload', () => {
-    const varDef: VariableDefinition = {
-      key: 'parameters',
-      label: 'Parameters',
-      var_type: { FileUpload: { extensions: ['.prm', '.par', '.str'] } },
-      required: true,
-      help_text: null
-    };
-
-    expect(getSampleValue(varDef)).toBe('parameters.prm');
-  });
-
-  it('handles FileUpload with no extensions (fallback)', () => {
-    const varDef: VariableDefinition = {
-      key: 'data_file',
-      label: 'Data File',
-      var_type: { FileUpload: { extensions: [] } },
-      required: true,
-      help_text: null
-    };
-
-    expect(getSampleValue(varDef)).toBe('data_file.dat');
   });
 });

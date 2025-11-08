@@ -1,9 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { logger } from '$lib/utils/logger';
   import { createTemplate, updateTemplate, deleteTemplate, templatesError } from '$lib/stores/templateStore';
   import type { Template } from '$lib/types/template';
+  import type { PreviewResult } from '$lib/types/api';
   import { getVariableTypeName } from '$lib/types/template';
-  import { extractVariablesFromTemplate, generateLabel, getSampleValue } from '$lib/utils/template-utils';
+  import { extractVariablesFromTemplate, generateLabel } from '$lib/utils/template-utils';
   import VariableEditor from './VariableEditor.svelte';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import PreviewModal from '../ui/PreviewModal.svelte';
@@ -60,6 +63,7 @@
   // Test template state
   let showTestPreview = false;
   let testPreviewContent = '';
+  let isGeneratingPreview = false;
 
   // Delete confirmation state
   let showDeleteConfirm = false;
@@ -156,18 +160,30 @@
     editingVariableKey = null;
   }
 
-  function handleTestTemplate() {
-    // Generate preview with sample values
-    let preview = namdConfigTemplate;
-
-    for (const [key, varDef] of Object.entries(variables)) {
-      const sampleValue = getSampleValue(varDef);
-      const placeholder = `{{${key}}}`;
-      preview = preview.replaceAll(placeholder, sampleValue);
+  async function handleTestTemplate() {
+    if (!id) {
+      error = 'Please save the template before testing';
+      return;
     }
 
-    testPreviewContent = preview;
-    showTestPreview = true;
+    isGeneratingPreview = true;
+
+    try {
+      const result = await invoke<PreviewResult>('preview_template_with_defaults', { template_id: id });
+
+      if (result.success && result.content) {
+        testPreviewContent = result.content;
+        showTestPreview = true;
+      } else {
+        error = result.error || 'Failed to generate preview';
+        logger.error('[TemplateEditor]', `Preview failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      error = 'Failed to generate preview';
+      logger.error('[TemplateEditor]', 'Preview error', err);
+    } finally {
+      isGeneratingPreview = false;
+    }
   }
 </script>
 
@@ -275,8 +291,8 @@
         <button type="button" class="btn btn-secondary" on:click={handleCancel}>
           Cancel
         </button>
-        <button type="button" class="btn btn-secondary" on:click={handleTestTemplate}>
-          Test Template
+        <button type="button" class="btn btn-secondary" on:click={handleTestTemplate} disabled={isGeneratingPreview}>
+          {isGeneratingPreview ? 'Generating Preview...' : 'Test Template'}
         </button>
         <button type="submit" class="btn btn-primary" disabled={isSaving}>
           {isSaving ? 'Saving...' : 'Save Template'}

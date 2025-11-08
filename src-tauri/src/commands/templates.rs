@@ -302,3 +302,65 @@ pub async fn preview_namd_config(
         }
     }
 }
+
+/// Preview template with default/sample values (for template editor testing)
+#[tauri::command(rename_all = "snake_case")]
+pub async fn preview_template_with_defaults(template_id: String) -> PreviewResult {
+    info_log!("[Templates] Previewing template with defaults: {}", template_id);
+
+    // Load template
+    let template = match with_database(|db| db.load_template(&template_id)) {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return PreviewResult {
+                success: false,
+                content: None,
+                error: Some(format!("Template '{}' not found", template_id)),
+            };
+        }
+        Err(e) => {
+            return PreviewResult {
+                success: false,
+                content: None,
+                error: Some(format!("Database error: {}", e)),
+            };
+        }
+    };
+
+    // Generate sample values from variable defaults
+    let mut values = HashMap::new();
+    for (key, var_def) in &template.variables {
+        let sample_value = match &var_def.var_type {
+            crate::templates::VariableType::Number { default, .. } => Value::from(*default),
+            crate::templates::VariableType::Text { default } => Value::from(default.clone()),
+            crate::templates::VariableType::Boolean { default } => Value::from(*default),
+            crate::templates::VariableType::FileUpload { extensions } => {
+                // Generate sample filename (renderer will prepend input_files/)
+                let default_ext = ".dat".to_string();
+                let ext = extensions.first().unwrap_or(&default_ext);
+                Value::from(format!("{}{}", key, ext))
+            }
+        };
+        values.insert(key.clone(), sample_value);
+    }
+
+    // Use the same renderer as preview_namd_config
+    match crate::templates::render_template(&template, &values) {
+        Ok(rendered) => {
+            info_log!("[Templates] Preview with defaults generated successfully");
+            PreviewResult {
+                success: true,
+                content: Some(rendered),
+                error: None,
+            }
+        }
+        Err(e) => {
+            error_log!("[Templates] Preview with defaults failed: {}", e);
+            PreviewResult {
+                success: false,
+                content: None,
+                error: Some(format!("Rendering error: {}", e)),
+            }
+        }
+    }
+}

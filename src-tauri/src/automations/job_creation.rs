@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use std::collections::HashMap;
 use serde_json::Value;
 
@@ -123,41 +123,51 @@ pub async fn execute_job_creation_with_progress(
     // Extract FileUpload variables from template and upload their files
     let mut template_values_for_rendering = params.template_values.clone();
 
+    // First pass: collect all filenames to upload and emit the list to frontend
+    let mut files_to_upload: Vec<(String, String, String)> = Vec::new(); // (var_key, local_path, filename)
     for (var_key, var_def) in &template.variables {
-        // Check if this is a FileUpload variable
         if matches!(var_def.var_type, crate::templates::VariableType::FileUpload { .. }) {
-            // Get the file path from template_values
             if let Some(file_path_value) = params.template_values.get(var_key) {
                 if let Some(local_file_path) = file_path_value.as_str() {
                     if !local_file_path.is_empty() {
-                        // Extract filename from local path
                         let filename = std::path::Path::new(local_file_path)
                             .file_name()
                             .and_then(|n| n.to_str())
-                            .ok_or_else(|| anyhow!("Invalid filename in {}: {}", var_key, local_file_path))?;
+                            .ok_or_else(|| anyhow!("Invalid filename in {}: {}", var_key, local_file_path))?
+                            .to_string();
 
-                        progress_callback(&format!("Uploading file: {}", filename));
-                        info_log!("[Job Creation] Uploading file for {}: {} -> {}", var_key, local_file_path, filename);
-
-                        // Construct remote path
-                        let remote_path = crate::ssh::JobDirectoryStructure::full_input_path(&project_dir, filename);
-
-                        // Upload file
-                        connection_manager.upload_file_with_progress(local_file_path, &remote_path, Some(app_handle.clone())).await
-                            .map_err(|e| {
-                                error_log!("[Job Creation] Failed to upload file {}: {}", filename, e);
-                                anyhow!("Could not upload file '{}': {}", filename, e)
-                            })?;
-
-                        info_log!("[Job Creation] Successfully uploaded: {} -> {}", local_file_path, remote_path);
-
-                        // Update template_values with just the filename (not full path)
-                        // The renderer will prepend "input_files/" when rendering the template
-                        template_values_for_rendering.insert(var_key.clone(), Value::String(filename.to_string()));
+                        files_to_upload.push((var_key.clone(), local_file_path.to_string(), filename));
                     }
                 }
             }
         }
+    }
+
+    // Emit the file list to frontend for progress tracking
+    let file_names: Vec<String> = files_to_upload.iter().map(|(_, _, name)| name.clone()).collect();
+    let _ = app_handle.emit("file-upload-list", file_names);
+    info_log!("[Job Creation] Emitted file upload list: {} files", files_to_upload.len());
+
+    // Second pass: upload each file
+    for (var_key, local_file_path, filename) in files_to_upload {
+        progress_callback(&format!("Uploading file: {}", filename));
+        info_log!("[Job Creation] Uploading file for {}: {} -> {}", var_key, local_file_path, filename);
+
+        // Construct remote path
+        let remote_path = crate::ssh::JobDirectoryStructure::full_input_path(&project_dir, &filename);
+
+        // Upload file
+        connection_manager.upload_file_with_progress(&local_file_path, &remote_path, Some(app_handle.clone())).await
+            .map_err(|e| {
+                error_log!("[Job Creation] Failed to upload file {}: {}", filename, e);
+                anyhow!("Could not upload file '{}': {}", filename, e)
+            })?;
+
+        info_log!("[Job Creation] Successfully uploaded: {} -> {}", local_file_path, remote_path);
+
+        // Update template_values with just the filename (not full path)
+        // The renderer will prepend "input_files/" when rendering the template
+        template_values_for_rendering.insert(var_key, Value::String(filename));
     }
 
     progress_callback("Rendering template...");
@@ -170,11 +180,12 @@ pub async fn execute_job_creation_with_progress(
 
     // Create JobInfo using factory function (sets Created status and timestamp)
     // scratch_dir remains None until job submission
+    // Use template_values_for_rendering (filenames only) instead of original params (full paths)
     let mut job_info = create_job_info(
         job_id.clone(),
         clean_job_name,
         params.template_id,
-        params.template_values,
+        template_values_for_rendering.clone(),
         params.slurm_config,
         project_dir.clone(),
     );
@@ -192,8 +203,8 @@ pub async fn execute_job_creation_with_progress(
     let slurm_script = crate::slurm::script_generator::SlurmScriptGenerator::generate_namd_script(&job_info, &scratch_dir)?;
     info_log!("[Job Creation] Generated SLURM script ({} bytes)", slurm_script.len());
 
-    // Upload script to scripts subdirectory
-    let script_path = crate::ssh::JobDirectoryStructure::full_script_path(&project_dir, "job.sbatch");
+    // Upload script to job root directory
+    let script_path = format!("{}/job.sbatch", project_dir);
     crate::ssh::metadata::upload_content(connection_manager, &slurm_script, &script_path).await
         .map_err(|e| {
             error_log!("[Job Creation] Failed to upload SLURM script: {}", e);
@@ -203,8 +214,8 @@ pub async fn execute_job_creation_with_progress(
 
     progress_callback("Uploading NAMD configuration...");
 
-    // Upload rendered config to scripts subdirectory
-    let config_path = crate::ssh::JobDirectoryStructure::full_script_path(&project_dir, "config.namd");
+    // Upload rendered config to job root directory
+    let config_path = format!("{}/config.namd", project_dir);
     crate::ssh::metadata::upload_content(connection_manager, &namd_config_content, &config_path).await
         .map_err(|e| {
             error_log!("[Job Creation] Failed to upload NAMD config: {}", e);

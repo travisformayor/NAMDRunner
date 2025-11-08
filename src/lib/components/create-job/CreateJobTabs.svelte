@@ -1,6 +1,7 @@
 <script lang="ts">
-    import { logger } from '$lib/utils/logger';
-import { invoke } from '@tauri-apps/api/core';
+  import { logger } from '$lib/utils/logger';
+  import { invoke } from '@tauri-apps/api/core';
+  import type { JobValidationResult } from '$lib/types/api';
   import ResourcesTab from './ResourcesTab.svelte';
   import ConfigureTab from './ConfigureTab.svelte';
   import ReviewTab from './ReviewTab.svelte';
@@ -21,6 +22,7 @@ import { invoke } from '@tauri-apps/api/core';
   export let onCancel: () => void;
   export let isSubmitting: boolean = false;
   export let uploadProgress: Map<string, { percentage: number }>;
+  export let uploadFileList: string[] = [];
 
   type TabId = 'resources' | 'configure' | 'review';
 
@@ -47,7 +49,7 @@ import { invoke } from '@tauri-apps/api/core';
 
   async function runBackendValidation() {
     try {
-      const result = await invoke('validate_job_config', {
+      const result = await invoke<JobValidationResult>('validate_job_config', {
         job_name: jobName,
         template_id: templateId,
         template_values: templateValues,
@@ -91,7 +93,7 @@ import { invoke } from '@tauri-apps/api/core';
         errors = newErrors;
       }
     } catch (error) {
-      logger.error('[CreateJobTabs] Validation error:', error);
+      logger.error('[CreateJobTabs]', 'Validation error', error);
     }
   }
 </script>
@@ -124,6 +126,7 @@ import { invoke } from '@tauri-apps/api/core';
         {resourceConfig}
         {errors}
         {uploadProgress}
+        {uploadFileList}
         {onSubmit}
         {onCancel}
         {isSubmitting}

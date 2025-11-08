@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { logger } from '$lib/utils/logger';
+  import { invoke } from '@tauri-apps/api/core';
+  import { logger } from '$lib/utils/logger';
   import { extractVariablesFromTemplate } from '$lib/utils/template-utils';
   import { onMount } from 'svelte';
   import { templates, loadTemplates, loadTemplate, validateTemplateValues } from '$lib/stores/templateStore';
@@ -81,7 +82,6 @@
       if (!varDef || getVariableTypeName(varDef.var_type) !== 'FileUpload') return;
 
       // Use existing backend command for file selection
-      const { invoke } = await import('@tauri-apps/api/core');
       const selected = await invoke('select_input_file') as { name: string; path: string; size: number; file_type: string } | null;
 
       if (selected) {

@@ -1,6 +1,7 @@
 <script lang="ts">
-    import { logger } from '$lib/utils/logger';
-import { invoke } from '@tauri-apps/api/core';
+  import { logger } from '$lib/utils/logger';
+  import { invoke } from '@tauri-apps/api/core';
+  import type { PreviewResult } from '$lib/types/api';
   import DynamicJobForm from './DynamicJobForm.svelte';
   import PreviewModal from '../ui/PreviewModal.svelte';
 
@@ -21,7 +22,7 @@ import { invoke } from '@tauri-apps/api/core';
     isGeneratingPreview = true;
 
     try {
-      const result = await invoke('preview_namd_config', {
+      const result = await invoke<PreviewResult>('preview_namd_config', {
         template_id: templateId,
         values: templateValues
       });
@@ -30,10 +31,10 @@ import { invoke } from '@tauri-apps/api/core';
         previewContent = result.content;
         showPreview = true;
       } else {
-        logger.error('[ConfigureTab] Preview failed:', result.error);
+        logger.error('[ConfigureTab]', `Preview failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
-      logger.error('[ConfigureTab] Preview error:', error);
+      logger.error('[ConfigureTab]', 'Preview error', error);
     } finally {
       isGeneratingPreview = false;
     }

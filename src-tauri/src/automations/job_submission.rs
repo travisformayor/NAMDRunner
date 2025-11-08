@@ -89,10 +89,10 @@ pub async fn execute_job_submission_with_progress(
     progress_callback("Submitting job to SLURM...");
 
     // Submit job using SLURM commands module (using mirrored script in scratch)
-    let script_relative = crate::ssh::JobDirectoryStructure::script_path("job.sbatch");
+    let script_relative = "job.sbatch";
     let script_path = format!("{}/{}", scratch_dir, script_relative);
     info_log!("[Job Submission] Executing sbatch with script: {}", script_path);
-    let submit_cmd = crate::slurm::commands::submit_job_command(&scratch_dir, &script_relative)?;
+    let submit_cmd = crate::slurm::commands::submit_job_command(&scratch_dir, script_relative)?;
     let output = connection_manager.execute_command(&submit_cmd, Some(crate::cluster::timeouts::JOB_SUBMIT)).await
         .map_err(|e| {
             error_log!("[Job Submission] Failed to submit job to SLURM: {}", e);
