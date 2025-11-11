@@ -104,11 +104,11 @@
 
     isValidating = true;
     const result = await validateTemplateValues(selectedTemplate.id, templateValues);
-    validationErrors = result.errors;
+    validationErrors = result.issues;
 
-    // Parse errors to extract field-specific errors
+    // Parse issues to extract field-specific errors
     fieldErrors = {};
-    for (const error of result.errors) {
+    for (const error of result.issues) {
       // Try to extract field name from error message (format: "FieldLabel: error message")
       const colonIndex = error.indexOf(':');
       if (colonIndex > 0) {

@@ -1,16 +1,17 @@
 use super::{Template, VariableType};
 use serde_json::Value;
 use std::collections::HashMap;
+use crate::validation::job_validation::ValidationResult;
 
 /// Validate template values against template variable definitions
 /// Pure business logic - no database or AppHandle dependencies
-pub fn validate_values(template: &Template, values: &HashMap<String, Value>) -> Vec<String> {
-    let mut errors = Vec::new();
+pub fn validate_values(template: &Template, values: &HashMap<String, Value>) -> ValidationResult {
+    let mut issues = Vec::new();
 
     // Check all template variables have values (all variables are required)
     for (key, var_def) in &template.variables {
         if !values.contains_key(key) {
-            errors.push(format!("Required variable missing: {}", var_def.label));
+            issues.push(format!("Required variable missing: {}", var_def.label));
         }
     }
 
@@ -21,46 +22,51 @@ pub fn validate_values(template: &Template, values: &HashMap<String, Value>) -> 
                 VariableType::Number { min, max, .. } => {
                     if let Some(num) = value.as_f64() {
                         if num < *min {
-                            errors.push(format!("{}: value {} below minimum {}", var_def.label, num, min));
+                            issues.push(format!("{}: value {} below minimum {}", var_def.label, num, min));
                         }
                         if num > *max {
-                            errors.push(format!("{}: value {} above maximum {}", var_def.label, num, max));
+                            issues.push(format!("{}: value {} above maximum {}", var_def.label, num, max));
                         }
                     } else {
-                        errors.push(format!("{}: expected number, got {:?}", var_def.label, value));
+                        issues.push(format!("{}: expected number, got {:?}", var_def.label, value));
                     }
                 }
                 VariableType::Text { .. } => {
                     if !value.is_string() {
-                        errors.push(format!("{}: expected text, got {:?}", var_def.label, value));
+                        issues.push(format!("{}: expected text, got {:?}", var_def.label, value));
                     }
                 }
                 VariableType::Boolean { .. } => {
                     if !value.is_boolean() {
-                        errors.push(format!("{}: expected boolean, got {:?}", var_def.label, value));
+                        issues.push(format!("{}: expected boolean, got {:?}", var_def.label, value));
                     }
                 }
                 VariableType::FileUpload { extensions } => {
                     if let Some(filename) = value.as_str() {
                         // Check file is provided (not empty)
                         if filename.trim().is_empty() {
-                            errors.push(format!("{}: file is required", var_def.label));
+                            issues.push(format!("{}: file is required", var_def.label));
                         } else {
                             // Validate file extension
                             let ext_match = extensions.iter().any(|ext| filename.to_lowercase().ends_with(&ext.to_lowercase()));
                             if !ext_match {
-                                errors.push(format!("{}: file '{}' does not match allowed extensions: {:?}", var_def.label, filename, extensions));
+                                issues.push(format!("{}: file '{}' does not match allowed extensions: {:?}", var_def.label, filename, extensions));
                             }
                         }
                     } else {
-                        errors.push(format!("{}: expected filename string, got {:?}", var_def.label, value));
+                        issues.push(format!("{}: expected filename string, got {:?}", var_def.label, value));
                     }
                 }
             }
         }
     }
 
-    errors
+    ValidationResult {
+        is_valid: issues.is_empty(),
+        issues,
+        warnings: vec![],
+        suggestions: vec![],
+    }
 }
 
 #[cfg(test)]
@@ -127,8 +133,9 @@ mod tests {
         values.insert("structure_file".to_string(), Value::from("structure.psf"));
         values.insert("pme_enabled".to_string(), Value::from(true));
 
-        let errors = validate_values(&template, &values);
-        assert!(errors.is_empty(), "Valid values should pass validation");
+        let result = validate_values(&template, &values);
+        assert!(result.is_valid, "Valid values should pass validation");
+        assert!(result.issues.is_empty());
     }
 
     #[test]
@@ -138,10 +145,11 @@ mod tests {
         values.insert("temperature".to_string(), Value::from(300.0));
         // Missing structure_file and pme_enabled
 
-        let errors = validate_values(&template, &values);
-        assert_eq!(errors.len(), 2, "Should report 2 missing required variables");
-        assert!(errors.iter().any(|e| e.contains("Structure File")));
-        assert!(errors.iter().any(|e| e.contains("PME Enabled")));
+        let result = validate_values(&template, &values);
+        assert!(!result.is_valid);
+        assert_eq!(result.issues.len(), 2, "Should report 2 missing required variables");
+        assert!(result.issues.iter().any(|e| e.contains("Structure File")));
+        assert!(result.issues.iter().any(|e| e.contains("PME Enabled")));
     }
 
     #[test]
@@ -152,11 +160,12 @@ mod tests {
         values.insert("structure_file".to_string(), Value::from("structure.psf"));
         values.insert("pme_enabled".to_string(), Value::from(true));
 
-        let errors = validate_values(&template, &values);
-        assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("below minimum"));
-        assert!(errors[0].contains("150"));
-        assert!(errors[0].contains("200"));
+        let result = validate_values(&template, &values);
+        assert!(!result.is_valid);
+        assert_eq!(result.issues.len(), 1);
+        assert!(result.issues[0].contains("below minimum"));
+        assert!(result.issues[0].contains("150"));
+        assert!(result.issues[0].contains("200"));
     }
 
     #[test]
@@ -167,11 +176,12 @@ mod tests {
         values.insert("structure_file".to_string(), Value::from("structure.psf"));
         values.insert("pme_enabled".to_string(), Value::from(true));
 
-        let errors = validate_values(&template, &values);
-        assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("above maximum"));
-        assert!(errors[0].contains("500"));
-        assert!(errors[0].contains("400"));
+        let result = validate_values(&template, &values);
+        assert!(!result.is_valid);
+        assert_eq!(result.issues.len(), 1);
+        assert!(result.issues[0].contains("above maximum"));
+        assert!(result.issues[0].contains("500"));
+        assert!(result.issues[0].contains("400"));
     }
 
     #[test]
@@ -182,9 +192,10 @@ mod tests {
         values.insert("structure_file".to_string(), Value::from("structure.psf"));
         values.insert("pme_enabled".to_string(), Value::from(true));
 
-        let errors = validate_values(&template, &values);
-        assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("expected number"));
+        let result = validate_values(&template, &values);
+        assert!(!result.is_valid);
+        assert_eq!(result.issues.len(), 1);
+        assert!(result.issues[0].contains("expected number"));
     }
 
     #[test]
@@ -195,9 +206,10 @@ mod tests {
         values.insert("structure_file".to_string(), Value::from("structure.psf"));
         values.insert("pme_enabled".to_string(), Value::from("yes")); // String not bool
 
-        let errors = validate_values(&template, &values);
-        assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("expected boolean"));
+        let result = validate_values(&template, &values);
+        assert!(!result.is_valid);
+        assert_eq!(result.issues.len(), 1);
+        assert!(result.issues[0].contains("expected boolean"));
     }
 
     #[test]
@@ -208,10 +220,11 @@ mod tests {
         values.insert("structure_file".to_string(), Value::from("structure.xyz")); // Wrong extension
         values.insert("pme_enabled".to_string(), Value::from(true));
 
-        let errors = validate_values(&template, &values);
-        assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("does not match allowed extensions"));
-        assert!(errors[0].contains(".psf"));
+        let result = validate_values(&template, &values);
+        assert!(!result.is_valid);
+        assert_eq!(result.issues.len(), 1);
+        assert!(result.issues[0].contains("does not match allowed extensions"));
+        assert!(result.issues[0].contains(".psf"));
     }
 
     #[test]
@@ -222,8 +235,9 @@ mod tests {
         values.insert("structure_file".to_string(), Value::from("structure.PSF")); // Uppercase
         values.insert("pme_enabled".to_string(), Value::from(true));
 
-        let errors = validate_values(&template, &values);
-        assert!(errors.is_empty(), "File extension matching should be case-insensitive");
+        let result = validate_values(&template, &values);
+        assert!(result.is_valid, "File extension matching should be case-insensitive");
+        assert!(result.issues.is_empty());
     }
 
     #[test]
@@ -234,7 +248,8 @@ mod tests {
         values.insert("pme_enabled".to_string(), Value::from("invalid")); // Wrong type
         // Missing structure_file
 
-        let errors = validate_values(&template, &values);
-        assert_eq!(errors.len(), 3, "Should report all validation errors");
+        let result = validate_values(&template, &values);
+        assert!(!result.is_valid);
+        assert_eq!(result.issues.len(), 3, "Should report all validation errors");
     }
 }

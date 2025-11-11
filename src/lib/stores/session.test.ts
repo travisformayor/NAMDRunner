@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { sessionActions, connectionState, isConnected } from './session';
-import type { ConnectResult, DisconnectResult, ConnectionStatusResult } from '../types/api';
+import type { SessionInfo, ConnectionStatus, ApiResult } from '../types/api';
 
 // Mock Tauri invoke
 vi.mock('@tauri-apps/api/core', () => ({
@@ -26,9 +26,9 @@ describe('Session Store', () => {
   });
 
   it('should handle successful connection', async () => {
-    const successResult: ConnectResult = {
+    const successResult: ApiResult<SessionInfo> = {
       success: true,
-      session_info: {
+      data: {
         host: 'test.host',
         username: 'testuser',
         connected_at: new Date().toISOString()
@@ -52,7 +52,7 @@ describe('Session Store', () => {
   });
 
   it('should handle connection failure', async () => {
-    const failureResult: ConnectResult = {
+    const failureResult: ApiResult<SessionInfo> = {
       success: false,
       error: 'Authentication failed'
     };
@@ -78,9 +78,9 @@ describe('Session Store', () => {
 
   it('should handle disconnection', async () => {
     // First connect
-    const connectResult: ConnectResult = {
+    const connectResult: ApiResult<SessionInfo> = {
       success: true,
-      session_info: {
+      data: {
         host: 'test.host',
         username: 'testuser',
         connected_at: new Date().toISOString()
@@ -93,7 +93,7 @@ describe('Session Store', () => {
     expect(get(connectionState)).toBe('Connected');
 
     // Then disconnect
-    const disconnectResult: DisconnectResult = {
+    const disconnectResult: ApiResult<void> = {
       success: true
     };
     vi.mocked(invoke).mockResolvedValue(disconnectResult);
@@ -108,7 +108,7 @@ describe('Session Store', () => {
 
   it('should clear errors', async () => {
     // Trigger an error
-    const failureResult: ConnectResult = {
+    const failureResult: ApiResult<SessionInfo> = {
       success: false,
       error: 'Connection error'
     };

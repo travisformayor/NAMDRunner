@@ -1,11 +1,13 @@
 use crate::types::*;
+use crate::types::response_data::ConnectionStatus;
 use crate::ssh::get_connection_manager;
 use crate::{info_log, debug_log, error_log};
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn connect_to_cluster(params: ConnectParams) -> ConnectResult {
+pub async fn connect_to_cluster(params: ConnectParams) -> ApiResult<SessionInfo> {
     info_log!("[CONNECT] Starting connection to {} as {}", params.host, params.username);
     let port = 22;
+
     match get_connection_manager().connect(params.host.clone(), port, params.username.clone(), &params.password).await {
         Ok(connection_info) => {
             info_log!("[SSH] Successfully connected to {}:{} as {}", connection_info.host, connection_info.port, connection_info.username);
@@ -16,11 +18,7 @@ pub async fn connect_to_cluster(params: ConnectParams) -> ConnectResult {
                 connected_at: connection_info.connected_at,
             };
 
-            ConnectResult {
-                success: true,
-                session_info: Some(session_info),
-                error: None,
-            }
+            ApiResult::success(session_info)
         }
         Err(e) => {
             error_log!("[SSH] Connection failed: {}", e);
@@ -41,31 +39,21 @@ pub async fn connect_to_cluster(params: ConnectParams) -> ConnectResult {
                 generic_msg
             };
 
-            ConnectResult {
-                success: false,
-                session_info: None,
-                error: Some(error_message),
-            }
+            ApiResult::error(error_message)
         }
     }
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn disconnect() -> DisconnectResult {
+pub async fn disconnect() -> ApiResult<()> {
     match get_connection_manager().disconnect().await {
-        Ok(_) => DisconnectResult {
-            success: true,
-            error: None,
-        },
-        Err(e) => DisconnectResult {
-            success: false,
-            error: Some(format!("Disconnect failed: {}", e)),
-        }
+        Ok(_) => ApiResult::success(()),
+        Err(e) => ApiResult::error(format!("Disconnect failed: {}", e)),
     }
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_connection_status() -> ConnectionStatusResult {
+pub async fn get_connection_status() -> ApiResult<ConnectionStatus> {
     let connection_info = get_connection_manager().get_connection_info().await;
 
     let (state, session_info) = if let Some(info) = connection_info {
@@ -83,9 +71,11 @@ pub async fn get_connection_status() -> ConnectionStatusResult {
         (ConnectionState::Disconnected, None)
     };
 
-    ConnectionStatusResult {
+    let status = ConnectionStatus {
         state,
         session_info,
-    }
+    };
+
+    ApiResult::success(status)
 }
 

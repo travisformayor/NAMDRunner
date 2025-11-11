@@ -3,14 +3,10 @@ import { writable, derived, get } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
 import type {
   Template,
-  TemplateSummary,
-  ListTemplatesResult,
-  GetTemplateResult,
-  CreateTemplateResult,
-  UpdateTemplateResult,
-  DeleteTemplateResult,
-  ValidateTemplateValuesResult
+  TemplateSummary
 } from '$lib/types/template';
+import type { ValidationResult } from '$lib/types/api';
+import type { ApiResult } from '$lib/types/api';
 
 // Store for all template summaries
 export const templates = writable<TemplateSummary[]>([]);
@@ -42,10 +38,10 @@ export async function loadTemplates(): Promise<void> {
   templatesError.set(null);
 
   try {
-    const result = await invoke<ListTemplatesResult>('list_templates');
+    const result = await invoke<ApiResult<TemplateSummary[]>>('list_templates');
 
-    if (result.success && result.templates) {
-      templates.set(result.templates);
+    if (result.success && result.data) {
+      templates.set(result.data);
     } else {
       templatesError.set(result.error || 'Failed to load templates');
     }
@@ -65,11 +61,11 @@ export async function loadTemplate(templateId: string): Promise<Template | null>
   templatesError.set(null);
 
   try {
-    const result = await invoke<GetTemplateResult>('get_template', { template_id: templateId });
+    const result = await invoke<ApiResult<Template>>('get_template', { template_id: templateId });
 
-    if (result.success && result.template) {
-      currentTemplate.set(result.template);
-      return result.template;
+    if (result.success && result.data) {
+      currentTemplate.set(result.data);
+      return result.data;
     } else {
       templatesError.set(result.error || 'Template not found');
       return null;
@@ -91,7 +87,7 @@ export async function createTemplate(template: Template): Promise<boolean> {
   templatesError.set(null);
 
   try {
-    const result = await invoke<CreateTemplateResult>('create_template', { template });
+    const result = await invoke<ApiResult<string>>('create_template', { template });
 
     if (result.success) {
       // Reload templates to get updated list
@@ -118,7 +114,7 @@ export async function updateTemplate(templateId: string, template: Template): Pr
   templatesError.set(null);
 
   try {
-    const result = await invoke<UpdateTemplateResult>('update_template', { template_id: templateId, template });
+    const result = await invoke<ApiResult<void>>('update_template', { template_id: templateId, template });
 
     if (result.success) {
       // Reload templates to get updated list
@@ -149,7 +145,7 @@ export async function deleteTemplate(templateId: string): Promise<boolean> {
   templatesError.set(null);
 
   try {
-    const result = await invoke<DeleteTemplateResult>('delete_template', { template_id: templateId });
+    const result = await invoke<ApiResult<void>>('delete_template', { template_id: templateId });
 
     if (result.success) {
       // Reload templates to get updated list
@@ -178,22 +174,21 @@ export async function deleteTemplate(templateId: string): Promise<boolean> {
 export async function validateTemplateValues(
   templateId: string,
   values: Record<string, any>
-): Promise<{ valid: boolean; errors: string[] }> {
+): Promise<ValidationResult> {
   try {
-    const result = await invoke<ValidateTemplateValuesResult>('validate_template_values', {
+    const result = await invoke<ValidationResult>('validate_template_values', {
       template_id: templateId,
       values
     });
 
-    return {
-      valid: result.valid,
-      errors: result.errors
-    };
+    return result;
   } catch (error) {
     logger.error('[TemplateStore]', 'Failed to validate values', error);
     return {
-      valid: false,
-      errors: [`Validation error: ${error}`]
+      is_valid: false,
+      issues: [`Validation error: ${error}`],
+      warnings: [],
+      suggestions: []
     };
   }
 }

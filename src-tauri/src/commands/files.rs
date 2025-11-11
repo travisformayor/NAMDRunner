@@ -1,4 +1,5 @@
 use crate::types::*;
+use crate::types::response_data::DownloadInfo;
 use crate::ssh::get_connection_manager;
 use crate::validation::input::sanitize_job_id;
 use crate::database::with_database;
@@ -221,62 +222,37 @@ fn validate_upload_file(file: &FileUpload) -> Result<()> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn download_job_output(job_id: String, file_path: String) -> DownloadResult {
+pub async fn download_job_output(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
     download_job_output_real(job_id, file_path).await
 }
 
 // DELETED: download_job_output_demo - demo mode removed
 
-async fn download_job_output_real(job_id: String, file_path: String) -> DownloadResult {
+async fn download_job_output_real(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
     use rfd::FileDialog;
 
     // Validate and sanitize inputs
     let clean_job_id = match sanitize_job_id(&job_id) {
         Ok(id) => id,
-        Err(e) => return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some(format!("Invalid job ID: {}", e)),
-        },
+        Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
     };
 
     // Validate file path using centralized validation
     if let Err(e) = crate::validation::input::validate_relative_file_path(&file_path) {
-        return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some(format!("Invalid file path: {}", e)),
-        };
+        return ApiResult::error(format!("Invalid file path: {}", e));
     }
 
     // Get job info from database to find project directory
     let job_id_for_db = clean_job_id.clone();
     let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
         Ok(Some(job)) => job,
-        Ok(None) => return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some(format!("Job {} not found", clean_job_id)),
-        },
-        Err(e) => return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some(format!("Database error: {}", e)),
-        },
+        Ok(None) => return ApiResult::error(format!("Job {} not found", clean_job_id)),
+        Err(e) => return ApiResult::error(format!("Database error: {}", e)),
     };
 
     let project_dir = match &job_info.project_dir {
         Some(dir) => dir,
-        None => return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some("Job has no project directory".to_string()),
-        },
+        None => return ApiResult::error("Job has no project directory".to_string()),
     };
 
     // Build full remote path (project_dir + relative path)
@@ -301,109 +277,62 @@ async fn download_job_output_real(job_id: String, file_path: String) -> Download
 
             let save_path = match save_path {
                 Some(path) => path,
-                None => return DownloadResult {
-                    success: false,
-                    saved_to: None,
-                    file_size: None,
-                    error: Some("Download cancelled".to_string()),
-                },
+                None => return ApiResult::error("Download cancelled".to_string()),
             };
 
             // Download file from server and write to chosen location
             match connection_manager.download_file(&remote_path, &save_path.to_string_lossy()).await {
                 Ok(progress) => {
-                    DownloadResult {
-                        success: true,
-                        saved_to: Some(save_path.to_string_lossy().to_string()),
-                        file_size: Some(progress.total_bytes),
-                        error: None,
-                    }
+                    ApiResult::success(DownloadInfo {
+                        saved_to: save_path.to_string_lossy().to_string(),
+                        file_size: progress.total_bytes,
+                    })
                 }
                 Err(e) => {
-                    DownloadResult {
-                        success: false,
-                        saved_to: None,
-                        file_size: None,
-                        error: Some(format!("Download failed: {}", e)),
-                    }
+                    ApiResult::error(format!("Download failed: {}", e))
                 }
             }
         }
         Ok(false) => {
-            DownloadResult {
-                success: false,
-                saved_to: None,
-                file_size: None,
-                error: Some(format!("File '{}' not found", file_path)),
-            }
+            ApiResult::error(format!("File '{}' not found", file_path))
         }
         Err(e) => {
-            DownloadResult {
-                success: false,
-                saved_to: None,
-                file_size: None,
-                error: Some(format!("Error checking file: {}", e)),
-            }
+            ApiResult::error(format!("Error checking file: {}", e))
         }
     }
 }
 
 /// Download all output files as a zip archive
 #[tauri::command(rename_all = "snake_case")]
-pub async fn download_all_outputs(job_id: String) -> DownloadResult {
+pub async fn download_all_outputs(job_id: String) -> ApiResult<DownloadInfo> {
     download_all_outputs_real(job_id).await
 }
 
-async fn download_all_outputs_real(job_id: String) -> DownloadResult {
+async fn download_all_outputs_real(job_id: String) -> ApiResult<DownloadInfo> {
     use rfd::FileDialog;
 
     // Validate and sanitize job_id
     let clean_job_id = match sanitize_job_id(&job_id) {
         Ok(id) => id,
-        Err(e) => return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some(format!("Invalid job ID: {}", e)),
-        },
+        Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
     };
 
     // Get job info from database
     let job_info = match with_database(|db| db.load_job(&clean_job_id)) {
         Ok(Some(job)) => job,
-        Ok(None) => return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some(format!("Job '{}' not found", clean_job_id)),
-        },
-        Err(e) => return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some(format!("Database error: {}", e)),
-        },
+        Ok(None) => return ApiResult::error(format!("Job '{}' not found", clean_job_id)),
+        Err(e) => return ApiResult::error(format!("Database error: {}", e)),
     };
 
     let project_dir: &str = match &job_info.project_dir {
         Some(dir) => dir.as_str(),
-        None => return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some("Job project directory not configured".to_string()),
-        },
+        None => return ApiResult::error("Job project directory not configured".to_string()),
     };
 
     // Generate zip file path and command
     let (zip_command, temp_zip_path) = match crate::ssh::commands::zip_outputs_command(project_dir, &clean_job_id) {
         Ok(result) => result,
-        Err(e) => return DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some(format!("Failed to generate zip command: {}", e)),
-        },
+        Err(e) => return ApiResult::error(format!("Failed to generate zip command: {}", e)),
     };
 
     let connection_manager = get_connection_manager();
@@ -412,21 +341,11 @@ async fn download_all_outputs_real(job_id: String) -> DownloadResult {
     match connection_manager.execute_command(&zip_command, None).await {
         Ok(result) => {
             if result.exit_code != 0 {
-                return DownloadResult {
-                    success: false,
-                    saved_to: None,
-                    file_size: None,
-                    error: Some(format!("Failed to create zip file: {}", result.stderr)),
-                };
+                return ApiResult::error(format!("Failed to create zip file: {}", result.stderr));
             }
         }
         Err(e) => {
-            return DownloadResult {
-                success: false,
-                saved_to: None,
-                file_size: None,
-                error: Some(format!("Failed to execute zip command: {}", e)),
-            };
+            return ApiResult::error(format!("Failed to execute zip command: {}", e));
         }
     }
 
@@ -443,29 +362,17 @@ async fn download_all_outputs_real(job_id: String) -> DownloadResult {
             // User cancelled - clean up temp file
             cleanup_temp_file(connection_manager, &temp_zip_path).await;
 
-            return DownloadResult {
-                success: false,
-                saved_to: None,
-                file_size: None,
-                error: Some("Download cancelled".to_string()),
-            };
+            return ApiResult::error("Download cancelled".to_string());
         }
     };
 
     // Download the zip file
     let download_result = match connection_manager.download_file(&temp_zip_path, &save_path.to_string_lossy()).await {
-        Ok(progress) => DownloadResult {
-            success: true,
-            saved_to: Some(save_path.to_string_lossy().to_string()),
-            file_size: Some(progress.total_bytes),
-            error: None,
-        },
-        Err(e) => DownloadResult {
-            success: false,
-            saved_to: None,
-            file_size: None,
-            error: Some(format!("Download failed: {}", e)),
-        },
+        Ok(progress) => ApiResult::success(DownloadInfo {
+            saved_to: save_path.to_string_lossy().to_string(),
+            file_size: progress.total_bytes,
+        }),
+        Err(e) => ApiResult::error(format!("Download failed: {}", e)),
     };
 
     // Clean up temporary zip file on server
@@ -490,37 +397,25 @@ async fn cleanup_temp_file(connection_manager: &crate::ssh::ConnectionManager, f
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn list_job_files(job_id: String) -> ListFilesResult {
+pub async fn list_job_files(job_id: String) -> ApiResult<Vec<RemoteFile>> {
     list_job_files_real(job_id).await
 }
 
 // DELETED: list_job_files_demo - demo mode removed
 
-async fn list_job_files_real(job_id: String) -> ListFilesResult {
+async fn list_job_files_real(job_id: String) -> ApiResult<Vec<RemoteFile>> {
     // Validate and sanitize job ID
     let clean_job_id = match sanitize_job_id(&job_id) {
         Ok(id) => id,
-        Err(e) => return ListFilesResult {
-            success: false,
-            files: None,
-            error: Some(format!("Invalid job ID: {}", e)),
-        },
+        Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
     };
 
     // Get job info from database to find directories
     let job_id_for_db = clean_job_id.clone();
     let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
         Ok(Some(job)) => job,
-        Ok(None) => return ListFilesResult {
-            success: false,
-            files: None,
-            error: Some(format!("Job {} not found", clean_job_id)),
-        },
-        Err(e) => return ListFilesResult {
-            success: false,
-            files: None,
-            error: Some(format!("Database error: {}", e)),
-        },
+        Ok(None) => return ApiResult::error(format!("Job {} not found", clean_job_id)),
+        Err(e) => return ApiResult::error(format!("Database error: {}", e)),
     };
 
     let connection_manager = get_connection_manager();
@@ -568,11 +463,7 @@ async fn list_job_files_real(job_id: String) -> ListFilesResult {
         }
     }
 
-    ListFilesResult {
-        success: true,
-        files: Some(all_files),
-        error: None,
-    }
+    ApiResult::success(all_files)
 }
 
 /// Get directories to list for a job

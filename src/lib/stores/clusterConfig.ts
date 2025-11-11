@@ -17,8 +17,8 @@ import type {
   ClusterCapabilities,
   PartitionSpec,
   QosSpec,
-  GetClusterCapabilitiesResult,
-  ValidateResourceAllocationResult
+  ValidateResourceAllocationResult,
+  ApiResult
 } from '../types/api';
 import { logger } from '../utils/logger';
 
@@ -35,7 +35,7 @@ export async function initClusterConfig(): Promise<void> {
   try {
     loadErrorStore.set(null);
     logger.debug('ClusterConfig', 'Calling backend getClusterCapabilities...');
-    const result = await invoke<GetClusterCapabilitiesResult>('get_cluster_capabilities');
+    const result = await invoke<ApiResult<ClusterCapabilities>>('get_cluster_capabilities');
     logger.debug('ClusterConfig', `Backend response: success=${result.success}, hasData=${!!result.data}`);
 
     if (result.success && result.data) {

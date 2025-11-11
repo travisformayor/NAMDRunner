@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import type { JobInfo, DownloadResult } from '../../../types/api';
+  import type { JobInfo, DownloadInfo, ApiResult } from '../../../types/api';
   import { getFileIcon, getTypeLabel, getTypeColor, getFileDescription, getFileExtension, formatFileSize } from '../../../utils/file-helpers';
   import { isConnected } from '../../../stores/session';
 
@@ -41,13 +41,13 @@
     downloadingFiles = downloadingFiles; // Trigger reactivity
 
     try {
-      const result = await invoke<DownloadResult>('download_job_output', { job_id: job.job_id, file_path });
+      const result = await invoke<ApiResult<DownloadInfo>>('download_job_output', { job_id: job.job_id, file_path });
 
       if (!result.success) {
         downloadErrors.set(file_name, result.error || 'Failed to download file');
         downloadErrors = downloadErrors; // Trigger reactivity
       }
-      // Success - file was saved to user's chosen location via native dialog
+      // Success - file was saved to user's chosen location via native dialog (result.data has saved_to and file_size)
     } catch (error) {
       downloadErrors.set(file_name, error instanceof Error ? error.message : 'Download failed');
       downloadErrors = downloadErrors; // Trigger reactivity
@@ -72,12 +72,12 @@
     isDownloadingAll = true;
 
     try {
-      const result = await invoke<DownloadResult>('download_all_outputs', { job_id: job.job_id });
+      const result = await invoke<ApiResult<DownloadInfo>>('download_all_outputs', { job_id: job.job_id });
 
       if (!result.success) {
         downloadAllError = result.error || 'Failed to download output files';
       }
-      // Success - zip file was saved to user's chosen location via native dialog
+      // Success - zip file was saved to user's chosen location via native dialog (result.data has saved_to and file_size)
     } catch (error) {
       downloadAllError = error instanceof Error ? error.message : 'Download failed';
     } finally {

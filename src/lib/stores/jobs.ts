@@ -4,12 +4,9 @@ import type {
   JobInfo,
   JobStatus,
   CreateJobParams,
-  GetAllJobsResult,
   SyncJobsResult,
-  CreateJobResult,
-  SubmitJobResult,
-  DeleteJobResult,
-  JobStatusResult
+  JobSubmissionData,
+  ApiResult
 } from '../types/api';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -69,13 +66,13 @@ function createJobsStore() {
     // Load jobs from database (for offline/startup)
     loadFromDatabase: async () => {
       try {
-        const result = await invoke<GetAllJobsResult>('get_all_jobs');
+        const result = await invoke<ApiResult<JobInfo[]>>('get_all_jobs');
 
-        if (result.success && result.jobs) {
+        if (result.success && result.data) {
           update(state => ({
             ...state,
-            jobs: result.jobs || [],
-            hasEverSynced: !!(result.jobs && result.jobs.length > 0)
+            jobs: result.data || [],
+            hasEverSynced: !!(result.data && result.data.length > 0)
           }));
         }
       } catch (error) {
@@ -147,9 +144,9 @@ function createJobsStore() {
       });
 
       try {
-        const result = await invoke<CreateJobResult>('create_job', { params });
+        const result = await invoke<ApiResult<JobInfo>>('create_job', { params });
 
-        if (result.success && result.job_id && result.job) {
+        if (result.success && result.data) {
           // Update progress to completion
           update(state => ({
             ...state,
@@ -157,14 +154,14 @@ function createJobsStore() {
           }));
 
           // Add the returned job directly to the store (no second backend call)
-          if (result.job) {
+          if (result.data) {
             update(state => ({
               ...state,
-              jobs: [...state.jobs, result.job as JobInfo]
+              jobs: [...state.jobs, result.data as JobInfo]
             }));
           }
 
-          return result;
+          return { success: true, job_id: result.data.job_id, job: result.data };
         } else {
           // Job creation failed - check for connection error
           const errorMsg = result.error || 'Job creation failed';
@@ -174,7 +171,7 @@ function createJobsStore() {
             ...state,
             creationProgress: { message: `Job creation failed: ${errorMsg}`, isActive: false }
           }));
-          return result;
+          return { success: false, error: errorMsg };
         }
       } catch (error) {
         // Job creation error - check for connection error
@@ -210,9 +207,9 @@ function createJobsStore() {
       });
 
       try {
-        const result = await invoke<SubmitJobResult>('submit_job', { job_id });
+        const result = await invoke<ApiResult<JobSubmissionData>>('submit_job', { job_id });
 
-        if (result.success) {
+        if (result.success && result.data) {
           // Update progress to completion
           update(state => ({
             ...state,
@@ -222,17 +219,18 @@ function createJobsStore() {
                 const updatedJob: JobInfo = {
                   ...job,
                   status: 'PENDING' as JobStatus,
-                  submitted_at: result.submitted_at || new Date().toISOString(),
+                  submitted_at: result.data?.submitted_at || new Date().toISOString(),
                   updated_at: new Date().toISOString()
                 };
-                if (result.slurm_job_id) {
-                  updatedJob.slurm_job_id = result.slurm_job_id;
+                if (result.data?.slurm_job_id) {
+                  updatedJob.slurm_job_id = result.data.slurm_job_id;
                 }
                 return updatedJob;
               }
               return job;
             })
           }));
+          return { success: true, slurm_job_id: result.data.slurm_job_id, submitted_at: result.data.submitted_at };
         } else {
           // Submission failed - check for connection error
           const errorMsg = result.error || 'Job submission failed';
@@ -242,9 +240,8 @@ function createJobsStore() {
             ...state,
             submissionProgress: { message: `Job submission failed: ${errorMsg}`, isActive: false }
           }));
+          return { success: false, error: errorMsg };
         }
-
-        return result;
       } catch (error) {
         // Job submission error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -264,7 +261,7 @@ function createJobsStore() {
     // Delete a job via backend
     deleteJob: async (job_id: string) => {
       try {
-        const result = await invoke<DeleteJobResult>('delete_job', { job_id, delete_remote: true });
+        const result = await invoke<ApiResult<void>>('delete_job', { job_id, delete_remote: true });
 
         if (result.success) {
           // Remove job from local state
@@ -272,13 +269,13 @@ function createJobsStore() {
             ...state,
             jobs: state.jobs.filter(job => job.job_id !== job_id)
           }));
+          return { success: true };
         } else {
           // Deletion failed - check for connection error
           const errorMsg = result.error || 'Job deletion failed';
           handleConnectionFailure(errorMsg);
+          return { success: false, error: errorMsg };
         }
-
-        return result;
       } catch (error) {
         // Job deletion error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -291,21 +288,21 @@ function createJobsStore() {
     // Get detailed job status via backend
     getJobStatus: async (job_id: string) => {
       try {
-        const result = await invoke<JobStatusResult>('get_job_status', { job_id });
+        const result = await invoke<ApiResult<JobInfo>>('get_job_status', { job_id });
 
-        if (result.success && result.job_info) {
+        if (result.success && result.data) {
           // Update the specific job in local state
           update(state => ({
             ...state,
-            jobs: state.jobs.map(job => job.job_id === job_id ? result.job_info as JobInfo : job)
+            jobs: state.jobs.map(job => job.job_id === job_id ? result.data as JobInfo : job)
           }));
+          return { success: true, job_info: result.data };
         } else {
           // Status check failed - check for connection error
           const errorMsg = result.error || 'Job status check failed';
           handleConnectionFailure(errorMsg);
+          return { success: false, error: errorMsg };
         }
-
-        return result;
       } catch (error) {
         // Job status check error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);

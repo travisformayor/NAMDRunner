@@ -1,5 +1,6 @@
 use crate::types::*;
 use crate::types::commands::ValidateJobConfigParams;
+use crate::types::response_data;
 use crate::validation::input;
 use crate::validation::job_validation::ValidationResult;
 use crate::database::with_database;
@@ -9,17 +10,12 @@ use tauri::Emitter;
 use serde::Serialize;
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -> CreateJobResult {
+pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -> ApiResult<JobInfo> {
     // Early validation at command boundary - sanitize job name immediately
     let clean_job_name = match input::sanitize_job_id(&params.job_name) {
         Ok(name) => name,
         Err(e) => {
-            return CreateJobResult {
-                success: false,
-                job_id: None,
-                job: None,
-                error: Some(format!("Invalid job name: {}", e)),
-            };
+            return ApiResult::error(format!("Invalid job name: {}", e));
         }
     };
 
@@ -34,7 +30,7 @@ pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -
     create_job_real(app_handle, validated_params).await
 }
 
-async fn create_job_real(app_handle: tauri::AppHandle, params: CreateJobParams) -> CreateJobResult {
+async fn create_job_real(app_handle: tauri::AppHandle, params: CreateJobParams) -> ApiResult<JobInfo> {
     // Use automation system with direct Tauri event emission for progress tracking
     let handle_clone = app_handle.clone();
 
@@ -46,40 +42,25 @@ async fn create_job_real(app_handle: tauri::AppHandle, params: CreateJobParams) 
             let _ = handle_clone.emit("job-creation-progress", msg);
         }
     ).await {
-        Ok((job_id, job_info)) => CreateJobResult {
-            success: true,
-            job_id: Some(job_id),
-            job: Some(job_info),
-            error: None,
-        },
-        Err(e) => CreateJobResult {
-            success: false,
-            job_id: None,
-            job: None,
-            error: Some(e.to_string()),
-        },
+        Ok((_job_id, job_info)) => ApiResult::success(job_info),
+        Err(e) => ApiResult::error(e.to_string()),
     }
 }
 
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn submit_job(job_id: String, app_handle: tauri::AppHandle) -> SubmitJobResult {
+pub async fn submit_job(job_id: String, app_handle: tauri::AppHandle) -> ApiResult<response_data::JobSubmissionData> {
     let clean_job_id = match input::sanitize_job_id(&job_id) {
         Ok(id) => id,
         Err(error) => {
-            return SubmitJobResult {
-                success: false,
-                slurm_job_id: None,
-                submitted_at: None,
-                error: Some(error.to_string()),
-            };
+            return ApiResult::error(error.to_string());
         }
     };
 
     submit_job_real(app_handle, clean_job_id).await
 }
 
-async fn submit_job_real(app_handle: tauri::AppHandle, job_id: String) -> SubmitJobResult {
+async fn submit_job_real(app_handle: tauri::AppHandle, job_id: String) -> ApiResult<response_data::JobSubmissionData> {
     // Use automation system with direct Tauri event emission for progress tracking
     let handle_clone = app_handle.clone();
 
@@ -91,60 +72,32 @@ async fn submit_job_real(app_handle: tauri::AppHandle, job_id: String) -> Submit
             let _ = handle_clone.emit("job-submission-progress", msg);
         }
     ).await {
-        Ok(result) => result,
-        Err(e) => SubmitJobResult {
-            success: false,
-            slurm_job_id: None,
-            submitted_at: None,
-            error: Some(e.to_string()),
-        },
+        Ok(data) => ApiResult::success(data),
+        Err(e) => ApiResult::error(e.to_string()),
     }
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_job_status(job_id: String) -> JobStatusResult {
-    // Removed demo delay - real SLURM queries have their own latency
-
+pub async fn get_job_status(job_id: String) -> ApiResult<JobInfo> {
     // Retrieve job from database
     let job_id_for_db = job_id.clone();
     match with_database(move |db| db.load_job(&job_id_for_db)) {
-        Ok(Some(job)) => JobStatusResult {
-            success: true,
-            job_info: Some(job),
-            error: None,
-        },
-        Ok(None) => JobStatusResult {
-            success: false,
-            job_info: None,
-            error: Some(format!("Job {} not found", job_id)),
-        },
-        Err(e) => JobStatusResult {
-            success: false,
-            job_info: None,
-            error: Some(format!("Failed to load job {}: {}", job_id, e)),
-        },
+        Ok(Some(job)) => ApiResult::success(job),
+        Ok(None) => ApiResult::error(format!("Job {} not found", job_id)),
+        Err(e) => ApiResult::error(format!("Failed to load job {}: {}", job_id, e)),
     }
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_all_jobs() -> GetAllJobsResult {
-    // NOTE: Using mock state for delay simulation in development
-    // This provides realistic UI behavior during development
-    // In production, this would be replaced with actual database query latency
-    // Removed demo delay - database queries have their own latency
-    // Retrieve all jobs from database
+pub async fn get_all_jobs() -> ApiResult<Vec<JobInfo>> {
+    info_log!("[Get All Jobs] Loading jobs from database");
 
-    match with_database(move |db| db.load_all_jobs()) {
-        Ok(jobs) => GetAllJobsResult {
-            success: true,
-            jobs: Some(jobs),
-            error: None,
-        },
-        Err(e) => GetAllJobsResult {
-            success: false,
-            jobs: None,
-            error: Some(format!("Failed to load jobs from database: {}", e)),
-        },
+    match with_database(|db| db.load_all_jobs()) {
+        Ok(jobs) => ApiResult::success(jobs),
+        Err(e) => {
+            error_log!("[Get All Jobs] Database error: {}", e);
+            ApiResult::error(format!("Failed to load jobs: {}", e))
+        }
     }
 }
 
@@ -176,21 +129,18 @@ async fn sync_jobs_real() -> SyncJobsResult {
 
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn delete_job(job_id: String, delete_remote: bool) -> DeleteJobResult {
+pub async fn delete_job(job_id: String, delete_remote: bool) -> ApiResult<()> {
     let clean_job_id = match input::sanitize_job_id(&job_id) {
         Ok(id) => id,
         Err(error) => {
-            return DeleteJobResult {
-                success: false,
-                error: Some(error.to_string()),
-            };
+            return ApiResult::error(error.to_string());
         }
     };
 
     delete_job_real(clean_job_id, delete_remote).await
 }
 
-async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult {
+async fn delete_job_real(job_id: String, delete_remote: bool) -> ApiResult<()> {
     // Real implementation with safe directory cleanup
 
     // Get job information from database
@@ -198,16 +148,10 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
     let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
         Ok(Some(info)) => info,
         Ok(None) => {
-            return DeleteJobResult {
-                success: false,
-                error: Some(format!("Job {} not found", job_id)),
-            };
+            return ApiResult::error(format!("Job {} not found", job_id));
         }
         Err(e) => {
-            return DeleteJobResult {
-                success: false,
-                error: Some(format!("Failed to load job {}: {}", job_id, e)),
-            };
+            return ApiResult::error(format!("Failed to load job {}: {}", job_id, e));
         }
     };
 
@@ -217,30 +161,21 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
             // Check if connected to cluster
             let connection_manager = crate::ssh::get_connection_manager();
             if !connection_manager.is_connected().await {
-                return DeleteJobResult {
-                    success: false,
-                    error: Some("Cannot cancel SLURM job: Not connected to cluster".to_string()),
-                };
+                return ApiResult::error("Cannot cancel SLURM job: Not connected to cluster".to_string());
             }
 
             // Get username for SLURM operations
             let username = match connection_manager.get_username().await {
                 Ok(user) => user,
                 Err(e) => {
-                    return DeleteJobResult {
-                        success: false,
-                        error: Some(format!("Failed to get cluster username: {}", e)),
-                    };
+                    return ApiResult::error(format!("Failed to get cluster username: {}", e));
                 }
             };
 
             // Cancel the SLURM job to prevent orphaned cluster jobs
             let slurm_sync = crate::slurm::status::SlurmStatusSync::new(&username);
             if let Err(e) = slurm_sync.cancel_job(slurm_job_id).await {
-                return DeleteJobResult {
-                    success: false,
-                    error: Some(format!("Failed to cancel SLURM job {}: {}", slurm_job_id, e)),
-                };
+                return ApiResult::error(format!("Failed to cancel SLURM job {}: {}", slurm_job_id, e));
             }
 
             info_log!("[Delete Job] Successfully cancelled SLURM job: {}", slurm_job_id);
@@ -252,10 +187,7 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
         // Check if connected to cluster
         let connection_manager = crate::ssh::get_connection_manager();
         if !connection_manager.is_connected().await {
-            return DeleteJobResult {
-                success: false,
-                error: Some("Cannot delete remote files: Not connected to cluster".to_string()),
-            };
+            return ApiResult::error("Cannot delete remote files: Not connected to cluster".to_string());
         }
 
         // Collect directories to delete (both project and scratch)
@@ -273,26 +205,17 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
         for (dir_type, dir_path) in directories_to_delete {
             // Safety check: ensure the path is within expected NAMDRunner directories
             if !dir_path.contains(crate::ssh::directory_structure::JOB_BASE_DIRECTORY) {
-                return DeleteJobResult {
-                    success: false,
-                    error: Some(format!("Refusing to delete directory '{}' - not a NAMDRunner job directory", dir_path)),
-                };
+                return ApiResult::error(format!("Refusing to delete directory '{}' - not a NAMDRunner job directory", dir_path));
             }
 
             // Additional safety check: path should not contain dangerous patterns
             if dir_path.contains("..") || dir_path == "/" || dir_path.starts_with("/etc") || dir_path.starts_with("/usr") {
-                return DeleteJobResult {
-                    success: false,
-                    error: Some(format!("Refusing to delete dangerous directory path: {}", dir_path)),
-                };
+                return ApiResult::error(format!("Refusing to delete dangerous directory path: {}", dir_path));
             }
 
             // Use ConnectionManager to safely delete directory with retry logic
             if let Err(e) = connection_manager.delete_directory(&dir_path).await {
-                return DeleteJobResult {
-                    success: false,
-                    error: Some(format!("Failed to delete {} directory '{}': {}", dir_type, dir_path, e)),
-                };
+                return ApiResult::error(format!("Failed to delete {} directory '{}': {}", dir_type, dir_path, e));
             }
         }
     }
@@ -300,41 +223,20 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> DeleteJobResult
     // Remove job from database
 
     match with_database(move |db| db.delete_job(&job_info.job_id)) {
-        Ok(true) => DeleteJobResult {
-            success: true,
-            error: None,
-        },
-        Ok(false) => DeleteJobResult {
-            success: false,
-            error: Some(format!("Job {} not found during removal", job_id)),
-        },
-        Err(e) => DeleteJobResult {
-            success: false,
-            error: Some(format!("Failed to delete job from database: {}", e)),
-        },
+        Ok(true) => ApiResult::success(()),
+        Ok(false) => ApiResult::error(format!("Job {} not found during removal", job_id)),
+        Err(e) => ApiResult::error(format!("Failed to delete job from database: {}", e)),
     }
-}
-
-/// Result type for refetch logs operation
-#[derive(Debug, Serialize)]
-pub struct RefetchLogsResult {
-    pub success: bool,
-    pub job_info: Option<JobInfo>,
-    pub error: Option<String>,
 }
 
 /// Refetch SLURM logs from server, overwriting cached logs
 /// Used when user explicitly clicks "Refetch Logs" button
 #[tauri::command(rename_all = "snake_case")]
-pub async fn refetch_slurm_logs(job_id: String) -> RefetchLogsResult {
+pub async fn refetch_slurm_logs(job_id: String) -> ApiResult<JobInfo> {
     let clean_job_id = match input::sanitize_job_id(&job_id) {
         Ok(id) => id,
         Err(e) => {
-            return RefetchLogsResult {
-                success: false,
-                job_info: None,
-                error: Some(format!("Invalid job ID: {}", e)),
-            };
+            return ApiResult::error(format!("Invalid job ID: {}", e));
         }
     };
 
@@ -343,45 +245,25 @@ pub async fn refetch_slurm_logs(job_id: String) -> RefetchLogsResult {
     let mut job_info = match with_database(move |db| db.load_job(&job_id_clone)) {
         Ok(Some(job)) => job,
         Ok(None) => {
-            return RefetchLogsResult {
-                success: false,
-                job_info: None,
-                error: Some(format!("Job {} not found", clean_job_id)),
-            };
+            return ApiResult::error(format!("Job {} not found", clean_job_id));
         }
         Err(e) => {
-            return RefetchLogsResult {
-                success: false,
-                job_info: None,
-                error: Some(format!("Database error: {}", e)),
-            };
+            return ApiResult::error(format!("Database error: {}", e));
         }
     };
 
     // Refetch logs from server
     if let Err(e) = automations::refetch_slurm_logs(&mut job_info).await {
-        return RefetchLogsResult {
-            success: false,
-            job_info: None,
-            error: Some(format!("Failed to refetch logs: {}", e)),
-        };
+        return ApiResult::error(format!("Failed to refetch logs: {}", e));
     }
 
     // Save updated job to database
     let job_clone = job_info.clone();
     if let Err(e) = with_database(move |db| db.save_job(&job_clone)) {
-        return RefetchLogsResult {
-            success: false,
-            job_info: None,
-            error: Some(format!("Failed to save updated logs: {}", e)),
-        };
+        return ApiResult::error(format!("Failed to save updated logs: {}", e));
     }
 
-    RefetchLogsResult {
-        success: true,
-        job_info: Some(job_info),
-        error: None,
-    }
+    ApiResult::success(job_info)
 }
 
 // Job completion automation commands
@@ -559,7 +441,7 @@ pub async fn preview_slurm_script(
     walltime: String,
     partition: Option<String>,
     qos: Option<String>
-) -> PreviewResult {
+) -> ApiResult<String> {
     info_log!("[Jobs] Generating SLURM script preview");
 
     // Create minimal JobInfo for script generation
@@ -595,19 +477,11 @@ pub async fn preview_slurm_script(
     match crate::slurm::script_generator::SlurmScriptGenerator::generate_namd_script(&job_info, preview_scratch_dir) {
         Ok(script) => {
             info_log!("[Jobs] SLURM script preview generated");
-            PreviewResult {
-                success: true,
-                content: Some(script),
-                error: None,
-            }
+            ApiResult::success(script)
         }
         Err(e) => {
             error_log!("[Jobs] SLURM script preview failed: {}", e);
-            PreviewResult {
-                success: false,
-                content: None,
-                error: Some(format!("Script generation error: {}", e)),
-            }
+            ApiResult::error(format!("Script generation error: {}", e))
         }
     }
 }
@@ -639,9 +513,10 @@ pub async fn validate_job_config(params: ValidateJobConfigParams) -> ValidationR
             params.template_values.clone()
         ).await;
 
-        // Template validation currently only returns errors (no warnings/suggestions)
-        // This is acceptable as template validation is strict (type checking)
-        issues.extend(template_validation.errors);
+        // Merge template validation results (now uses unified ValidationResult)
+        issues.extend(template_validation.issues);
+        warnings.extend(template_validation.warnings);
+        suggestions.extend(template_validation.suggestions);
     }
 
     // Validate resource configuration using centralized validator

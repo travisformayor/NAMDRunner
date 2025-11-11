@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use tauri::AppHandle;
 use chrono::Utc;
 
-use crate::types::{SubmitJobResult, JobStatus};
+use crate::types::{JobStatus, response_data::JobSubmissionData};
 use crate::validation::paths;
 use crate::ssh::get_connection_manager;
 use crate::database::with_database;
@@ -18,7 +18,7 @@ pub async fn execute_job_submission_with_progress(
     _app_handle: AppHandle,
     job_id: String,
     progress_callback: impl Fn(&str),
-) -> Result<SubmitJobResult> {
+) -> Result<JobSubmissionData> {
     progress_callback("Loading job information...");
     info_log!("[Job Submission] Starting job submission for: {}", job_id);
 
@@ -141,11 +141,10 @@ pub async fn execute_job_submission_with_progress(
     progress_callback("Job submission completed successfully");
     info_log!("[Job Submission] Job submission completed successfully for: {}", job_id);
 
-    Ok(SubmitJobResult {
-        success: true,
-        slurm_job_id: Some(slurm_job_id),
-        submitted_at: Some(submitted_at),
-        error: None,
+    Ok(JobSubmissionData {
+        job_id,
+        slurm_job_id,
+        submitted_at,
     })
 }
 

@@ -3,7 +3,7 @@
   import { logger } from '$lib/utils/logger';
   import { createTemplate, updateTemplate, deleteTemplate, templatesError } from '$lib/stores/templateStore';
   import type { Template } from '$lib/types/template';
-  import type { PreviewResult } from '$lib/types/api';
+  import type { ApiResult } from '$lib/types/api';
   import { getVariableTypeName } from '$lib/types/template';
   import { extractVariablesFromTemplate, generateLabel } from '$lib/utils/template-utils';
   import VariableEditor from './VariableEditor.svelte';
@@ -169,10 +169,10 @@
     isGeneratingPreview = true;
 
     try {
-      const result = await invoke<PreviewResult>('preview_template_with_defaults', { template_id: id });
+      const result = await invoke<ApiResult<string>>('preview_template_with_defaults', { template_id: id });
 
-      if (result.success && result.content) {
-        testPreviewContent = result.content;
+      if (result.success && result.data) {
+        testPreviewContent = result.data;
         showTestPreview = true;
       } else {
         error = result.error || 'Failed to generate preview';

@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
-import type { DatabaseInfo, DatabaseInfoResult, DatabaseOperationResult } from '../types/api';
+import type { DatabaseInfo, DatabaseOperationData, ApiResult } from '../types/api';
 import { logger } from '../utils/logger';
 
 interface SettingsState {
@@ -23,14 +23,16 @@ function createSettingsStore() {
       logger.debug('Settings', 'Loading database info');
       update(state => ({ ...state, isLoading: true }));
 
-      const result = await invoke<DatabaseInfoResult>('get_database_info');
+      const result = await invoke<ApiResult<DatabaseInfo>>('get_database_info');
 
-      if (result.success && result.path && result.size_bytes !== undefined) {
+      if (result.success && result.data) {
+        const { path, size_bytes, job_count } = result.data;
         update(state => ({
           ...state,
           databaseInfo: {
-            path: result.path!,
-            size_bytes: result.size_bytes!,
+            path,
+            size_bytes,
+            job_count,
           },
           isLoading: false,
         }));
@@ -40,12 +42,12 @@ function createSettingsStore() {
       }
     },
 
-    async backupDatabase(): Promise<DatabaseOperationResult> {
+    async backupDatabase() {
       logger.debug('Settings', 'Starting backup');
-      const result = await invoke<DatabaseOperationResult>('backup_database');
+      const result = await invoke<ApiResult<DatabaseOperationData>>('backup_database');
 
-      if (result.success) {
-        logger.debug('Settings', result.message || 'Backup successful');
+      if (result.success && result.data) {
+        logger.debug('Settings', result.data.message || 'Backup successful');
       } else if (result.error !== 'Backup cancelled') {
         logger.error('Settings', result.error || 'Backup failed');
       }
@@ -53,12 +55,12 @@ function createSettingsStore() {
       return result;
     },
 
-    async restoreDatabase(): Promise<DatabaseOperationResult> {
+    async restoreDatabase() {
       logger.debug('Settings', 'Starting restore');
-      const result = await invoke<DatabaseOperationResult>('restore_database');
+      const result = await invoke<ApiResult<DatabaseOperationData>>('restore_database');
 
-      if (result.success) {
-        logger.debug('Settings', result.message || 'Restore successful');
+      if (result.success && result.data) {
+        logger.debug('Settings', result.data.message || 'Restore successful');
         // Reload database info after restore
         await settingsStore.loadDatabaseInfo();
       } else if (result.error !== 'Restore cancelled') {
@@ -68,12 +70,12 @@ function createSettingsStore() {
       return result;
     },
 
-    async resetDatabase(): Promise<DatabaseOperationResult> {
+    async resetDatabase() {
       logger.debug('Settings', 'Resetting database');
-      const result = await invoke<DatabaseOperationResult>('reset_database');
+      const result = await invoke<ApiResult<DatabaseOperationData>>('reset_database');
 
-      if (result.success) {
-        logger.debug('Settings', result.message || 'Reset successful');
+      if (result.success && result.data) {
+        logger.debug('Settings', result.data.message || 'Reset successful');
         // Reload database info after reset
         await settingsStore.loadDatabaseInfo();
       } else {

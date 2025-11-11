@@ -2,9 +2,8 @@ import { writable, derived } from 'svelte/store';
 import type {
   ConnectionState,
   SessionInfo,
-  ConnectResult,
-  DisconnectResult,
-  ConnectionStatusResult
+  ConnectionStatus,
+  ApiResult
 } from '../types/api';
 import { invoke } from '@tauri-apps/api/core';
 import { jobsStore } from './jobs';
@@ -48,7 +47,7 @@ export const sessionActions = {
     }));
 
     try {
-      const result = await invoke<ConnectResult>('connect_to_cluster', {
+      const result = await invoke<ApiResult<SessionInfo>>('connect_to_cluster', {
         params: { host, username, password }
       });
 
@@ -60,7 +59,7 @@ export const sessionActions = {
         sessionStore.update((state) => ({
           ...state,
           connectionState: 'Connected',
-          session_info: result.session_info || null,
+          session_info: result.data || null,
           isConnecting: false,
           lastError: null,
         }));
@@ -98,7 +97,7 @@ export const sessionActions = {
   // Disconnect from cluster
   async disconnect(): Promise<boolean> {
     try {
-      const result = await invoke<DisconnectResult>('disconnect');
+      const result = await invoke<ApiResult<void>>('disconnect');
 
       sessionStore.update((state) => ({
         ...state,
@@ -123,12 +122,12 @@ export const sessionActions = {
   // Check connection status
   async checkStatus(): Promise<void> {
     try {
-      const result = await invoke<ConnectionStatusResult>('get_connection_status');
+      const result = await invoke<ApiResult<ConnectionStatus>>('get_connection_status');
 
       sessionStore.update((state) => ({
         ...state,
-        connectionState: result.state,
-        session_info: result.session_info || null,
+        connectionState: result.data?.state || 'Disconnected',
+        session_info: result.data?.session_info || null,
       }));
     } catch (error) {
       sessionStore.update((state) => ({
