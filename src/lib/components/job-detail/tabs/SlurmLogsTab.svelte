@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { JobInfo } from '../../../types/api';
-  import { CoreClientFactory } from '../../../ports/clientFactory';
+  import { invoke } from '@tauri-apps/api/core';
+  import type { JobInfo, RefetchLogsResult } from '../../../types/api';
   import { isConnected } from '../../../stores/session';
 
   export let job: JobInfo;
@@ -47,7 +47,7 @@
     refetchError = '';
 
     try {
-      const result = await CoreClientFactory.getClient().refetchSlurmLogs(job.job_id);
+      const result = await invoke<RefetchLogsResult>('refetch_slurm_logs', { job_id: job.job_id });
 
       if (!result.success) {
         refetchError = result.error || 'Failed to refetch logs';

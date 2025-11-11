@@ -3,7 +3,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import type { PreviewResult } from '$lib/types/api';
   import { jobPresets, partitions, allQosOptions, validateResourceRequest, calculateJobCost, estimateQueueTime, walltimeToHours } from '$lib/stores/clusterConfig';
-  import type { JobPreset } from '$lib/types/cluster';
+  import type { JobPreset } from '$lib/types/api';
   import PreviewModal from '../ui/PreviewModal.svelte';
 
   export let resourceConfig: {

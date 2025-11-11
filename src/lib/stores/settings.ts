@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
+import { invoke } from '@tauri-apps/api/core';
 import type { DatabaseInfo, DatabaseInfoResult, DatabaseOperationResult } from '../types/api';
-import { CoreClientFactory } from '../ports/clientFactory';
 import { logger } from '../utils/logger';
 
 interface SettingsState {
@@ -23,7 +23,7 @@ function createSettingsStore() {
       logger.debug('Settings', 'Loading database info');
       update(state => ({ ...state, isLoading: true }));
 
-      const result = await CoreClientFactory.getClient().getDatabaseInfo();
+      const result = await invoke<DatabaseInfoResult>('get_database_info');
 
       if (result.success && result.path && result.size_bytes !== undefined) {
         update(state => ({
@@ -42,7 +42,7 @@ function createSettingsStore() {
 
     async backupDatabase(): Promise<DatabaseOperationResult> {
       logger.debug('Settings', 'Starting backup');
-      const result = await CoreClientFactory.getClient().backupDatabase();
+      const result = await invoke<DatabaseOperationResult>('backup_database');
 
       if (result.success) {
         logger.debug('Settings', result.message || 'Backup successful');
@@ -55,7 +55,7 @@ function createSettingsStore() {
 
     async restoreDatabase(): Promise<DatabaseOperationResult> {
       logger.debug('Settings', 'Starting restore');
-      const result = await CoreClientFactory.getClient().restoreDatabase();
+      const result = await invoke<DatabaseOperationResult>('restore_database');
 
       if (result.success) {
         logger.debug('Settings', result.message || 'Restore successful');
@@ -70,7 +70,7 @@ function createSettingsStore() {
 
     async resetDatabase(): Promise<DatabaseOperationResult> {
       logger.debug('Settings', 'Resetting database');
-      const result = await CoreClientFactory.getClient().resetDatabase();
+      const result = await invoke<DatabaseOperationResult>('reset_database');
 
       if (result.success) {
         logger.debug('Settings', result.message || 'Reset successful');

@@ -1,7 +1,17 @@
 import { logger } from '$lib/utils/logger';
 import { writable, derived } from 'svelte/store';
-import type { JobInfo, JobStatus, CreateJobParams } from '../types/api';
-import { CoreClientFactory } from '../ports/clientFactory';
+import type {
+  JobInfo,
+  JobStatus,
+  CreateJobParams,
+  GetAllJobsResult,
+  SyncJobsResult,
+  CreateJobResult,
+  SubmitJobResult,
+  DeleteJobResult,
+  JobStatusResult
+} from '../types/api';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { sessionActions } from './session';
 
@@ -59,7 +69,7 @@ function createJobsStore() {
     // Load jobs from database (for offline/startup)
     loadFromDatabase: async () => {
       try {
-        const result = await CoreClientFactory.getClient().getAllJobs();
+        const result = await invoke<GetAllJobsResult>('get_all_jobs');
 
         if (result.success && result.jobs) {
           update(state => ({
@@ -83,7 +93,7 @@ function createJobsStore() {
       try {
         // Call syncJobs to update job statuses from SLURM, then fetch updated jobs
 
-        const syncResult = await CoreClientFactory.getClient().syncJobs();
+        const syncResult = await invoke<SyncJobsResult>('sync_jobs');
 
         if (syncResult.success) {
           // Pure caching - backend returns complete job list (discovery happens automatically if DB empty)
@@ -137,7 +147,7 @@ function createJobsStore() {
       });
 
       try {
-        const result = await CoreClientFactory.getClient().createJob(params);
+        const result = await invoke<CreateJobResult>('create_job', { params });
 
         if (result.success && result.job_id && result.job) {
           // Update progress to completion
@@ -200,7 +210,7 @@ function createJobsStore() {
       });
 
       try {
-        const result = await CoreClientFactory.getClient().submitJob(job_id);
+        const result = await invoke<SubmitJobResult>('submit_job', { job_id });
 
         if (result.success) {
           // Update progress to completion
@@ -254,7 +264,7 @@ function createJobsStore() {
     // Delete a job via backend
     deleteJob: async (job_id: string) => {
       try {
-        const result = await CoreClientFactory.getClient().deleteJob(job_id, true);
+        const result = await invoke<DeleteJobResult>('delete_job', { job_id, delete_remote: true });
 
         if (result.success) {
           // Remove job from local state
@@ -281,7 +291,7 @@ function createJobsStore() {
     // Get detailed job status via backend
     getJobStatus: async (job_id: string) => {
       try {
-        const result = await CoreClientFactory.getClient().getJobStatus(job_id);
+        const result = await invoke<JobStatusResult>('get_job_status', { job_id });
 
         if (result.success && result.job_info) {
           // Update the specific job in local state
@@ -328,11 +338,6 @@ export const isSyncing = derived(jobsStore, $store => $store.isSyncing);
 // Progress tracking stores
 export const creationProgress = derived(jobsStore, $store => $store.creationProgress);
 export const submissionProgress = derived(jobsStore, $store => $store.submissionProgress);
-
-export const selectedJob = derived(
-  [jobs, writable<string | null>(null)],
-  ([$jobs, $selectedId]) => $selectedId ? $jobs.find(job => job.job_id === $selectedId) : null
-);
 
 export const jobsByStatus = derived(jobs, $jobs => {
   const grouped = {

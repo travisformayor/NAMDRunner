@@ -1,7 +1,14 @@
 import { writable, derived } from 'svelte/store';
-import type { ConnectionState, SessionInfo } from '../types/api';
-import { CoreClientFactory } from '../ports/clientFactory';
+import type {
+  ConnectionState,
+  SessionInfo,
+  ConnectResult,
+  DisconnectResult,
+  ConnectionStatusResult
+} from '../types/api';
+import { invoke } from '@tauri-apps/api/core';
 import { jobsStore } from './jobs';
+import { logger } from '../utils/logger';
 
 // Session state store
 interface SessionState {
@@ -32,7 +39,7 @@ export const lastError = derived(sessionStore, ($session) => $session.lastError)
 export const sessionActions = {
   // Connect to cluster
   async connect(host: string, username: string, password: string): Promise<boolean> {
-    // Starting connection attempt
+    logger.debug('SSH', `Starting connection attempt to ${host} as ${username}`);
 
     sessionStore.update((state) => ({
       ...state,
@@ -41,11 +48,15 @@ export const sessionActions = {
     }));
 
     try {
-      // Calling CoreClientFactory.getClient().connect()
-      const result = await CoreClientFactory.getClient().connect({ host, username, password });
-      // Connection attempt completed
-      
+      const result = await invoke<ConnectResult>('connect_to_cluster', {
+        params: { host, username, password }
+      });
+
+      logger.debug('SSH', `Connection result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+
       if (result.success) {
+        logger.debug('SSH', 'Connection established successfully');
+
         sessionStore.update((state) => ({
           ...state,
           connectionState: 'Connected',
@@ -59,7 +70,8 @@ export const sessionActions = {
 
         return true;
       } else {
-        // Connection failed
+        logger.error('SSH', `Connection failed: ${result.error || 'Unknown error'}`);
+
         sessionStore.update((state) => ({
           ...state,
           connectionState: 'Disconnected',
@@ -70,7 +82,8 @@ export const sessionActions = {
         return false;
       }
     } catch (error) {
-      // Connection threw exception
+      logger.error('SSH', `Connection exception: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
       sessionStore.update((state) => ({
         ...state,
         connectionState: 'Disconnected',
@@ -85,8 +98,8 @@ export const sessionActions = {
   // Disconnect from cluster
   async disconnect(): Promise<boolean> {
     try {
-      const result = await CoreClientFactory.getClient().disconnect();
-      
+      const result = await invoke<DisconnectResult>('disconnect');
+
       sessionStore.update((state) => ({
         ...state,
         connectionState: 'Disconnected',
@@ -110,7 +123,7 @@ export const sessionActions = {
   // Check connection status
   async checkStatus(): Promise<void> {
     try {
-      const result = await CoreClientFactory.getClient().getConnectionStatus();
+      const result = await invoke<ConnectionStatusResult>('get_connection_status');
 
       sessionStore.update((state) => ({
         ...state,

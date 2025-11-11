@@ -12,9 +12,14 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import type { ClusterCapabilities, PartitionSpec, QosSpec, ValidationResult } from '../types/cluster';
-import type { GetClusterCapabilitiesResult } from '../types/api';
-import { CoreClientFactory } from '../ports/clientFactory';
+import { invoke } from '@tauri-apps/api/core';
+import type {
+  ClusterCapabilities,
+  PartitionSpec,
+  QosSpec,
+  GetClusterCapabilitiesResult,
+  ValidateResourceAllocationResult
+} from '../types/api';
 import { logger } from '../utils/logger';
 
 // Main store - holds full cluster capabilities from backend
@@ -30,7 +35,7 @@ export async function initClusterConfig(): Promise<void> {
   try {
     loadErrorStore.set(null);
     logger.debug('ClusterConfig', 'Calling backend getClusterCapabilities...');
-    const result: GetClusterCapabilitiesResult = await CoreClientFactory.getClient().getClusterCapabilities();
+    const result = await invoke<GetClusterCapabilitiesResult>('get_cluster_capabilities');
     logger.debug('ClusterConfig', `Backend response: success=${result.success}, hasData=${!!result.data}`);
 
     if (result.success && result.data) {
@@ -138,7 +143,12 @@ export async function calculateJobCost(
   gpuCount: number = 1
 ): Promise<number> {
   try {
-    return await CoreClientFactory.getClient().calculateJobCost(cores, walltimeHours, hasGpu, gpuCount);
+    return await invoke<number>('calculate_job_cost', {
+      cores,
+      walltime_hours: walltimeHours,
+      has_gpu: hasGpu,
+      gpu_count: gpuCount
+    });
   } catch (error) {
     logger.debug('ClusterConfig', `Cost calculation failed: ${error}`);
     return 0;
@@ -166,7 +176,10 @@ export function walltimeToHours(walltime: string): number {
  */
 export async function suggestQos(walltimeHours: number, partitionId: string): Promise<string> {
   try {
-    return await CoreClientFactory.getClient().suggestQosForPartition(walltimeHours, partitionId);
+    return await invoke<string>('suggest_qos_for_partition', {
+      walltime_hours: walltimeHours,
+      partition_id: partitionId
+    });
   } catch (error) {
     logger.debug('ClusterConfig', `QoS suggestion failed: ${error}`);
     // Fallback to default QoS
@@ -183,7 +196,10 @@ export async function suggestQos(walltimeHours: number, partitionId: string): Pr
  */
 export async function estimateQueueTime(cores: number, partitionId: string): Promise<string> {
   try {
-    return await CoreClientFactory.getClient().estimateQueueTimeForJob(cores, partitionId);
+    return await invoke<string>('estimate_queue_time_for_job', {
+      cores,
+      partition_id: partitionId
+    });
   } catch (error) {
     logger.debug('ClusterConfig', `Queue time estimation failed: ${error}`);
     return 'Unknown';
@@ -203,7 +219,7 @@ export async function validateResourceRequest(
   walltime: string,
   partitionId: string,
   qosId: string
-): Promise<ValidationResult> {
+): Promise<ValidateResourceAllocationResult> {
   // Check if config is loaded
   const config = get(clusterCapabilitiesStore);
   if (!config) {
@@ -218,13 +234,13 @@ export async function validateResourceRequest(
   // Call backend validation - pass parameters as-is, no conversion
   try {
     logger.debug('ClusterConfig', `Calling backend validation: cores=${cores}, memory=${memory}, walltime=${walltime}, partition=${partitionId}, qos=${qosId}`);
-    const result = await CoreClientFactory.getClient().validateResourceAllocation(
+    const result = await invoke<ValidateResourceAllocationResult>('validate_resource_allocation', {
       cores,
       memory,
       walltime,
-      partitionId,
-      qosId
-    );
+      partition_id: partitionId,
+      qos_id: qosId
+    });
     logger.debug('ClusterConfig', `Backend validation result: is_valid=${result.is_valid}, issues=${JSON.stringify(result.issues)}`);
     return result;
   } catch (error) {

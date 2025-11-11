@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { JobInfo } from '../../../types/api';
-  import { CoreClientFactory } from '../../../ports/clientFactory';
+  import { invoke } from '@tauri-apps/api/core';
+  import type { JobInfo, DownloadResult } from '../../../types/api';
   import { getFileIcon, getTypeLabel, getTypeColor, getFileDescription, getFileExtension, formatFileSize } from '../../../utils/file-helpers';
   import { isConnected } from '../../../stores/session';
 
@@ -41,7 +41,7 @@
     downloadingFiles = downloadingFiles; // Trigger reactivity
 
     try {
-      const result = await CoreClientFactory.getClient().downloadJobOutput(job.job_id, file_path);
+      const result = await invoke<DownloadResult>('download_job_output', { job_id: job.job_id, file_path });
 
       if (!result.success) {
         downloadErrors.set(file_name, result.error || 'Failed to download file');
@@ -72,7 +72,7 @@
     isDownloadingAll = true;
 
     try {
-      const result = await CoreClientFactory.getClient().downloadAllOutputs(job.job_id);
+      const result = await invoke<DownloadResult>('download_all_outputs', { job_id: job.job_id });
 
       if (!result.success) {
         downloadAllError = result.error || 'Failed to download output files';
