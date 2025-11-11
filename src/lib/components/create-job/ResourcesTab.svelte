@@ -122,7 +122,7 @@
             type="number"
             bind:value={resourceConfig.cores}
             min="1"
-            max="1024"
+            max={parseInt($partitions.find(p => p.id === resourceConfig.partition)?.cores_per_node ?? '64')}
             class:error={errors.cores}
           />
           {#if errors.cores}

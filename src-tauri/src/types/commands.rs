@@ -1,6 +1,21 @@
 use serde::{Deserialize, Serialize};
 use super::core::*;
 use crate::security::SecurePassword;
+use std::collections::HashMap;
+use serde_json::Value;
+
+// Job validation request parameters
+#[derive(Debug, Deserialize)]
+pub struct ValidateJobConfigParams {
+    pub job_name: String,
+    pub template_id: String,
+    pub template_values: HashMap<String, Value>,
+    pub cores: u32,
+    pub memory: String,
+    pub walltime: String,
+    pub partition: Option<String>,
+    pub qos: Option<String>,
+}
 
 // Connection management command parameters and results
 #[derive(Debug, Clone, Deserialize)]
@@ -160,12 +175,6 @@ pub struct ValidateTemplateValuesResult {
     pub errors: Vec<String>,
 }
 
-// Job configuration validation result
-#[derive(Debug, Serialize)]
-pub struct JobValidationResult {
-    pub is_valid: bool,
-    pub errors: Vec<String>,
-}
 
 // Preview result types
 #[derive(Debug, Serialize)]

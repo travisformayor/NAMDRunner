@@ -50,22 +50,24 @@
   async function runBackendValidation() {
     try {
       const result = await invoke<JobValidationResult>('validate_job_config', {
-        job_name: jobName,
-        template_id: templateId,
-        template_values: templateValues,
-        cores: resourceConfig.cores,
-        memory: resourceConfig.memory,
-        walltime: resourceConfig.walltime,
-        partition: resourceConfig.partition || null,
-        qos: resourceConfig.qos || null
+        params: {
+          job_name: jobName,
+          template_id: templateId,
+          template_values: templateValues,
+          cores: resourceConfig.cores,
+          memory: resourceConfig.memory,
+          walltime: resourceConfig.walltime,
+          partition: resourceConfig.partition || null,
+          qos: resourceConfig.qos || null
+        }
       });
 
       if (result.is_valid) {
         errors = {};
       } else {
-        // Parse errors to extract field-specific errors
+        // Parse issues to extract field-specific errors
         const newErrors: Record<string, string> = {};
-        for (const error of result.errors) {
+        for (const error of result.issues) {
           if (error.toLowerCase().includes('job name')) {
             newErrors.job_name = error;
           } else if (error.toLowerCase().includes('template')) {

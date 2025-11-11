@@ -153,7 +153,7 @@
       <select
         id="template-select"
         bind:value={templateId}
-        class="form-control"
+        class="namd-input"
       >
         <option value="">-- Select a template --</option>
         {#each $templates as template}
@@ -243,7 +243,7 @@
                   min={config.min ?? undefined}
                   max={config.max ?? undefined}
                   step="any"
-                  class="form-control"
+                  class="namd-input"
                   class:error={hasError}
                   required={varDef.required}
                 />
@@ -252,7 +252,7 @@
                   type="text"
                   id={key}
                   bind:value={templateValues[key]}
-                  class="form-control"
+                  class="namd-input"
                   class:error={hasError}
                   required={varDef.required}
                 />
@@ -356,22 +356,6 @@
     margin-left: 0.25rem;
   }
 
-  .form-control {
-    width: 100%;
-    padding: var(--namd-spacing-sm);
-    border: 1px solid var(--namd-border);
-    border-radius: var(--namd-border-radius-sm);
-    font-size: var(--namd-font-size-sm);
-    font-family: inherit;
-    background-color: var(--namd-bg-primary);
-    color: var(--namd-text-primary);
-  }
-
-  .form-control:focus {
-    outline: none;
-    border-color: var(--namd-primary);
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
-  }
 
   .file-input-group {
     display: flex;

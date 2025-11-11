@@ -256,7 +256,9 @@ export interface PreviewResult {
 
 export interface JobValidationResult {
   is_valid: boolean;
-  errors: string[];
+  issues: string[];
+  warnings: string[];
+  suggestions: string[];
 }
 
 // Error handling

@@ -1,12 +1,12 @@
 use crate::types::*;
+use crate::types::commands::ValidateJobConfigParams;
 use crate::validation::input;
+use crate::validation::job_validation::ValidationResult;
 use crate::database::with_database;
 use crate::automations;
 use crate::{info_log, debug_log, error_log};
 use tauri::Emitter;
 use serde::Serialize;
-use std::collections::HashMap;
-use serde_json::Value;
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -> CreateJobResult {
@@ -615,68 +615,64 @@ pub async fn preview_slurm_script(
 /// Validate complete job configuration
 /// Checks job name, template selection, template values, and resource configuration
 #[tauri::command(rename_all = "snake_case")]
-pub async fn validate_job_config(
-    job_name: String,
-    template_id: String,
-    template_values: HashMap<String, Value>,
-    cores: u32,
-    memory: String,
-    walltime: String,
-    partition: Option<String>,
-    qos: Option<String>
-) -> JobValidationResult {
-    let mut errors = Vec::new();
+pub async fn validate_job_config(params: ValidateJobConfigParams) -> ValidationResult {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let mut suggestions = Vec::new();
 
     // Validate job name
-    if job_name.trim().is_empty() {
-        errors.push("Job name is required".to_string());
-    } else if let Err(e) = input::sanitize_job_id(&job_name) {
-        errors.push(format!("Job name invalid: {}", e));
+    if params.job_name.trim().is_empty() {
+        issues.push("Job name is required".to_string());
+    } else if let Err(e) = input::sanitize_job_id(&params.job_name) {
+        issues.push(format!("Job name invalid: {}", e));
     }
 
     // Validate template selection
-    if template_id.is_empty() {
-        errors.push("Template selection is required".to_string());
+    if params.template_id.is_empty() {
+        issues.push("Template selection is required".to_string());
     }
 
     // Validate template values (if template selected)
-    if !template_id.is_empty() {
+    if !params.template_id.is_empty() {
         let template_validation = crate::commands::templates::validate_template_values(
-            template_id.clone(),
-            template_values.clone()
+            params.template_id.clone(),
+            params.template_values.clone()
         ).await;
 
-        errors.extend(template_validation.errors);
+        // Template validation currently only returns errors (no warnings/suggestions)
+        // This is acceptable as template validation is strict (type checking)
+        issues.extend(template_validation.errors);
     }
 
-    // Validate resource configuration
-    if cores == 0 {
-        errors.push("Cores must be greater than 0".to_string());
-    }
+    // Validate resource configuration using centralized validator
+    let partition_id = params.partition.as_deref().unwrap_or("amilan");
+    let qos_id = params.qos.as_deref().unwrap_or("normal");
 
-    if memory.trim().is_empty() {
-        errors.push("Memory is required".to_string());
-    }
+    // Build SlurmConfig for validation
+    let slurm_config = crate::types::SlurmConfig {
+        cores: params.cores,
+        memory: params.memory,
+        walltime: params.walltime,
+        partition: Some(partition_id.to_string()),
+        qos: Some(qos_id.to_string()),
+    };
 
-    if walltime.trim().is_empty() || !walltime.contains(':') {
-        errors.push("Wall time must be in HH:MM:SS format".to_string());
-    }
+    // Use centralized resource validation (replaces duplicate checks)
+    let resource_validation = crate::validation::job_validation::validate_resource_allocation(
+        &slurm_config,
+        partition_id,
+        qos_id
+    );
 
-    // Validate partition and QoS if provided
-    if let Some(p) = &partition {
-        if p.trim().is_empty() {
-            errors.push("Partition cannot be empty if specified".to_string());
-        }
-    }
+    // Merge resource validation results
+    issues.extend(resource_validation.issues);
+    warnings.extend(resource_validation.warnings);
+    suggestions.extend(resource_validation.suggestions);
 
-    if let Some(q) = &qos {
-        if q.trim().is_empty() {
-            errors.push("QoS cannot be empty if specified".to_string());
-        }
-    }
-
-    JobValidationResult {
-        is_valid: errors.is_empty(),
-        errors,
+    ValidationResult {
+        is_valid: issues.is_empty(),
+        issues,
+        warnings,
+        suggestions,
     }
 }
