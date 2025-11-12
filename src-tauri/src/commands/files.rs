@@ -2,7 +2,7 @@ use crate::types::*;
 use crate::types::response_data::DownloadInfo;
 use crate::ssh::get_connection_manager;
 use crate::validation::input::sanitize_job_id;
-use crate::database::with_database;
+use crate::commands::helpers;
 use chrono::Utc;
 use anyhow::{Result, anyhow};
 use std::fs;
@@ -86,23 +86,14 @@ async fn upload_job_files_real(app_handle: AppHandle, job_id: String, files: Vec
     };
 
     // Get job info from database to find the project directory
-    let job_id_for_db = clean_job_id.clone();
-    let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
-        Ok(Some(job)) => job,
-        Ok(None) => return UploadResult {
-            success: false,
-            uploaded_files: None,
-            failed_uploads: Some(vec![FailedUpload {
-                file_name: "job_lookup".to_string(),
-                error: format!("Job {} not found", clean_job_id),
-            }]),
-        },
+    let job_info = match helpers::load_job_or_fail(&clean_job_id, "Files") {
+        Ok(job) => job,
         Err(e) => return UploadResult {
             success: false,
             uploaded_files: None,
             failed_uploads: Some(vec![FailedUpload {
-                file_name: "database".to_string(),
-                error: format!("Database error: {}", e),
+                file_name: "job_lookup".to_string(),
+                error: e.to_string(),
             }]),
         },
     };
@@ -243,11 +234,9 @@ async fn download_job_output_real(job_id: String, file_path: String) -> ApiResul
     }
 
     // Get job info from database to find project directory
-    let job_id_for_db = clean_job_id.clone();
-    let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
-        Ok(Some(job)) => job,
-        Ok(None) => return ApiResult::error(format!("Job {} not found", clean_job_id)),
-        Err(e) => return ApiResult::error(format!("Database error: {}", e)),
+    let job_info = match helpers::load_job_or_fail(&clean_job_id, "Files") {
+        Ok(job) => job,
+        Err(e) => return ApiResult::error(e.to_string()),
     };
 
     let project_dir = match &job_info.project_dir {
@@ -318,10 +307,9 @@ async fn download_all_outputs_real(job_id: String) -> ApiResult<DownloadInfo> {
     };
 
     // Get job info from database
-    let job_info = match with_database(|db| db.load_job(&clean_job_id)) {
-        Ok(Some(job)) => job,
-        Ok(None) => return ApiResult::error(format!("Job '{}' not found", clean_job_id)),
-        Err(e) => return ApiResult::error(format!("Database error: {}", e)),
+    let job_info = match helpers::load_job_or_fail(&clean_job_id, "Files") {
+        Ok(job) => job,
+        Err(e) => return ApiResult::error(e.to_string()),
     };
 
     let project_dir: &str = match &job_info.project_dir {
@@ -411,11 +399,9 @@ async fn list_job_files_real(job_id: String) -> ApiResult<Vec<RemoteFile>> {
     };
 
     // Get job info from database to find directories
-    let job_id_for_db = clean_job_id.clone();
-    let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
-        Ok(Some(job)) => job,
-        Ok(None) => return ApiResult::error(format!("Job {} not found", clean_job_id)),
-        Err(e) => return ApiResult::error(format!("Database error: {}", e)),
+    let job_info = match helpers::load_job_or_fail(&clean_job_id, "Files") {
+        Ok(job) => job,
+        Err(e) => return ApiResult::error(e.to_string()),
     };
 
     let connection_manager = get_connection_manager();

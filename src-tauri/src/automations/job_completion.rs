@@ -1,10 +1,7 @@
 use anyhow::{Result, anyhow};
-use chrono::Utc;
-
 use crate::types::{JobStatus, JobInfo};
-use crate::ssh::get_connection_manager;
-use crate::database::with_database;
 use crate::{info_log, error_log};
+use crate::automations::common;
 
 /// Execute job completion automation (called automatically when job reaches terminal state)
 ///
@@ -24,31 +21,15 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     }
 
     // Verify SSH connection is active
-    let connection_manager = get_connection_manager();
-    if !connection_manager.is_connected().await {
-        error_log!("[Job Completion] SSH connection not active");
-        return Err(anyhow!("Not connected to cluster"));
-    }
+    let (connection_manager, _username) = common::require_connection_with_username("Job Completion").await?;
 
     // Ensure we have both project and scratch directories
-    let project_dir = job.project_dir.as_ref()
-        .ok_or_else(|| {
-            error_log!("[Job Completion] Job {} has no project directory", job_id);
-            anyhow!("Job has no project directory")
-        })?.clone();
-    let scratch_dir = job.scratch_dir.as_ref()
-        .ok_or_else(|| {
-            error_log!("[Job Completion] Job {} has no scratch directory", job_id);
-            anyhow!("Job has no scratch directory")
-        })?.clone();
+    let project_dir = common::require_project_dir(job, "Job Completion")?.to_string();
+    let scratch_dir = common::require_scratch_dir(job, "Job Completion")?.to_string();
 
     // CRITICAL: Rsync scratch→project FIRST (DATA BOUNDARY CROSSED)
     // This preserves all results including SLURM logs before they're cleaned up
-    let source_with_slash = if scratch_dir.ends_with('/') {
-        scratch_dir.to_string()
-    } else {
-        format!("{}/", scratch_dir)
-    };
+    let source_with_slash = common::ensure_trailing_slash(&scratch_dir);
 
     info_log!("[Job Completion] Rsyncing scratch→project: {} -> {}", scratch_dir, project_dir);
     connection_manager.sync_directory_rsync(&source_with_slash, &project_dir).await
@@ -81,14 +62,9 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
         }
     }
 
-    // Update database
-    job.updated_at = Some(Utc::now().to_rfc3339());
-    let job_clone = job.clone();
-    with_database(move |db| db.save_job(&job_clone))
-        .map_err(|e| {
-            error_log!("[Job Completion] Failed to update database: {}", e);
-            anyhow!("Failed to update database: {}", e)
-        })?;
+    // Update database with timestamp
+    common::touch_job_timestamp(job);
+    common::save_job_to_database(job, "Job Completion")?;
 
     info_log!("[Job Completion] Job completion successful: {}", job_id);
     Ok(())

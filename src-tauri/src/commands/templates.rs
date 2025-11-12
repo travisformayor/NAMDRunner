@@ -1,6 +1,7 @@
 use crate::types::*;
 use crate::database::with_database;
 use crate::templates::Template;
+use crate::commands::helpers;
 use crate::validation::job_validation::ValidationResult;
 use crate::{info_log, error_log};
 use std::collections::HashMap;
@@ -34,20 +35,13 @@ pub async fn list_templates() -> ApiResult<Vec<crate::templates::TemplateSummary
 pub async fn get_template(template_id: String) -> ApiResult<Template> {
     info_log!("[Templates] Loading template: {}", template_id);
 
-    match with_database(|db| db.load_template(&template_id)) {
-        Ok(Some(template)) => {
-            info_log!("[Templates] Loaded template: {}", template.name);
-            ApiResult::success(template)
-        }
-        Ok(None) => {
-            error_log!("[Templates] Template not found: {}", template_id);
-            ApiResult::error(format!("Template '{}' not found", template_id))
-        }
-        Err(e) => {
-            error_log!("[Templates] Database error: {}", e);
-            ApiResult::error(format!("Database error: {}", e))
-        }
-    }
+    let template = match helpers::load_template_or_fail(&template_id, "Templates") {
+        Ok(t) => t,
+        Err(e) => return ApiResult::error(e.to_string()),
+    };
+
+    info_log!("[Templates] Loaded template: {}", template.name);
+    ApiResult::success(template)
 }
 
 /// Create a new template
@@ -90,18 +84,8 @@ pub async fn update_template(template_id: String, template: Template) -> ApiResu
     info_log!("[Templates] Updating template: {}", template_id);
 
     // Verify template exists
-    match with_database(|db| db.load_template(&template_id)) {
-        Ok(Some(_)) => {
-            // Template exists, proceed with update
-        }
-        Ok(None) => {
-            error_log!("[Templates] Template not found: {}", template_id);
-            return ApiResult::error(format!("Template '{}' not found", template_id));
-        }
-        Err(e) => {
-            error_log!("[Templates] Database error: {}", e);
-            return ApiResult::error(format!("Database error: {}", e));
-        }
+    if let Err(e) = helpers::load_template_or_fail(&template_id, "Templates") {
+        return ApiResult::error(e.to_string());
     }
 
     // Save updated template
@@ -160,22 +144,12 @@ pub async fn validate_template_values(
 ) -> ValidationResult {
 
     // Load template
-    let template = match with_database(|db| db.load_template(&template_id)) {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            error_log!("[Templates] Template not found: {}", template_id);
-            return ValidationResult {
-                is_valid: false,
-                issues: vec![format!("Template '{}' not found", template_id)],
-                warnings: vec![],
-                suggestions: vec![],
-            };
-        }
+    let template = match helpers::load_template_or_fail(&template_id, "Templates") {
+        Ok(t) => t,
         Err(e) => {
-            error_log!("[Templates] Database error: {}", e);
             return ValidationResult {
                 is_valid: false,
-                issues: vec![format!("Database error: {}", e)],
+                issues: vec![e.to_string()],
                 warnings: vec![],
                 suggestions: vec![],
             };
@@ -201,14 +175,9 @@ pub async fn preview_namd_config(
     info_log!("[Templates] Previewing NAMD config for template: {}", template_id);
 
     // Load template
-    let template = match with_database(|db| db.load_template(&template_id)) {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            return ApiResult::error(format!("Template '{}' not found", template_id));
-        }
-        Err(e) => {
-            return ApiResult::error(format!("Database error: {}", e));
-        }
+    let template = match helpers::load_template_or_fail(&template_id, "Templates") {
+        Ok(t) => t,
+        Err(e) => return ApiResult::error(e.to_string()),
     };
 
     // Render template
@@ -230,14 +199,9 @@ pub async fn preview_template_with_defaults(template_id: String) -> ApiResult<St
     info_log!("[Templates] Previewing template with defaults: {}", template_id);
 
     // Load template
-    let template = match with_database(|db| db.load_template(&template_id)) {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            return ApiResult::error(format!("Template '{}' not found", template_id));
-        }
-        Err(e) => {
-            return ApiResult::error(format!("Database error: {}", e));
-        }
+    let template = match helpers::load_template_or_fail(&template_id, "Templates") {
+        Ok(t) => t,
+        Err(e) => return ApiResult::error(e.to_string()),
     };
 
     // Generate sample values from variable defaults

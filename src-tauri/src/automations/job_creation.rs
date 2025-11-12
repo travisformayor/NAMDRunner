@@ -5,9 +5,8 @@ use serde_json::Value;
 
 use crate::types::{CreateJobParams, JobInfo, JobStatus, SlurmConfig};
 use crate::validation::{input, paths};
-use crate::ssh::get_connection_manager;
-use crate::database::with_database;
 use crate::{info_log, debug_log, error_log};
+use crate::automations::common;
 
 /// Factory function to create a new JobInfo with business logic (status, timestamps)
 ///
@@ -63,19 +62,8 @@ pub async fn execute_job_creation_with_progress(
 
     progress_callback("Validating connection...");
 
-    // Validate SSH connection is active
-    let connection_manager = get_connection_manager();
-    if !connection_manager.is_connected().await {
-        error_log!("[Job Creation] SSH connection not active");
-        return Err(anyhow!("Please connect to the cluster to create jobs"));
-    }
-
-    // Get cluster username using existing logic
-    let username = connection_manager.get_username().await
-        .map_err(|e| {
-            error_log!("[Job Creation] Failed to get username: {}", e);
-            anyhow!("Failed to get cluster username: {}", e)
-        })?;
+    // Validate SSH connection and get username
+    let (connection_manager, username) = common::require_connection_with_username("Job Creation").await?;
     info_log!("[Job Creation] Creating job for user: {}", username);
 
     progress_callback("Generating job paths...");
@@ -226,13 +214,8 @@ pub async fn execute_job_creation_with_progress(
     progress_callback("Saving job to database...");
     debug_log!("[Job Creation] Saving job {} to database", job_id);
 
-    // Save to database using existing database utilities
-    let job_info_clone = job_info.clone();
-    with_database(move |db| db.save_job(&job_info_clone))
-        .map_err(|e| {
-            error_log!("[Job Creation] Failed to save job to database: {}", e);
-            anyhow!("Failed to save job to database: {}", e)
-        })?;
+    // Save to database using common helper
+    common::save_job_to_database(&job_info, "Job Creation")?;
 
     progress_callback("Creating job metadata...");
 

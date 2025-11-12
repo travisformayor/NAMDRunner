@@ -4,9 +4,9 @@ use chrono::Utc;
 
 use crate::types::{JobStatus, response_data::JobSubmissionData};
 use crate::validation::paths;
-use crate::ssh::get_connection_manager;
 use crate::database::with_database;
 use crate::{info_log, debug_log, error_log};
+use crate::automations::common;
 
 /// Simplified job submission automation that follows NAMDRunner's direct function patterns
 /// This replaces the complex AutomationStep trait system with a simple async function
@@ -43,28 +43,13 @@ pub async fn execute_job_submission_with_progress(
 
     progress_callback("Validating connection...");
 
-    // Verify SSH connection is active
-    let connection_manager = get_connection_manager();
-    if !connection_manager.is_connected().await {
-        error_log!("[Job Submission] SSH connection not active");
-        return Err(anyhow!("Please connect to the cluster to submit jobs"));
-    }
-
-    // Get username using existing logic
-    let username = connection_manager.get_username().await
-        .map_err(|e| {
-            error_log!("[Job Submission] Failed to get username: {}", e);
-            anyhow!("Failed to get cluster username: {}", e)
-        })?;
+    // Verify SSH connection and get username
+    let (connection_manager, username) = common::require_connection_with_username("Job Submission").await?;
     info_log!("[Job Submission] Submitting job for user: {}", username);
 
     progress_callback("Mirroring job directory to scratch...");
 
-    let project_dir = job_info.project_dir.as_ref()
-        .ok_or_else(|| {
-            error_log!("[Job Submission] Job {} has no project directory", job_id);
-            anyhow!("Job has no project directory")
-        })?;
+    let project_dir = common::require_project_dir(&job_info, "Job Submission")?;
 
     // Generate scratch directory path using existing validation functions
     let scratch_dir = paths::scratch_directory(&username, &job_info.job_id)?;
@@ -72,11 +57,7 @@ pub async fn execute_job_submission_with_progress(
 
     // Use rsync to mirror entire job directory from project to scratch
     // Note: source must end with / to sync contents, destination should NOT end with / to create/sync into it
-    let source_with_slash = if project_dir.ends_with('/') {
-        project_dir.to_string()
-    } else {
-        format!("{}/", project_dir)
-    };
+    let source_with_slash = common::ensure_trailing_slash(project_dir);
 
     connection_manager.sync_directory_rsync(&source_with_slash, &scratch_dir).await
         .map_err(|e| {
@@ -115,17 +96,11 @@ pub async fn execute_job_submission_with_progress(
     job_info.scratch_dir = Some(scratch_dir.clone());
     job_info.slurm_job_id = Some(slurm_job_id.clone());
     job_info.submitted_at = Some(submitted_at.clone());
-    job_info.status = JobStatus::Pending;
-    job_info.updated_at = Some(Utc::now().to_rfc3339());
+    common::update_job_status(&mut job_info, JobStatus::Pending);
     debug_log!("[Job Submission] Updated job status to Pending");
 
     // Save updated job info to database
-    let job_info_clone = job_info.clone();
-    with_database(move |db| db.save_job(&job_info_clone))
-        .map_err(|e| {
-            error_log!("[Job Submission] Failed to save job to database: {}", e);
-            anyhow!("Failed to update job in database: {}", e)
-        })?;
+    common::save_job_to_database(&job_info, "Job Submission")?;
     debug_log!("[Job Submission] Saved job to database");
 
     // Update job_info.json in project directory

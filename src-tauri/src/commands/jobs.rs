@@ -4,6 +4,7 @@ use crate::types::response_data;
 use crate::validation::input;
 use crate::validation::job_validation::ValidationResult;
 use crate::database::with_database;
+use crate::commands::helpers;
 use crate::automations;
 use crate::{info_log, debug_log, error_log};
 use tauri::Emitter;
@@ -144,32 +145,22 @@ async fn delete_job_real(job_id: String, delete_remote: bool) -> ApiResult<()> {
     // Real implementation with safe directory cleanup
 
     // Get job information from database
-    let job_id_for_db = job_id.clone();
-    let job_info = match with_database(move |db| db.load_job(&job_id_for_db)) {
-        Ok(Some(info)) => info,
-        Ok(None) => {
-            return ApiResult::error(format!("Job {} not found", job_id));
-        }
-        Err(e) => {
-            return ApiResult::error(format!("Failed to load job {}: {}", job_id, e));
-        }
+    let job_info = match helpers::load_job_or_fail(&job_id, "Delete Job") {
+        Ok(info) => info,
+        Err(e) => return ApiResult::error(e.to_string()),
     };
 
     // Cancel SLURM job if it's still actively running or pending
     if matches!(job_info.status, crate::types::JobStatus::Pending | crate::types::JobStatus::Running) {
         if let Some(slurm_job_id) = &job_info.slurm_job_id {
-            // Check if connected to cluster
-            let connection_manager = crate::ssh::get_connection_manager();
-            if !connection_manager.is_connected().await {
-                return ApiResult::error("Cannot cancel SLURM job: Not connected to cluster".to_string());
+            // Check if connected to cluster and get username
+            if let Err(e) = helpers::require_connection("Delete Job").await {
+                return ApiResult::error(e.to_string());
             }
 
-            // Get username for SLURM operations
-            let username = match connection_manager.get_username().await {
+            let username = match helpers::get_cluster_username("Delete Job").await {
                 Ok(user) => user,
-                Err(e) => {
-                    return ApiResult::error(format!("Failed to get cluster username: {}", e));
-                }
+                Err(e) => return ApiResult::error(e.to_string()),
             };
 
             // Cancel the SLURM job to prevent orphaned cluster jobs
@@ -241,15 +232,9 @@ pub async fn refetch_slurm_logs(job_id: String) -> ApiResult<JobInfo> {
     };
 
     // Get job from database
-    let job_id_clone = clean_job_id.clone();
-    let mut job_info = match with_database(move |db| db.load_job(&job_id_clone)) {
-        Ok(Some(job)) => job,
-        Ok(None) => {
-            return ApiResult::error(format!("Job {} not found", clean_job_id));
-        }
-        Err(e) => {
-            return ApiResult::error(format!("Database error: {}", e));
-        }
+    let mut job_info = match helpers::load_job_or_fail(&clean_job_id, "Refetch Logs") {
+        Ok(job) => job,
+        Err(e) => return ApiResult::error(e.to_string()),
     };
 
     // Refetch logs from server

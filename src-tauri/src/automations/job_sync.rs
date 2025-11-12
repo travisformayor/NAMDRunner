@@ -1,11 +1,11 @@
 use anyhow::{Result, anyhow};
-use chrono::Utc;
 
 use crate::types::{JobInfo, JobStatus};
 use crate::ssh::get_connection_manager;
 use crate::database::with_database;
 use crate::slurm::status::SlurmStatusSync;
 use crate::{info_log, debug_log, error_log};
+use crate::automations::common;
 
 /// Job sync result for a single job
 #[derive(Debug, Clone)]
@@ -26,19 +26,8 @@ pub struct JobSyncResult {
 pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
     info_log!("[Job Sync] Starting job status sync");
 
-    // Verify SSH connection is active
-    let connection_manager = get_connection_manager();
-    if !connection_manager.is_connected().await {
-        error_log!("[Job Sync] SSH connection not active");
-        return Err(anyhow!("Not connected to cluster"));
-    }
-
-    // Get username
-    let username = connection_manager.get_username().await
-        .map_err(|e| {
-            error_log!("[Job Sync] Failed to get username: {}", e);
-            anyhow!("Failed to get cluster username: {}", e)
-        })?;
+    // Verify SSH connection and get username
+    let (_connection_manager, username) = common::require_connection_with_username("Job Sync").await?;
     debug_log!("[Job Sync] Syncing jobs for user: {}", username);
 
     // Load all jobs from database
@@ -211,12 +200,10 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
     // Status changed - update job
     debug_log!("[Job Sync] Status changed for job {}: {:?} -> {:?}", job_id, old_status, new_status);
 
-    job.status = new_status.clone();
-    job.updated_at = Some(Utc::now().to_rfc3339());
+    common::update_job_status(&mut job, new_status.clone());
 
-    // Set completion timestamp and trigger automatic completion for terminal states
+    // Trigger automatic completion for terminal states
     if matches!(new_status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
-        job.completed_at = Some(Utc::now().to_rfc3339());
         info_log!("[Job Sync] Job {} reached terminal state: {:?}", job_id, new_status);
 
         // Trigger automatic job completion (rsync scratch→project, fetch logs, update metadata)
@@ -230,12 +217,7 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
 
     // Update database (Metadata-at-Boundaries: only update DB during execution, not server metadata)
     // Server metadata is updated at lifecycle boundaries (creation, submission, completion)
-    let job_clone = job.clone();
-    with_database(move |db| db.save_job(&job_clone))
-        .map_err(|e| {
-            error_log!("[Job Sync] Failed to save job {} to database: {}", job_id, e);
-            anyhow!("Failed to update database: {}", e)
-        })?;
+    common::save_job_to_database(&job, "Job Sync")?;
     debug_log!("[Job Sync] Database updated for job {}", job_id);
 
     // Log if job finished
