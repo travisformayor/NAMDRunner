@@ -206,7 +206,7 @@
         disabled={mode === 'edit'}
         placeholder="e.g., my_custom_template_v1"
         required
-        class="form-control"
+        class="namd-input"
       />
       <p class="help-text">Unique identifier (lowercase, underscores only)</p>
     </div>
@@ -221,7 +221,7 @@
         bind:value={name}
         placeholder="e.g., My Custom Simulation"
         required
-        class="form-control"
+        class="namd-input"
       />
     </div>
 
@@ -232,7 +232,7 @@
         bind:value={description}
         placeholder="Describe what this template is for..."
         rows="3"
-        class="form-control"
+        class="namd-input"
       ></textarea>
     </div>
 
@@ -246,7 +246,7 @@
         placeholder="# NAMD Configuration Template"
         rows="20"
         required
-        class="form-control code-editor"
+        class="namd-input code-editor"
       ></textarea>
       <p class="help-text">
         Variables are auto-detected from your template. Use <code>&#123;&#123;variable_name&#125;&#125;</code> syntax.
@@ -359,22 +359,6 @@
 
   .required {
     color: var(--namd-error);
-  }
-
-  .form-control {
-    width: 100%;
-    padding: var(--namd-spacing-sm);
-    border: 1px solid var(--namd-border);
-    border-radius: var(--namd-border-radius-sm);
-    font-size: var(--namd-font-size-sm);
-    font-family: inherit;
-    background-color: var(--namd-bg-primary);
-    color: var(--namd-text-primary);
-  }
-
-  .form-control:focus {
-    outline: none;
-    border-color: var(--namd-primary);
   }
 
   .code-editor {

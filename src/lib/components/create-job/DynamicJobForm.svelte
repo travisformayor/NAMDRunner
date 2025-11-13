@@ -189,7 +189,7 @@
                 bind:value={templateValues[key]}
                 placeholder="No file selected"
                 readonly
-                class="form-control file-display"
+                class="namd-input file-display"
                 class:error={hasError}
               />
               <button
@@ -430,12 +430,12 @@
     color: var(--namd-error);
   }
 
-  .form-control.error {
+  .namd-input.error {
     border-color: var(--namd-error);
     background: var(--namd-error-bg);
   }
 
-  .form-control.error:focus {
+  .namd-input.error:focus {
     border-color: var(--namd-error);
     box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
   }

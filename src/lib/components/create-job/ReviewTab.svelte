@@ -119,27 +119,27 @@
     <div class="review-section">
       <h4 class="review-section-title">Input Files</h4>
       {#if filesWithProgress.length > 0}
-        <div class="files-summary">
+        <div class="namd-file-list">
           {#each filesWithProgress as file}
-            <div class="file-summary-item">
+            <div class="namd-file-item">
               <!-- Animated progress background -->
-              <div class="file-progress-bg" style="width: {file.progress}%"></div>
+              <div class="namd-file-progress-bg" style="width: {file.progress}%"></div>
 
-              <div class="file-content">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <div class="namd-file-content">
+                <svg class="namd-file-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
                   <polyline points="14,2 14,8 20,8"/>
                 </svg>
-                <span class="file-name">{file.name}</span>
+                <span class="namd-file-name">{file.name}</span>
                 {#if file.progress > 0}
-                  <span class="file-progress-text">{file.progress.toFixed(0)}%</span>
+                  <span class="namd-file-progress-text">{file.progress.toFixed(0)}%</span>
                 {/if}
               </div>
             </div>
           {/each}
         </div>
       {:else}
-        <div class="no-files">No files to upload</div>
+        <div class="namd-file-list-empty">No files to upload</div>
       {/if}
     </div>
 
@@ -232,61 +232,6 @@
   .error-indicator {
     color: var(--namd-error);
     font-size: var(--namd-font-size-lg);
-  }
-
-  .files-summary {
-    display: flex;
-    flex-direction: column;
-    gap: var(--namd-spacing-sm);
-  }
-
-  .file-summary-item {
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    padding: var(--namd-spacing-sm);
-    background-color: var(--namd-bg-primary);
-    border-radius: var(--namd-border-radius-sm);
-  }
-
-  .file-progress-bg {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.4) 100%);
-    transition: width 0.3s ease;
-    z-index: 0;
-    pointer-events: none;
-  }
-
-  .file-content {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    gap: var(--namd-spacing-sm);
-    width: 100%;
-  }
-
-  .file-name {
-    font-weight: var(--namd-font-weight-medium);
-    color: var(--namd-text-primary);
-  }
-
-  .file-progress-text {
-    margin-left: auto;
-    font-weight: var(--namd-font-weight-semibold);
-    color: var(--namd-primary);
-    font-size: var(--namd-font-size-sm);
-  }
-
-  .no-files {
-    color: var(--namd-text-secondary);
-    font-style: italic;
-    padding: var(--namd-spacing-md);
-    text-align: center;
   }
 
   .review-actions {
