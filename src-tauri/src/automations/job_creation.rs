@@ -18,6 +18,7 @@ pub fn create_job_info(
     template_values: HashMap<String, Value>,
     slurm_config: SlurmConfig,
     remote_directory: String,
+    input_files: Vec<String>,
 ) -> JobInfo {
     JobInfo {
         job_id,
@@ -36,6 +37,7 @@ pub fn create_job_info(
         template_id,
         template_values,
         slurm_config,
+        input_files: Some(input_files),
         output_files: None,
         remote_directory,
     }
@@ -132,7 +134,7 @@ pub async fn execute_job_creation_with_progress(
 
     // Emit the file list to frontend for progress tracking
     let file_names: Vec<String> = files_to_upload.iter().map(|(_, _, name)| name.clone()).collect();
-    let _ = app_handle.emit("file-upload-list", file_names);
+    let _ = app_handle.emit("file-upload-list", file_names.clone());
     info_log!("[Job Creation] Emitted file upload list: {} files", files_to_upload.len());
 
     // Second pass: upload each file
@@ -166,8 +168,7 @@ pub async fn execute_job_creation_with_progress(
     progress_callback("Creating job metadata...");
 
     // Create JobInfo using factory function (sets Created status and timestamp)
-    // scratch_dir remains None until job submission
-    // Use template_values_for_rendering (filenames only, not full paths)
+    // Pass uploaded file list for explicit tracking
     let mut job_info = create_job_info(
         job_id.clone(),
         clean_job_name,
@@ -175,6 +176,7 @@ pub async fn execute_job_creation_with_progress(
         template_values_for_rendering.clone(),
         params.slurm_config,
         project_dir.clone(),
+        file_names,
     );
 
     // Set only project directory (this fixes the workflow separation issue)

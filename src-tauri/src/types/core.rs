@@ -138,6 +138,7 @@ pub struct JobInfo {
     pub template_values: std::collections::HashMap<String, serde_json::Value>,
 
     pub slurm_config: SlurmConfig,
+    pub input_files: Option<Vec<String>>,
     pub output_files: Option<Vec<OutputFile>>,
     pub remote_directory: String,
 }

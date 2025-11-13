@@ -161,7 +161,7 @@ function createJobsStore() {
             }));
           }
 
-          return { success: true, job_id: result.data.job_id, job: result.data };
+          return result;
         } else {
           // Job creation failed - check for connection error
           const errorMsg = result.error || 'Job creation failed';
@@ -234,7 +234,7 @@ function createJobsStore() {
               return job;
             })
           }));
-          return { success: true, slurm_job_id: result.data.slurm_job_id, submitted_at: result.data.submitted_at };
+          return result;
         } else {
           // Submission failed - check for connection error
           const errorMsg = result.error || 'Job submission failed';
@@ -277,7 +277,7 @@ function createJobsStore() {
             ...state,
             jobs: state.jobs.filter(job => job.job_id !== job_id)
           }));
-          return { success: true };
+          return result;
         } else {
           // Deletion failed - check for connection error
           const errorMsg = result.error || 'Job deletion failed';
@@ -308,7 +308,7 @@ function createJobsStore() {
             ...state,
             jobs: state.jobs.map(job => job.job_id === job_id ? result.data as JobInfo : job)
           }));
-          return { success: true, job_info: result.data };
+          return result;
         } else {
           // Status check failed - check for connection error
           const errorMsg = result.error || 'Job status check failed';

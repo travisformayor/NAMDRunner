@@ -382,6 +382,161 @@ async fn cleanup_temp_file(connection_manager: &crate::ssh::ConnectionManager, f
     }
 }
 
+/// Download a single input file from a job
+#[tauri::command(rename_all = "snake_case")]
+pub async fn download_job_input(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
+    download_job_input_real(job_id, file_path).await
+}
+
+async fn download_job_input_real(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
+    use rfd::FileDialog;
+
+    // Validate and sanitize inputs
+    let clean_job_id = match sanitize_job_id(&job_id) {
+        Ok(id) => id,
+        Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
+    };
+
+    // Validate file path
+    if let Err(e) = crate::validation::input::validate_relative_file_path(&file_path) {
+        return ApiResult::error(format!("Invalid file path: {}", e));
+    }
+
+    // Get job info from database
+    let job_info = match helpers::load_job_or_fail(&clean_job_id, "Files") {
+        Ok(job) => job,
+        Err(e) => return ApiResult::error(e.to_string()),
+    };
+
+    let project_dir = match &job_info.project_dir {
+        Some(dir) => dir,
+        None => return ApiResult::error("Job has no project directory".to_string()),
+    };
+
+    // Build full remote path (project_dir/input_files + relative path)
+    let remote_path = format!("{}/{}", project_dir, file_path);
+
+    // Extract filename for save dialog
+    let file_name = Path::new(&file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("input.dat");
+
+    let connection_manager = get_connection_manager();
+
+    // Check if file exists
+    match connection_manager.file_exists(&remote_path).await {
+        Ok(true) => {
+            // Show save dialog
+            let save_path = FileDialog::new()
+                .set_file_name(file_name)
+                .set_title("Save Input File")
+                .save_file();
+
+            let save_path = match save_path {
+                Some(path) => path,
+                None => return ApiResult::error("Download cancelled".to_string()),
+            };
+
+            // Download file from server
+            match connection_manager.download_file(&remote_path, &save_path.to_string_lossy()).await {
+                Ok(progress) => {
+                    ApiResult::success(DownloadInfo {
+                        saved_to: save_path.to_string_lossy().to_string(),
+                        file_size: progress.total_bytes,
+                    })
+                }
+                Err(e) => {
+                    ApiResult::error(format!("Download failed: {}", e))
+                }
+            }
+        }
+        Ok(false) => {
+            ApiResult::error(format!("File '{}' not found", file_path))
+        }
+        Err(e) => {
+            ApiResult::error(format!("Error checking file: {}", e))
+        }
+    }
+}
+
+/// Download all input files as a zip archive
+#[tauri::command(rename_all = "snake_case")]
+pub async fn download_all_inputs(job_id: String) -> ApiResult<DownloadInfo> {
+    download_all_inputs_real(job_id).await
+}
+
+async fn download_all_inputs_real(job_id: String) -> ApiResult<DownloadInfo> {
+    use rfd::FileDialog;
+
+    // Validate and sanitize job_id
+    let clean_job_id = match sanitize_job_id(&job_id) {
+        Ok(id) => id,
+        Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
+    };
+
+    // Get job info from database
+    let job_info = match helpers::load_job_or_fail(&clean_job_id, "Files") {
+        Ok(job) => job,
+        Err(e) => return ApiResult::error(e.to_string()),
+    };
+
+    let project_dir: &str = match &job_info.project_dir {
+        Some(dir) => dir.as_str(),
+        None => return ApiResult::error("Job project directory not configured".to_string()),
+    };
+
+    // Generate zip command for inputs
+    let (zip_command, temp_zip_path) = match crate::ssh::commands::zip_inputs_command(project_dir, &clean_job_id) {
+        Ok(result) => result,
+        Err(e) => return ApiResult::error(format!("Failed to generate zip command: {}", e)),
+    };
+
+    let connection_manager = get_connection_manager();
+
+    // Execute zip command on server
+    match connection_manager.execute_command(&zip_command, None).await {
+        Ok(result) => {
+            if result.exit_code != 0 {
+                return ApiResult::error(format!("Failed to create zip file: {}", result.stderr));
+            }
+        }
+        Err(e) => {
+            return ApiResult::error(format!("Failed to execute zip command: {}", e));
+        }
+    }
+
+    // Show save dialog
+    let save_path = FileDialog::new()
+        .set_file_name(format!("{}_inputs.zip", clean_job_id))
+        .set_title("Save Input Files")
+        .add_filter("ZIP Archive", &["zip"])
+        .save_file();
+
+    let save_path = match save_path {
+        Some(path) => path,
+        None => {
+            // User cancelled - clean up temp file
+            cleanup_temp_file(connection_manager, &temp_zip_path).await;
+            return ApiResult::error("Download cancelled".to_string());
+        }
+    };
+
+    // Download the zip file
+    let download_result = match connection_manager.download_file(&temp_zip_path, &save_path.to_string_lossy()).await {
+        Ok(progress) => ApiResult::success(DownloadInfo {
+            saved_to: save_path.to_string_lossy().to_string(),
+            file_size: progress.total_bytes,
+        }),
+        Err(e) => ApiResult::error(format!("Download failed: {}", e)),
+    };
+
+    // Clean up temporary zip file on server
+    cleanup_temp_file(connection_manager, &temp_zip_path).await;
+
+    download_result
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_job_files(job_id: String) -> ApiResult<Vec<RemoteFile>> {
     list_job_files_real(job_id).await

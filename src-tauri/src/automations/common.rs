@@ -124,6 +124,7 @@ mod tests {
                 partition: Some("amilan".to_string()),
                 qos: Some("normal".to_string()),
             },
+            input_files: None,
             output_files: None,
             remote_directory: "/test/dir".to_string(),
         };
@@ -163,6 +164,7 @@ mod tests {
                 partition: Some("amilan".to_string()),
                 qos: Some("normal".to_string()),
             },
+            input_files: None,
             output_files: None,
             remote_directory: "/test/dir".to_string(),
         };
@@ -205,6 +207,7 @@ mod tests {
                 partition: Some("amilan".to_string()),
                 qos: Some("normal".to_string()),
             },
+            input_files: None,
             output_files: None,
             remote_directory: "/test/dir".to_string(),
         };

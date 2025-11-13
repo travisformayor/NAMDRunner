@@ -445,8 +445,9 @@ pub async fn preview_slurm_script(
         slurm_job_id: None,
         status: crate::types::JobStatus::Created,
         project_dir: Some("/projects/user/namdrunner_jobs/preview_job".to_string()),
-        scratch_dir: None, // Not needed for preview (passed as parameter)
-        output_files: Some(vec![]),
+        scratch_dir: None,
+        input_files: None,
+        output_files: None,
         slurm_stdout: None,
         slurm_stderr: None,
         error_info: None,

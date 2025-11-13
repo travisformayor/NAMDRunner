@@ -177,12 +177,11 @@ impl<'a> CommandExecutor<'a> {
 pub fn zip_outputs_command(project_dir: &str, job_id: &str) -> Result<(String, String)> {
     use crate::validation::shell;
 
-    // Validate inputs
-    let clean_project_dir = shell::escape_parameter(project_dir);
-    let clean_job_id = shell::escape_parameter(job_id);
+    // Temp zip file path (use raw job_id, not escaped)
+    let temp_zip = format!("/tmp/namdrunner_outputs_{}.zip", job_id);
 
-    // Temp zip file path
-    let temp_zip = format!("/tmp/namdrunner_outputs_{}.zip", clean_job_id);
+    // Escape parameters for shell command
+    let clean_project_dir = shell::escape_parameter(project_dir);
     let clean_temp_zip = shell::escape_parameter(&temp_zip);
 
     // Build command: cd to job dir and zip outputs subdirectory
@@ -191,6 +190,29 @@ pub fn zip_outputs_command(project_dir: &str, job_id: &str) -> Result<(String, S
         clean_project_dir,
         clean_temp_zip,
         shell::escape_parameter(super::JobDirectoryStructure::OUTPUTS)
+    );
+
+    Ok((command, temp_zip))
+}
+
+/// Generate a zip command for archiving input files
+/// Creates zip in /tmp/ and returns the temp file path
+pub fn zip_inputs_command(project_dir: &str, job_id: &str) -> Result<(String, String)> {
+    use crate::validation::shell;
+
+    // Temp zip file path (use raw job_id, not escaped)
+    let temp_zip = format!("/tmp/namdrunner_inputs_{}.zip", job_id);
+
+    // Escape parameters for shell command
+    let clean_project_dir = shell::escape_parameter(project_dir);
+    let clean_temp_zip = shell::escape_parameter(&temp_zip);
+
+    // Build command: cd to job dir and zip input_files subdirectory
+    let command = format!(
+        "cd {} && zip -r {} {}",
+        clean_project_dir,
+        clean_temp_zip,
+        shell::escape_parameter(super::JobDirectoryStructure::INPUT_FILES)
     );
 
     Ok((command, temp_zip))
@@ -251,5 +273,89 @@ mod tests {
         assert_eq!(quick_result.exit_code, 0);
         assert!(quick_result.duration_ms < 1000);
         assert!(!quick_result.timed_out);
+    }
+
+    #[test]
+    fn test_zip_outputs_command_generation() {
+        let (command, temp_path) = zip_outputs_command("/projects/testuser/namdrunner_jobs/job_123", "job_123")
+            .expect("Should generate zip command");
+
+        // Verify command has all required components in correct structure
+        assert!(command.contains("cd"), "Must change to job directory");
+        assert!(command.contains("&&"), "Must chain commands");
+        assert!(command.contains("zip -r"), "Must use recursive zip");
+        assert!(command.contains("outputs"), "Must zip outputs directory");
+        assert!(command.contains("/projects/testuser/namdrunner_jobs/job_123"), "Must use correct project directory");
+
+        // Verify temp path uses job_id without escaping (for file system)
+        assert_eq!(temp_path, "/tmp/namdrunner_outputs_job_123.zip");
+        assert!(!temp_path.contains("'"), "Temp path should not have shell escaping");
+    }
+
+    #[test]
+    fn test_zip_outputs_command_escapes_special_characters() {
+        // Test that paths with spaces get properly escaped for shell safety
+        let (command, temp_path) = zip_outputs_command("/projects/user name/jobs/job_123", "job_123")
+            .expect("Should generate zip command");
+
+        // Path with spaces should be escaped (wrapped in quotes)
+        assert!(command.contains("'") || command.contains("\""), "Paths with spaces must be quoted");
+        assert!(command.contains("user name"), "Original path should be preserved in escaped form");
+
+        // Temp path still uses simple job_id
+        assert_eq!(temp_path, "/tmp/namdrunner_outputs_job_123.zip");
+    }
+
+    #[test]
+    fn test_zip_inputs_command_generation() {
+        let (command, temp_path) = zip_inputs_command("/projects/testuser/namdrunner_jobs/job_123", "job_123")
+            .expect("Should generate zip command");
+
+        // Verify command has all required components in correct structure
+        assert!(command.contains("cd"), "Must change to job directory");
+        assert!(command.contains("&&"), "Must chain commands");
+        assert!(command.contains("zip -r"), "Must use recursive zip");
+        assert!(command.contains("input_files"), "Must zip input_files directory");
+        assert!(command.contains("/projects/testuser/namdrunner_jobs/job_123"), "Must use correct project directory");
+
+        // Verify temp path uses job_id without escaping (for file system)
+        assert_eq!(temp_path, "/tmp/namdrunner_inputs_job_123.zip");
+        assert!(!temp_path.contains("'"), "Temp path should not have shell escaping");
+    }
+
+    #[test]
+    fn test_zip_inputs_command_escapes_special_characters() {
+        // Test that paths with spaces get properly escaped for shell safety
+        let (command, temp_path) = zip_inputs_command("/projects/user name/jobs/job_123", "job_123")
+            .expect("Should generate zip command");
+
+        // Path with spaces should be escaped (wrapped in quotes)
+        assert!(command.contains("'") || command.contains("\""), "Paths with spaces must be quoted");
+        assert!(command.contains("user name"), "Original path should be preserved in escaped form");
+
+        // Temp path still uses simple job_id
+        assert_eq!(temp_path, "/tmp/namdrunner_inputs_job_123.zip");
+    }
+
+    #[test]
+    fn test_remove_temp_file_command_generation() {
+        let command = remove_temp_file_command("/tmp/test_file.zip")
+            .expect("Should generate remove command");
+
+        // Verify uses force flag (no confirmation prompt)
+        assert!(command.contains("rm -f"), "Must use force flag to avoid prompts");
+        assert!(command.contains("/tmp/test_file.zip"), "Must include file path");
+        assert!(!command.contains("rm -rf"), "Should not use recursive flag for single file");
+    }
+
+    #[test]
+    fn test_remove_temp_file_command_escapes_special_characters() {
+        let command = remove_temp_file_command("/tmp/file with spaces.zip")
+            .expect("Should generate remove command");
+
+        // File path with spaces should be escaped
+        assert!(command.contains("rm -f"), "Must use force flag");
+        assert!(command.contains("'") || command.contains("\""), "Paths with spaces must be quoted");
+        assert!(command.contains("file with spaces"), "Original filename should be preserved in escaped form");
     }
 }

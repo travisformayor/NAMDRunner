@@ -36,6 +36,7 @@ export interface JobInfo {
   template_id: string;
   template_values: Record<string, any>;
   slurm_config: SlurmConfig;
+  input_files?: string[];
   output_files?: OutputFile[];
   remote_directory: string;
 }

@@ -70,6 +70,8 @@ pub fn run() {
             commands::files::upload_job_files,
             commands::files::download_job_output,
             commands::files::download_all_outputs,
+            commands::files::download_job_input,
+            commands::files::download_all_inputs,
             commands::files::list_job_files,
             // Template management
             commands::templates::list_templates,
