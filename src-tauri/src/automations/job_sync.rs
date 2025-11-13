@@ -445,4 +445,3 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<(u32, u32)
     Ok((jobs_found, jobs_imported))
 }
 
-// DELETED: Test module using NAMDConfig - needs rewrite for template system

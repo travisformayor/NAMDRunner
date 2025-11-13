@@ -40,7 +40,7 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
 
     info_log!("[Job Completion] Rsync complete - all files now in project directory");
 
-    // NOW fetch logs from project directory (after rsync)
+    // Fetch logs from project directory (after rsync)
     if let Err(e) = crate::automations::fetch_slurm_logs_if_needed(job).await {
         error_log!("[Job Completion] Failed to fetch logs: {}", e);
         // Don't fail completion if log fetch fails - logs are nice-to-have
@@ -70,7 +70,6 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     Ok(())
 }
 
-// DELETED: Tests using NAMDConfig - will be rewritten for template system
 // Job completion automation logic doesn't depend on NAMD config structure
 // TODO: Add tests for template-based job completion in future phase
 

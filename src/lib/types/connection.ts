@@ -63,22 +63,3 @@ export interface SFTPService {
   createDirectory(remotePath: string): Promise<Result<void>>;
   getFileInfo(remotePath: string): Promise<Result<FileInfo>>;
 }
-
-// Simple state manager interface for mock client
-export interface ConnectionStateManager {
-  getCurrentState(): ConnectionState;
-  transitionTo(state: ConnectionState, reason?: string): Result<void>;
-  isConnected(): boolean;
-  getStateHistory?(): StateTransition[];
-  getLastError?(): import('./errors').ConnectionError | null;
-  canRetry?(): boolean;
-}
-
-// Simple session manager interface for mock client
-export interface SessionManager {
-  saveSession(session_info: SessionInfo): Promise<Result<void>>;
-  loadSession(): Promise<Result<SessionInfo | null>>;
-  clearSession(): Promise<Result<void>>;
-  getSessionInfo?(): SessionInfo | null;
-  getSessionDiagnostics?(): any;
-}

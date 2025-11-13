@@ -218,7 +218,6 @@ pub mod shell {
 }
 
 /// File validation utilities for NAMDRunner
-// DELETED: files module - file validation now handled by template system
 /// Directory path utilities for NAMDRunner
 pub mod paths {
     use super::*;
@@ -511,8 +510,6 @@ mod tests {
         }
     }
 
-    // DELETED: files_security_tests module - tested deleted files module
-
     mod integration_tests {
         use super::*;
 
@@ -597,7 +594,6 @@ mod tests {
             }
         }
 
-        // DELETED: test_file_validation_integration - tested deleted files::validate_remote_filename
 
         #[test]
         fn test_centralized_validation_consistency() {

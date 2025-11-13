@@ -8,9 +8,8 @@ use crate::database::with_database;
 use crate::{info_log, debug_log, error_log};
 use crate::automations::common;
 
-/// Simplified job submission automation that follows NAMDRunner's direct function patterns
-/// This replaces the complex AutomationStep trait system with a simple async function
-/// that provides progress reporting through callbacks.
+/// Simplified job submission automation that follows NAMDRunner's direct function patterns.
+/// Provides progress reporting through callbacks.
 ///
 /// Key functionality: Creates scratch directories, copies files from project to scratch,
 /// submits to SLURM, and updates job status. This maintains proper workflow separation.
@@ -123,4 +122,3 @@ pub async fn execute_job_submission_with_progress(
     })
 }
 
-// DELETED: Test module using NAMDConfig - needs rewrite for template system

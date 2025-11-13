@@ -41,9 +41,8 @@ pub fn create_job_info(
     }
 }
 
-/// Simplified job creation automation that follows NAMDRunner's direct function patterns
-/// This replaces the complex AutomationStep trait system with a simple async function
-/// that provides progress reporting through callbacks.
+/// Simplified job creation automation that follows NAMDRunner's direct function patterns.
+/// Provides progress reporting through callbacks.
 ///
 /// Key improvement: Job creation ONLY creates project directories, NOT scratch directories.
 /// Scratch directories are created during job submission, maintaining proper workflow separation.
@@ -168,7 +167,7 @@ pub async fn execute_job_creation_with_progress(
 
     // Create JobInfo using factory function (sets Created status and timestamp)
     // scratch_dir remains None until job submission
-    // Use template_values_for_rendering (filenames only) instead of original params (full paths)
+    // Use template_values_for_rendering (filenames only, not full paths)
     let mut job_info = create_job_info(
         job_id.clone(),
         clean_job_name,

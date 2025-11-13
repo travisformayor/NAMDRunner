@@ -34,7 +34,7 @@ pub struct CreateJobParams {
     pub slurm_config: SlurmConfig,
 }
 
-// Complex batch operation results (NOT migrated to ApiResult<T> - domain-specific)
+// Complex batch operation results (domain-specific)
 #[derive(Debug, Serialize)]
 pub struct SyncJobsResult {
     pub success: bool,
@@ -56,16 +56,3 @@ pub struct FailedUpload {
     pub file_name: String,
     pub error: String,
 }
-
-// DELETED: DownloadResult, ListFilesResult - now use ApiResult<T>
-// DELETED: AutoCompleteJobsResult - unused result type
-
-// Job discovery result types
-// DELETED: DiscoverJobsResult - defined locally in jobs.rs where it's used
-// DELETED: Cluster result types - commands use ApiResult and ValidationResult instead
-
-// DELETED: Template result types - now use ApiResult<T>
-// ListTemplatesResult, GetTemplateResult, CreateTemplateResult, UpdateTemplateResult, DeleteTemplateResult
-
-
-// DELETED: PreviewResult - now use ApiResult<String>

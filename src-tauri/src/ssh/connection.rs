@@ -443,7 +443,6 @@ mod tests {
     #[test]
     fn test_socket_addr_parsing_logic() {
         // This test verifies that we DON'T try to parse hostnames as SocketAddr directly
-        // (which was the original bug)
 
         // These strings would work with DNS resolution but NOT with SocketAddr::parse()
         let hostname_strings = vec![

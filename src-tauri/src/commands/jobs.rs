@@ -498,7 +498,7 @@ pub async fn validate_job_config(params: ValidateJobConfigParams) -> ValidationR
             params.template_values.clone()
         ).await;
 
-        // Merge template validation results (now uses unified ValidationResult)
+        // Merge template validation results
         issues.extend(template_validation.issues);
         warnings.extend(template_validation.warnings);
         suggestions.extend(template_validation.suggestions);
@@ -517,7 +517,7 @@ pub async fn validate_job_config(params: ValidateJobConfigParams) -> ValidationR
         qos: Some(qos_id.to_string()),
     };
 
-    // Use centralized resource validation (replaces duplicate checks)
+    // Use centralized resource validation
     let resource_validation = crate::validation::job_validation::validate_resource_allocation(
         &slurm_config,
         partition_id,

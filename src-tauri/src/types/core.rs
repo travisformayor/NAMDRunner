@@ -133,7 +133,7 @@ pub struct JobInfo {
     pub slurm_stdout: Option<String>,
     pub slurm_stderr: Option<String>,
 
-    // Template-based configuration (replaces NAMDConfig)
+    // Template-based configuration
     pub template_id: String,
     pub template_values: std::collections::HashMap<String, serde_json::Value>,
 

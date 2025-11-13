@@ -40,10 +40,6 @@ export interface JobInfo {
   remote_directory: string;
 }
 
-// DELETED: NAMDConfig - replaced by template system
-// DELETED: CellBasisVector - part of NAMDConfig
-// DELETED: InputFile - files now stored in template_values
-
 export interface SlurmConfig {
   cores: number;
   memory: string;
@@ -113,7 +109,7 @@ export interface CreateJobParams {
   slurm_config: SlurmConfig;
 }
 
-// Complex batch operation results (NOT migrated to ApiResult<T>)
+// Complex batch operation results (domain-specific)
 export interface SyncJobsResult {
   success: boolean;
   jobs: JobInfo[];           // Complete job list after sync
@@ -205,7 +201,6 @@ export interface ClusterCapabilities {
   billing_rates: BillingRates;
 }
 
-// Domain-specific validation result (NOT migrated to ApiResult<T>)
 // Unified validation result type matching Rust ValidationResult
 export interface ValidationResult {
   is_valid: boolean;

@@ -320,7 +320,7 @@ impl<'a> SFTPOperations<'a> {
     }
 
     /// Create a directory (single level only - use SSH mkdir -p for recursive)
-    /// Note: Directory creation now uses SSH commands in manager.rs for better performance
+    /// Note: For recursive directory creation, use SSH commands in manager.rs for better performance
     pub fn create_directory(&self, remote_path: &str, mode: i32) -> Result<()> {
         let sftp = self.get_sftp()?;
 

@@ -69,7 +69,6 @@ pub async fn upload_job_files(app_handle: AppHandle, job_id: String, files: Vec<
     upload_job_files_real(app_handle, job_id, files).await
 }
 
-// DELETED: upload_job_files_demo() - demo mode removed
 
 async fn upload_job_files_real(app_handle: AppHandle, job_id: String, files: Vec<FileUpload>) -> UploadResult {
     // Validate and sanitize job ID
@@ -217,7 +216,6 @@ pub async fn download_job_output(job_id: String, file_path: String) -> ApiResult
     download_job_output_real(job_id, file_path).await
 }
 
-// DELETED: download_job_output_demo - demo mode removed
 
 async fn download_job_output_real(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
     use rfd::FileDialog;
@@ -389,7 +387,6 @@ pub async fn list_job_files(job_id: String) -> ApiResult<Vec<RemoteFile>> {
     list_job_files_real(job_id).await
 }
 
-// DELETED: list_job_files_demo - demo mode removed
 
 async fn list_job_files_real(job_id: String) -> ApiResult<Vec<RemoteFile>> {
     // Validate and sanitize job ID
@@ -515,5 +512,3 @@ fn classify_file_type(filename: &str, relative_prefix: &str) -> FileType {
     }
 }
 
-// DELETED: Tests using NAMDConfig - will be rewritten for template system
-// DELETED: Test module using NAMDConfig - needs rewrite for template system

@@ -283,11 +283,11 @@ pub fn reinitialize_database(db_path: &str) -> Result<()> {
 
     let mut database_lock = DATABASE.lock().unwrap();
 
-    // Drop old connection (closes SQLite connection)
+    // Drop existing connection (closes SQLite connection)
     if database_lock.is_some() {
         debug_log!("[Database] Closing existing connection");
         *database_lock = None;
-        // Old JobDatabase is dropped here, closing the Connection
+        // JobDatabase is dropped here, closing the Connection
     }
 
     // Create new connection

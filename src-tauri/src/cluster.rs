@@ -5,9 +5,8 @@
 /// - Cluster capabilities (partitions, QoS, presets, billing)
 /// - Resource limits and validation rules
 ///
-/// This module consolidates what was previously split between cluster_config.rs
-/// and config.rs into a unified ClusterProfile concept, making the system
-/// ready for future multi-cluster support while keeping current implementation simple.
+/// Provides a unified ClusterProfile concept, making the system ready for future 
+/// multi-cluster support while keeping current implementation simple.
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 
