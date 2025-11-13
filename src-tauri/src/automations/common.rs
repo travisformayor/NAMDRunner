@@ -137,4 +137,86 @@ mod tests {
         assert_eq!(job.status, JobStatus::Completed);
         assert!(job.completed_at.is_some());
     }
+
+    #[test]
+    fn test_touch_job_timestamp_updates_timestamp_only() {
+        let mut job = JobInfo {
+            job_id: "test_job".to_string(),
+            job_name: "Test".to_string(),
+            status: JobStatus::Running,
+            slurm_job_id: Some("12345".to_string()),
+            created_at: Utc::now().to_rfc3339(),
+            updated_at: None,
+            submitted_at: Some(Utc::now().to_rfc3339()),
+            completed_at: None,
+            project_dir: Some("/test/project".to_string()),
+            scratch_dir: Some("/test/scratch".to_string()),
+            error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
+            template_id: "test".to_string(),
+            template_values: std::collections::HashMap::new(),
+            slurm_config: crate::types::SlurmConfig {
+                cores: 4,
+                memory: "16GB".to_string(),
+                walltime: "04:00:00".to_string(),
+                partition: Some("amilan".to_string()),
+                qos: Some("normal".to_string()),
+            },
+            output_files: None,
+            remote_directory: "/test/dir".to_string(),
+        };
+
+        // Record original state
+        let original_status = job.status.clone();
+        let original_completed_at = job.completed_at.clone();
+
+        // Call touch_job_timestamp
+        touch_job_timestamp(&mut job);
+
+        // Verify only updated_at changed
+        assert!(job.updated_at.is_some(), "updated_at should be set");
+        assert_eq!(job.status, original_status, "status should not change");
+        assert_eq!(job.completed_at, original_completed_at, "completed_at should not change");
+    }
+
+    #[test]
+    fn test_touch_job_timestamp_on_completed_job() {
+        let mut job = JobInfo {
+            job_id: "completed_job".to_string(),
+            job_name: "Test".to_string(),
+            status: JobStatus::Completed,
+            slurm_job_id: Some("12345".to_string()),
+            created_at: Utc::now().to_rfc3339(),
+            updated_at: Some(Utc::now().to_rfc3339()),
+            submitted_at: Some(Utc::now().to_rfc3339()),
+            completed_at: Some(Utc::now().to_rfc3339()),
+            project_dir: Some("/test/project".to_string()),
+            scratch_dir: Some("/test/scratch".to_string()),
+            error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
+            template_id: "test".to_string(),
+            template_values: std::collections::HashMap::new(),
+            slurm_config: crate::types::SlurmConfig {
+                cores: 4,
+                memory: "16GB".to_string(),
+                walltime: "04:00:00".to_string(),
+                partition: Some("amilan".to_string()),
+                qos: Some("normal".to_string()),
+            },
+            output_files: None,
+            remote_directory: "/test/dir".to_string(),
+        };
+
+        // Record original state
+        let old_completed_at = job.completed_at.clone();
+
+        // Touch timestamp
+        touch_job_timestamp(&mut job);
+
+        // Verify completed_at is NOT changed (only updated_at changes)
+        assert_eq!(job.completed_at, old_completed_at, "completed_at should not be overwritten");
+        assert_eq!(job.status, JobStatus::Completed, "status should remain Completed");
+    }
 }
