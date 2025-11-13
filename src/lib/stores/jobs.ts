@@ -13,21 +13,17 @@ import { listen } from '@tauri-apps/api/event';
 import { sessionActions } from './session';
 
 // Helper: Detect if error indicates connection failure
-function isConnectionError(errorMessage: string): boolean {
+// Exported for testing
+export function isConnectionError(errorMessage: string): boolean {
   const msg = errorMessage.toLowerCase();
   return msg.includes('timeout') ||
+         msg.includes('timed out') ||
          msg.includes('not connected') ||
          msg.includes('connection') ||
+         msg.includes('disconnect') ||
          msg.includes('broken pipe') ||
          msg.includes('network') ||
          msg.includes('ssh');
-}
-
-// Helper: Handle connection failure by updating session state
-function handleConnectionFailure(error: string) {
-  if (isConnectionError(error)) {
-    sessionActions.markExpired(error);
-  }
 }
 
 // Progress tracking interface
@@ -104,7 +100,9 @@ function createJobsStore() {
         } else {
           // Sync failed - check if it's a connection error
           const errorMsg = syncResult.errors.join(', ');
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
 
           update(state => ({
             ...state,
@@ -116,7 +114,9 @@ function createJobsStore() {
       } catch (error) {
         // Check if exception indicates connection failure
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
 
         update(state => ({
           ...state,
@@ -165,7 +165,9 @@ function createJobsStore() {
         } else {
           // Job creation failed - check for connection error
           const errorMsg = result.error || 'Job creation failed';
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
 
           update(state => ({
             ...state,
@@ -176,7 +178,9 @@ function createJobsStore() {
       } catch (error) {
         // Job creation error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
 
         update(state => ({
           ...state,
@@ -234,7 +238,9 @@ function createJobsStore() {
         } else {
           // Submission failed - check for connection error
           const errorMsg = result.error || 'Job submission failed';
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
 
           update(state => ({
             ...state,
@@ -245,7 +251,9 @@ function createJobsStore() {
       } catch (error) {
         // Job submission error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
 
         update(state => ({
           ...state,
@@ -273,13 +281,17 @@ function createJobsStore() {
         } else {
           // Deletion failed - check for connection error
           const errorMsg = result.error || 'Job deletion failed';
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
           return { success: false, error: errorMsg };
         }
       } catch (error) {
         // Job deletion error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
 
         return { success: false, error: errorMsg };
       }
@@ -300,13 +312,17 @@ function createJobsStore() {
         } else {
           // Status check failed - check for connection error
           const errorMsg = result.error || 'Job status check failed';
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
           return { success: false, error: errorMsg };
         }
       } catch (error) {
         // Job status check error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
         return { success: false, error: errorMsg };
       }
     },

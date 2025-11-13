@@ -5,11 +5,11 @@
   import AlertDialog from '../ui/AlertDialog.svelte';
   import { logger } from '$lib/utils/logger';
   import { jobsStore } from '$lib/stores/jobs';
-  import { loadTemplates } from '$lib/stores/templateStore';
+  import { templateStore } from '$lib/stores/templateStore';
 
   // Store subscriptions
   $: databaseInfo = $settingsStore.databaseInfo;
-  $: isLoading = $settingsStore.isLoading;
+  $: isLoading = $settingsStore.loading;
 
   // Dialog states
   let showRestoreWarning = false;
@@ -69,7 +69,7 @@
     if (result.success) {
       // Reload all stores after restore
       await jobsStore.loadFromDatabase();
-      await loadTemplates();
+      await templateStore.loadTemplates();
       showAlertDialog('Database Restored', 'Database restored successfully. All data has been reloaded.', 'success');
     } else if (result.error !== 'Restore cancelled') {
       showAlertDialog('Restore Failed', `Restore failed: ${result.error}`, 'error');
@@ -90,7 +90,7 @@
     if (result.success) {
       // Reload all stores after reset
       await jobsStore.loadFromDatabase();
-      await loadTemplates();
+      await templateStore.loadTemplates();
       showAlertDialog('Database Reset', 'Database reset successfully. All data has been cleared.', 'success');
     } else {
       showAlertDialog('Reset Failed', `Reset failed: ${result.error}`, 'error');

@@ -1,27 +1,30 @@
-import { writable } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
 import type { DatabaseInfo, DatabaseOperationData, ApiResult } from '../types/api';
 import { logger } from '../utils/logger';
 
+// Settings store state
 interface SettingsState {
   databaseInfo: DatabaseInfo | null;
-  isLoading: boolean;
+  loading: boolean;
 }
 
 const initialState: SettingsState = {
   databaseInfo: null,
-  isLoading: false,
+  loading: false,
 };
 
+// Create settings store
 function createSettingsStore() {
-  const { subscribe, set, update } = writable<SettingsState>(initialState);
+  const { subscribe, update } = writable<SettingsState>(initialState);
 
   return {
     subscribe,
 
-    async loadDatabaseInfo() {
+    // Load database information
+    async loadDatabaseInfo(): Promise<void> {
       logger.debug('Settings', 'Loading database info');
-      update(state => ({ ...state, isLoading: true }));
+      update(state => ({ ...state, loading: true }));
 
       const result = await invoke<ApiResult<DatabaseInfo>>('get_database_info');
 
@@ -34,11 +37,11 @@ function createSettingsStore() {
             size_bytes,
             job_count,
           },
-          isLoading: false,
+          loading: false,
         }));
       } else {
         logger.error('Settings', `Failed to load database info: ${result.error}`);
-        update(state => ({ ...state, isLoading: false }));
+        update(state => ({ ...state, loading: false }));
       }
     },
 
@@ -87,4 +90,9 @@ function createSettingsStore() {
   };
 }
 
+// Export store instance
 export const settingsStore = createSettingsStore();
+
+// Derived stores for convenience
+export const databaseInfo = derived(settingsStore, $store => $store.databaseInfo);
+export const settingsLoading = derived(settingsStore, $store => $store.loading);

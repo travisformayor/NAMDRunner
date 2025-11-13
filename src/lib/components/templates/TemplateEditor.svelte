@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { logger } from '$lib/utils/logger';
-  import { createTemplate, updateTemplate, deleteTemplate, templatesError } from '$lib/stores/templateStore';
+  import { templateStore, templatesError } from '$lib/stores/templateStore';
   import type { Template } from '$lib/types/template';
   import type { ApiResult } from '$lib/types/api';
   import { getVariableTypeName } from '$lib/types/template';
@@ -91,9 +91,9 @@
 
     let success = false;
     if (mode === 'create') {
-      success = await createTemplate(templateData);
+      success = await templateStore.createTemplate(templateData);
     } else {
-      success = await updateTemplate(id, templateData);
+      success = await templateStore.updateTemplate(id, templateData);
     }
 
     isSaving = false;
@@ -118,7 +118,7 @@
   async function handleDeleteConfirm() {
     if (!id) return;
 
-    const success = await deleteTemplate(id);
+    const success = await templateStore.deleteTemplate(id);
 
     showDeleteConfirm = false;
 

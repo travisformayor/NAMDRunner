@@ -3,7 +3,7 @@
   import { logger } from '$lib/utils/logger';
   import { extractVariablesFromTemplate } from '$lib/utils/template-utils';
   import { onMount } from 'svelte';
-  import { templates, loadTemplates, loadTemplate, validateTemplateValues } from '$lib/stores/templateStore';
+  import { templates, templateStore, validateTemplateValues } from '$lib/stores/templateStore';
   import type { Template, VariableDefinition } from '$lib/types/template';
   import { getVariableTypeName } from '$lib/types/template';
 
@@ -41,7 +41,7 @@
     : [];
 
   onMount(async () => {
-    await loadTemplates();
+    await templateStore.loadTemplates();
   });
 
   // Reactively load template when templateId changes
@@ -53,7 +53,7 @@
   }
 
   async function loadTemplateAndInitialize(newTemplateId: string) {
-    const template = await loadTemplate(newTemplateId);
+    const template = await templateStore.loadTemplate(newTemplateId);
     if (template) {
       selectedTemplate = template;
       lastLoadedTemplateId = newTemplateId;
