@@ -3,7 +3,7 @@ use chrono::Utc;
 use crate::types::{JobInfo, JobStatus};
 use crate::database::with_database;
 use crate::ssh::ConnectionManager;
-use crate::error_log;
+use crate::log_error;
 
 /// Save job to database with error handling
 /// Clones job internally to satisfy database closure requirements
@@ -12,7 +12,7 @@ pub fn save_job_to_database(job: &JobInfo, context: &str) -> Result<()> {
 
     with_database(move |db| db.save_job(&job_clone))
         .map_err(|e| {
-            error_log!("[{}] Failed to save job to database: {}", context, e);
+            log_error!(category: context, message: "Failed to save job to database", details: "{}", e);
             anyhow!("Failed to save job to database: {}", e)
         })
 }
@@ -23,13 +23,13 @@ pub async fn require_connection_with_username(context: &str) -> Result<(&'static
     let connection_manager = crate::ssh::get_connection_manager();
 
     if !connection_manager.is_connected().await {
-        error_log!("[{}] SSH connection not active", context);
+        log_error!(category: context, message: "SSH connection not active");
         return Err(anyhow!("Not connected to cluster"));
     }
 
     let username = connection_manager.get_username().await
         .map_err(|e| {
-            error_log!("[{}] Failed to get username: {}", context, e);
+            log_error!(category: context, message: "Failed to get username", details: "{}", e);
             anyhow!("Failed to get cluster username: {}", e)
         })?;
 
@@ -41,7 +41,7 @@ pub async fn require_connection_with_username(context: &str) -> Result<(&'static
 pub fn require_project_dir<'a>(job: &'a JobInfo, context: &str) -> Result<&'a str> {
     job.project_dir.as_ref()
         .ok_or_else(|| {
-            error_log!("[{}] Job {} has no project directory", context, job.job_id);
+            log_error!(category: context, message: "Job has no project directory", details: "{}", job.job_id);
             anyhow!("Job has no project directory")
         })
         .map(|s| s.as_str())
@@ -52,7 +52,7 @@ pub fn require_project_dir<'a>(job: &'a JobInfo, context: &str) -> Result<&'a st
 pub fn require_scratch_dir<'a>(job: &'a JobInfo, context: &str) -> Result<&'a str> {
     job.scratch_dir.as_ref()
         .ok_or_else(|| {
-            error_log!("[{}] Job {} has no scratch directory", context, job.job_id);
+            log_error!(category: context, message: "Job has no scratch directory", details: "{}", job.job_id);
             anyhow!("Job has no scratch directory")
         })
         .map(|s| s.as_str())

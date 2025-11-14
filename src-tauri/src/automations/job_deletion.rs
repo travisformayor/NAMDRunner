@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use crate::{info_log, debug_log};
+use crate::{log_info, log_debug, toast_log};
 use crate::commands::helpers;
 use crate::database::with_database;
 use crate::ssh::get_connection_manager;
@@ -12,11 +12,11 @@ pub async fn execute_job_deletion(
     progress_callback: impl Fn(&str),
 ) -> Result<()> {
     progress_callback("Loading job information...");
-    debug_log!("[Job Deletion] Starting deletion for job: {}", job_id);
+    log_debug!(category: "Job Deletion", message: "Starting deletion for job", details: "{}", job_id);
 
     // Load job from database
     let job_info = helpers::load_job_or_fail(&job_id, "Job Deletion")?;
-    info_log!("[Job Deletion] Loaded job: {} ({})", job_info.job_id, job_info.job_name);
+    log_info!(category: "Job Deletion", message: "Loaded job", details: "{} ({})", job_info.job_id, job_info.job_name);
 
     // Cancel SLURM job if still active
     if matches!(job_info.status, crate::types::JobStatus::Pending | crate::types::JobStatus::Running) {
@@ -26,12 +26,12 @@ pub async fn execute_job_deletion(
             helpers::require_connection("Job Deletion").await?;
             let username = helpers::get_cluster_username("Job Deletion").await?;
 
-            debug_log!("[Job Deletion] Cancelling SLURM job: {}", slurm_job_id);
+            log_debug!(category: "Job Deletion", message: "Cancelling SLURM job", details: "{}", slurm_job_id);
             let slurm_sync = crate::slurm::status::SlurmStatusSync::new(&username);
             slurm_sync.cancel_job(slurm_job_id).await
                 .map_err(|e| anyhow!("Failed to cancel SLURM job {}: {}", slurm_job_id, e))?;
 
-            info_log!("[Job Deletion] Successfully cancelled SLURM job: {}", slurm_job_id);
+            log_info!(category: "Job Deletion", message: "Successfully cancelled SLURM job", details: "{}", slurm_job_id);
         }
     }
 
@@ -70,11 +70,11 @@ pub async fn execute_job_deletion(
                 return Err(anyhow!("Refusing to delete dangerous directory: {}", dir_path));
             }
 
-            debug_log!("[Job Deletion] Deleting {} directory: {}", dir_type, dir_path);
+            log_debug!(category: "Job Deletion", message: "Deleting directory", details: "{}: {}", dir_type, dir_path);
             connection_manager.delete_directory(&dir_path).await
                 .map_err(|e| anyhow!("Failed to delete {} directory '{}': {}", dir_type, dir_path, e))?;
 
-            info_log!("[Job Deletion] Deleted {} directory: {}", dir_type, dir_path);
+            log_info!(category: "Job Deletion", message: "Deleted directory", details: "{}: {}", dir_type, dir_path);
         }
     }
 
@@ -90,6 +90,6 @@ pub async fn execute_job_deletion(
         }
     })?;
 
-    info_log!("[Job Deletion] Successfully deleted job: {}", job_id);
+    toast_log!(category: "Job Deletion", message: "Job deleted successfully", details: "{}", job_id);
     Ok(())
 }

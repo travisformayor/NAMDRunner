@@ -1,6 +1,5 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { logger } from '$lib/utils/logger';
   import { templateStore, templatesError } from '$lib/stores/templateStore';
   import type { Template } from '$lib/types/template';
   import type { ApiResult } from '$lib/types/api';
@@ -176,11 +175,9 @@
         showTestPreview = true;
       } else {
         error = result.error || 'Failed to generate preview';
-        logger.error('[TemplateEditor]', `Preview failed: ${result.error || 'Unknown error'}`);
       }
     } catch (err) {
       error = 'Failed to generate preview';
-      logger.error('[TemplateEditor]', 'Preview error', err);
     } finally {
       isGeneratingPreview = false;
     }

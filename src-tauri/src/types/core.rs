@@ -11,6 +11,18 @@ pub struct ApiResult<T> {
     pub error: Option<String>,
 }
 
+/// Unified log message structure for frontend consumption
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppLogMessage {
+    pub level: String,
+    pub category: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
+    pub show_toast: bool,
+    pub timestamp: String,
+}
+
 impl<T> ApiResult<T> {
     /// Create a successful result with data
     pub fn success(data: T) -> Self {

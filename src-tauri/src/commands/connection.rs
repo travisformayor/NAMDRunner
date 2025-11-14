@@ -1,16 +1,16 @@
 use crate::types::*;
 use crate::types::response_data::ConnectionStatus;
 use crate::ssh::get_connection_manager;
-use crate::{info_log, debug_log, error_log};
+use crate::{log_info, log_debug, log_error, toast_log};
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn connect_to_cluster(params: ConnectParams) -> ApiResult<SessionInfo> {
-    info_log!("[CONNECT] Starting connection to {} as {}", params.host, params.username);
+    log_info!(category: "Connection", message: "Starting connection", details: "Host: {}, User: {}", params.host, params.username);
     let port = 22;
 
     match get_connection_manager().connect(params.host.clone(), port, params.username.clone(), &params.password).await {
         Ok(connection_info) => {
-            info_log!("[SSH] Successfully connected to {}:{} as {}", connection_info.host, connection_info.port, connection_info.username);
+            toast_log!(category: "Connection", message: "Successfully connected to cluster");
 
             let session_info = SessionInfo {
                 host: connection_info.host,
@@ -21,11 +21,11 @@ pub async fn connect_to_cluster(params: ConnectParams) -> ApiResult<SessionInfo>
             ApiResult::success(session_info)
         }
         Err(e) => {
-            error_log!("[SSH] Connection failed: {}", e);
+            log_error!(category: "Connection", message: "Connection failed", details: "Error: {}", e);
 
             let error_message = if let Some(ssh_err) = e.downcast_ref::<crate::ssh::errors::SSHError>() {
                 let conn_error = crate::ssh::errors::map_ssh_error(ssh_err);
-                debug_log!("[SSH] Error Category: {} (Code: {})", conn_error.category, conn_error.code);
+                log_debug!(category: "Connection", message: "Error details", details: "Category: {} (Code: {})", conn_error.category, conn_error.code);
 
                 format!("{} (Code: {}) - {}. Suggestions: {}",
                     conn_error.message,
@@ -35,7 +35,7 @@ pub async fn connect_to_cluster(params: ConnectParams) -> ApiResult<SessionInfo>
                 )
             } else {
                 let generic_msg = format!("Connection failed: {}", e);
-                error_log!("[SSH] Connection error: {}", generic_msg);
+                log_error!(category: "Connection", message: "Connection error", details: "{}", generic_msg);
                 generic_msg
             };
 

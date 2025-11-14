@@ -3,7 +3,7 @@ use crate::types::JobInfo;
 use crate::templates::Template;
 use crate::ssh::ConnectionManager;
 use crate::database::with_database;
-use crate::error_log;
+use crate::log_error;
 
 /// Require active SSH connection
 /// Returns ConnectionManager or error if not connected
@@ -12,7 +12,7 @@ pub async fn require_connection(context: &str) -> Result<&'static ConnectionMana
     let connection_manager = crate::ssh::get_connection_manager();
 
     if !connection_manager.is_connected().await {
-        error_log!("[{}] SSH connection not active", context);
+        log_error!(category: context, message: "SSH connection not active");
         return Err(anyhow!("Not connected to cluster"));
     }
 
@@ -27,11 +27,11 @@ pub fn load_job_or_fail(job_id: &str, context: &str) -> Result<JobInfo> {
 
     with_database(move |db| db.load_job(&job_id_owned))
         .map_err(|e| {
-            error_log!("[{}] Database error: {}", context, e);
+            log_error!(category: context, message: "Database error", details: "{}", e);
             anyhow!("Database error: {}", e)
         })?
         .ok_or_else(|| {
-            error_log!("[{}] Job {} not found", context, job_id);
+            log_error!(category: context, message: "Job not found", details: "Job ID: {}", job_id);
             anyhow!("Job '{}' not found", job_id)
         })
 }
@@ -43,7 +43,7 @@ pub async fn get_cluster_username(context: &str) -> Result<String> {
 
     connection_manager.get_username().await
         .map_err(|e| {
-            error_log!("[{}] Failed to get username: {}", context, e);
+            log_error!(category: context, message: "Failed to get username", details: "{}", e);
             anyhow!("Failed to get cluster username: {}", e)
         })
 }
@@ -55,11 +55,11 @@ pub fn load_template_or_fail(template_id: &str, context: &str) -> Result<Templat
 
     with_database(move |db| db.load_template(&template_id_owned))
         .map_err(|e| {
-            error_log!("[{}] Database error: {}", context, e);
+            log_error!(category: context, message: "Database error", details: "{}", e);
             anyhow!("Database error: {}", e)
         })?
         .ok_or_else(|| {
-            error_log!("[{}] Template '{}' not found", context, template_id);
+            log_error!(category: context, message: "Template not found", details: "Template ID: {}", template_id);
             anyhow!("Template '{}' not found", template_id)
         })
 }

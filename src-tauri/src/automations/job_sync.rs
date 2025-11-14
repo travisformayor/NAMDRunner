@@ -4,7 +4,7 @@ use crate::types::{JobInfo, JobStatus};
 use crate::ssh::get_connection_manager;
 use crate::database::with_database;
 use crate::slurm::status::SlurmStatusSync;
-use crate::{info_log, debug_log, error_log};
+use crate::{log_info, log_debug, log_error, toast_log};
 use crate::automations::common;
 
 /// Job sync result for a single job
@@ -24,39 +24,44 @@ pub struct JobSyncResult {
 /// - job_info.json on server
 /// - Triggers job_completion automation when jobs finish
 pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
-    info_log!("[Job Sync] Starting job status sync");
+    log_info!(category: "Job Sync", message: "Starting job status sync");
 
     // Verify SSH connection and get username
     let (_connection_manager, username) = common::require_connection_with_username("Job Sync").await?;
-    debug_log!("[Job Sync] Syncing jobs for user: {}", username);
+    log_debug!(category: "Job Sync", message: "Syncing jobs for user", details: "{}", username);
 
     // Load all jobs from database
     let all_jobs = with_database(move |db| db.load_all_jobs())
         .map_err(|e| {
-            error_log!("[Job Sync] Failed to load jobs from database: {}", e);
+            log_error!(category: "Job Sync", message: "Failed to load jobs from database", details: "{}", e);
             anyhow!("Failed to load jobs: {}", e)
         })?;
 
     // Check if database is empty (first connection after DB reset)
     // If empty, automatically discover jobs from cluster
     if all_jobs.is_empty() {
-        info_log!("[Job Sync] Database empty - triggering automatic job discovery");
+        log_info!(category: "Job Sync", message: "Database empty - triggering automatic job discovery");
 
         // Attempt discovery (don't fail sync if discovery fails)
         match discover_jobs_from_server_internal(&username).await {
             Ok(report) => {
-                info_log!(
-                    "[Job Sync] Discovery complete - imported {} jobs, {} failures",
-                    report.imported_jobs.len(),
-                    report.failed_imports.len()
-                );
+                if !report.imported_jobs.is_empty() {
+                    toast_log!(
+                        category: "Job Discovery",
+                        message: "Jobs imported from cluster",
+                        details: "{} jobs imported",
+                        report.imported_jobs.len()
+                    );
+                } else {
+                    log_info!(category: "Job Discovery", message: "No new jobs found on cluster");
+                }
 
                 // Log detailed results
                 for job in &report.imported_jobs {
-                    info_log!("[Job Sync] Imported: {} ({})", job.job_id, job.job_name);
+                    log_info!(category: "Job Sync", message: "Imported", details: "{} ({})", job.job_id, job.job_name);
                 }
                 for failure in &report.failed_imports {
-                    error_log!("[Job Sync] Failed to import {}: {}", failure.directory, failure.reason);
+                    log_error!(category: "Job Sync", message: "Failed to import", details: "{}: {}", failure.directory, failure.reason);
                 }
 
                 // Reload jobs after discovery
@@ -73,7 +78,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
             }
             Err(e) => {
                 // Log error but don't fail sync - continue with empty list
-                error_log!("[Job Sync] Discovery failed: {} - continuing with sync", e);
+                log_error!(category: "Job Sync", message: "Discovery failed - continuing with sync", details: "{}", e);
             }
         }
     }
@@ -85,7 +90,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         .collect();
 
     if active_jobs.is_empty() {
-        info_log!("[Job Sync] No active jobs to sync");
+        log_info!(category: "Job Sync", message: "No active jobs to sync");
         // Still return complete job list (even if no active jobs)
         return Ok(crate::types::SyncJobsResult {
             success: true,
@@ -95,7 +100,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         });
     }
 
-    info_log!("[Job Sync] Found {} active jobs to sync", active_jobs.len());
+    log_info!(category: "Job Sync", message: "Found active jobs to sync", details: "{} jobs", active_jobs.len());
 
     // Create SLURM status sync helper
     let slurm_sync = SlurmStatusSync::new(&username);
@@ -107,7 +112,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         .collect();
 
     if job_ids.is_empty() {
-        info_log!("[Job Sync] No jobs have SLURM job IDs, skipping batch query");
+        log_info!(category: "Job Sync", message: "No jobs have SLURM job IDs, skipping batch query");
         // Load complete job list to return
         let final_jobs = with_database(|db| db.load_all_jobs())
             .map_err(|e| anyhow!("Failed to load jobs: {}", e))?;
@@ -119,12 +124,12 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         });
     }
 
-    debug_log!("[Job Sync] Batch querying {} SLURM jobs", job_ids.len());
+    log_debug!(category: "Job Sync", message: "Batch querying SLURM jobs", details: "{} jobs", job_ids.len());
 
     // Use centralized batch query method (1 SSH command instead of N)
     let batch_results = slurm_sync.sync_all_jobs(&job_ids).await
         .map_err(|e| {
-            error_log!("[Job Sync] Batch SLURM query failed: {}", e);
+            log_error!(category: "Job Sync", message: "Batch SLURM query failed", details: "{}", e);
             anyhow!("Failed to query SLURM job status: {}", e)
         })?;
 
@@ -149,22 +154,24 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
                     match sync_single_job_with_status(&slurm_sync, job.clone(), new_status).await {
                         Ok(result) => {
                             if result.updated {
-                                info_log!(
-                                    "[Job Sync] Job {} status changed: {:?} -> {:?}",
+                                log_info!(
+                                    category: "Job Sync",
+                                    message: "Job status changed",
+                                    details: "{}: {:?} -> {:?}",
                                     result.job_id, result.old_status, result.new_status
                                 );
                             } else {
-                                debug_log!("[Job Sync] Job {} status unchanged: {:?}", result.job_id, result.old_status);
+                                log_debug!(category: "Job Sync", message: "Job status unchanged", details: "{}: {:?}", result.job_id, result.old_status);
                             }
                             results.push(result);
                         }
                         Err(e) => {
-                            error_log!("[Job Sync] Failed to process job {}: {}", job.job_id, e);
+                            log_error!(category: "Job Sync", message: "Failed to process job", details: "{}: {}", job.job_id, e);
                         }
                     }
                 }
                 Err(e) => {
-                    error_log!("[Job Sync] Failed to query SLURM status for {}: {}", slurm_job_id, e);
+                    log_error!(category: "Job Sync", message: "Failed to query SLURM status", details: "{}: {}", slurm_job_id, e);
                 }
             }
         }
@@ -172,7 +179,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
 
     let jobs_updated = results.iter().filter(|r| r.updated).count() as u32;
 
-    info_log!("[Job Sync] Sync completed - {} jobs checked, {} updated",
+    log_info!(category: "Job Sync", message: "Sync completed", details: "{} jobs checked, {} updated",
         results.len(),
         jobs_updated
     );
@@ -180,7 +187,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
     // Load complete job list to return (backend owns complete state)
     let all_jobs = with_database(|db| db.load_all_jobs())
         .map_err(|e| {
-            error_log!("[Job Sync] Failed to load complete job list: {}", e);
+            log_error!(category: "Job Sync", message: "Failed to load complete job list", details: "{}", e);
             anyhow!("Failed to load jobs: {}", e)
         })?;
 
@@ -210,32 +217,34 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
     }
 
     // Status changed - update job
-    debug_log!("[Job Sync] Status changed for job {}: {:?} -> {:?}", job_id, old_status, new_status);
+    log_debug!(category: "Job Sync", message: "Status changed for job", details: "{}: {:?} -> {:?}", job_id, old_status, new_status);
 
     common::update_job_status(&mut job, new_status.clone());
 
     // Trigger automatic completion for terminal states
     if matches!(new_status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
-        info_log!("[Job Sync] Job {} reached terminal state: {:?}", job_id, new_status);
+        log_info!(category: "Job Sync", message: "Job reached terminal state", details: "{}: {:?}", job_id, new_status);
 
         // Trigger automatic job completion (rsync scratch→project, fetch logs, update metadata)
         if let Err(e) = crate::automations::execute_job_completion_internal(&mut job).await {
-            error_log!("[Job Sync] Automatic completion failed for {}: {}", job_id, e);
+            log_error!(category: "Job Sync", message: "Automatic completion failed", details: "{}: {}", job_id, e);
             // Don't fail sync - completion will retry on next sync
         } else {
-            info_log!("[Job Sync] Automatic completion successful for {}", job_id);
+            log_info!(category: "Job Sync", message: "Automatic completion successful", details: "{}", job_id);
         }
     }
 
     // Update database (Metadata-at-Boundaries: only update DB during execution, not server metadata)
     // Server metadata is updated at lifecycle boundaries (creation, submission, completion)
     common::save_job_to_database(&job, "Job Sync")?;
-    debug_log!("[Job Sync] Database updated for job {}", job_id);
+    log_debug!(category: "Job Sync", message: "Database updated for job", details: "{}", job_id);
 
     // Log if job finished
     if matches!(new_status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
-        info_log!(
-            "[Job Sync] Job {} finished with status {:?} - outputs available in scratch: {:?}",
+        log_info!(
+            category: "Job Sync",
+            message: "Job finished",
+            details: "{} - status: {:?}, outputs in: {:?}",
             job_id,
             new_status,
             job.scratch_dir
@@ -256,14 +265,14 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
 ///
 /// NOTE: Logs are fetched from project_dir (after rsync in job completion)
 pub async fn fetch_slurm_logs_if_needed(job: &mut JobInfo) -> Result<()> {
-    debug_log!("[Log Fetch] ENTRY: job_id={}, status={:?}, project_dir={:?}, slurm_job_id={:?}",
+    log_debug!(category: "Log Fetch", message: "ENTRY", details: "job_id={}, status={:?}, project_dir={:?}, slurm_job_id={:?}",
         job.job_id, job.status, job.project_dir, job.slurm_job_id);
 
     // Use project_dir instead of scratch_dir (rsync happens first in job completion)
     let project_dir = match &job.project_dir {
         Some(dir) => dir,
         None => {
-            debug_log!("[Log Fetch] No project directory for job {}, skipping", job.job_id);
+            log_debug!(category: "Log Fetch", message: "No project directory, skipping", details: "{}", job.job_id);
             return Ok(());
         }
     };
@@ -271,7 +280,7 @@ pub async fn fetch_slurm_logs_if_needed(job: &mut JobInfo) -> Result<()> {
     let slurm_job_id = match &job.slurm_job_id {
         Some(id) => id,
         None => {
-            debug_log!("[Log Fetch] No SLURM job ID for job {}, skipping", job.job_id);
+            log_debug!(category: "Log Fetch", message: "No SLURM job ID, skipping", details: "{}", job.job_id);
             return Ok(());
         }
     };
@@ -281,45 +290,45 @@ pub async fn fetch_slurm_logs_if_needed(job: &mut JobInfo) -> Result<()> {
     // Fetch stdout if not cached (from project directory after rsync)
     if job.slurm_stdout.is_none() {
         let stdout_path = format!("{}/{}_{}.out", project_dir, job.job_name, slurm_job_id);
-        debug_log!("[Log Fetch] Stdout not cached, constructing path: {}", stdout_path);
-        debug_log!("[Log Fetch] Attempting to read stdout file from remote...");
+        log_debug!(category: "Log Fetch", message: "Stdout not cached, constructing path", details: "{}", stdout_path);
+        log_debug!(category: "Log Fetch", message: "Attempting to read stdout file from remote");
 
         match connection_manager.read_remote_file(&stdout_path).await {
             Ok(content) => {
                 let content_len = content.len();
                 job.slurm_stdout = Some(content);
-                info_log!("[Log Fetch] Cached stdout for job {} ({} bytes)", job.job_id, content_len);
+                log_info!(category: "Log Fetch", message: "Cached stdout for job", details: "{} ({} bytes)", job.job_id, content_len);
             }
             Err(e) => {
-                debug_log!("[Log Fetch] Could not read stdout for {}: {} (file may not exist yet)", job.job_id, e);
+                log_debug!(category: "Log Fetch", message: "Could not read stdout (file may not exist yet)", details: "{}: {}", job.job_id, e);
                 // Gracefully handle - log file might not exist yet or job produced no output
             }
         }
     } else {
-        debug_log!("[Log Fetch] Stdout already cached for job {}, skipping", job.job_id);
+        log_debug!(category: "Log Fetch", message: "Stdout already cached, skipping", details: "{}", job.job_id);
     }
 
     // Fetch stderr if not cached (from project directory after rsync)
     if job.slurm_stderr.is_none() {
         let stderr_path = format!("{}/{}_{}.err", project_dir, job.job_name, slurm_job_id);
-        debug_log!("[Log Fetch] Stderr not cached, constructing path: {}", stderr_path);
-        debug_log!("[Log Fetch] Attempting to read stderr file from remote...");
+        log_debug!(category: "Log Fetch", message: "Stderr not cached, constructing path", details: "{}", stderr_path);
+        log_debug!(category: "Log Fetch", message: "Attempting to read stderr file from remote");
 
         match connection_manager.read_remote_file(&stderr_path).await {
             Ok(content) => {
                 let content_len = content.len();
                 job.slurm_stderr = Some(content);
-                info_log!("[Log Fetch] Cached stderr for job {} ({} bytes)", job.job_id, content_len);
+                log_info!(category: "Log Fetch", message: "Cached stderr for job", details: "{} ({} bytes)", job.job_id, content_len);
             }
             Err(e) => {
-                debug_log!("[Log Fetch] Could not read stderr for {}: {} (file may not exist yet)", job.job_id, e);
+                log_debug!(category: "Log Fetch", message: "Could not read stderr (file may not exist yet)", details: "{}: {}", job.job_id, e);
             }
         }
     } else {
-        debug_log!("[Log Fetch] Stderr already cached for job {}, skipping", job.job_id);
+        log_debug!(category: "Log Fetch", message: "Stderr already cached, skipping", details: "{}", job.job_id);
     }
 
-    debug_log!("[Log Fetch] EXIT: Successfully completed for job {}", job.job_id);
+    log_debug!(category: "Log Fetch", message: "EXIT: Successfully completed", details: "{}", job.job_id);
     Ok(())
 }
 
@@ -328,7 +337,7 @@ pub async fn fetch_slurm_logs_if_needed(job: &mut JobInfo) -> Result<()> {
 ///
 /// NOTE: Logs are fetched from project_dir (after rsync in job completion)
 pub async fn refetch_slurm_logs(job: &mut JobInfo) -> Result<()> {
-    debug_log!("[Log Refetch] ENTRY: job_id={}, status={:?}", job.job_id, job.status);
+    log_debug!(category: "Log Refetch", message: "ENTRY", details: "job_id={}, status={:?}", job.job_id, job.status);
 
     // Use project_dir instead of scratch_dir (logs have been rsynced to project)
     let project_dir = job.project_dir.as_ref()
@@ -341,16 +350,16 @@ pub async fn refetch_slurm_logs(job: &mut JobInfo) -> Result<()> {
 
     // Force fetch stdout (overwrite cache) from project directory
     let stdout_path = format!("{}/{}_{}.out", project_dir, job.job_name, slurm_job_id);
-    debug_log!("[Log Refetch] Fetching stdout from: {}", stdout_path);
+    log_debug!(category: "Log Refetch", message: "Fetching stdout", details: "{}", stdout_path);
 
     match connection_manager.read_remote_file(&stdout_path).await {
         Ok(content) => {
             let content_len = content.len();
             job.slurm_stdout = Some(content);
-            info_log!("[Log Refetch] Refetched stdout for job {} ({} bytes)", job.job_id, content_len);
+            log_info!(category: "Log Refetch", message: "Refetched stdout for job", details: "{} ({} bytes)", job.job_id, content_len);
         }
         Err(e) => {
-            debug_log!("[Log Refetch] Could not read stdout for {}: {}", job.job_id, e);
+            log_debug!(category: "Log Refetch", message: "Could not read stdout", details: "{}: {}", job.job_id, e);
             // Set to empty if file doesn't exist
             job.slurm_stdout = Some(String::new());
         }
@@ -358,21 +367,21 @@ pub async fn refetch_slurm_logs(job: &mut JobInfo) -> Result<()> {
 
     // Force fetch stderr (overwrite cache) from project directory
     let stderr_path = format!("{}/{}_{}.err", project_dir, job.job_name, slurm_job_id);
-    debug_log!("[Log Refetch] Fetching stderr from: {}", stderr_path);
+    log_debug!(category: "Log Refetch", message: "Fetching stderr", details: "{}", stderr_path);
 
     match connection_manager.read_remote_file(&stderr_path).await {
         Ok(content) => {
             let content_len = content.len();
             job.slurm_stderr = Some(content);
-            info_log!("[Log Refetch] Refetched stderr for job {} ({} bytes)", job.job_id, content_len);
+            log_info!(category: "Log Refetch", message: "Refetched stderr for job", details: "{} ({} bytes)", job.job_id, content_len);
         }
         Err(e) => {
-            debug_log!("[Log Refetch] Could not read stderr for {}: {}", job.job_id, e);
+            log_debug!(category: "Log Refetch", message: "Could not read stderr", details: "{}: {}", job.job_id, e);
             job.slurm_stderr = Some(String::new());
         }
     }
 
-    debug_log!("[Log Refetch] EXIT: Successfully completed for job {}", job.job_id);
+    log_debug!(category: "Log Refetch", message: "EXIT: Successfully completed", details: "{}", job.job_id);
     Ok(())
 }
 
@@ -381,19 +390,19 @@ pub async fn refetch_slurm_logs(job: &mut JobInfo) -> Result<()> {
 async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::types::response_data::DiscoveryReport> {
     use crate::types::response_data::{DiscoveryReport, JobSummary, FailedImport};
 
-    info_log!("[Job Discovery] Starting automatic discovery for user: {}", username);
+    log_info!(category: "Job Discovery", message: "Starting automatic discovery", details: "user: {}", username);
 
     let connection_manager = get_connection_manager();
 
     // Construct remote jobs directory path
     use crate::ssh::directory_structure::JobDirectoryStructure;
     let remote_jobs_dir = JobDirectoryStructure::project_base(username);
-    debug_log!("[Job Discovery] Scanning directory: {}", remote_jobs_dir);
+    log_debug!(category: "Job Discovery", message: "Scanning directory", details: "{}", remote_jobs_dir);
 
     // List directories in the jobs folder
     let job_dirs = connection_manager.list_files(&remote_jobs_dir).await
         .map_err(|e| {
-            error_log!("[Job Discovery] Failed to list directories: {}", e);
+            log_error!(category: "Job Discovery", message: "Failed to list directories", details: "{}", e);
             anyhow!("Failed to list job directories: {}", e)
         })?
         .into_iter()
@@ -401,7 +410,7 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
         .map(|f| f.name)
         .collect::<Vec<_>>();
 
-    info_log!("[Job Discovery] Found {} directories", job_dirs.len());
+    log_info!(category: "Job Discovery", message: "Found directories", details: "{} directories", job_dirs.len());
 
     let mut imported_jobs = Vec::new();
     let mut failed_imports = Vec::new();
@@ -415,7 +424,7 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
             Ok(content) => content,
             Err(e) => {
                 let error_msg = format!("Could not read job_info.json: {}", e);
-                debug_log!("[Job Discovery] {}: {}", job_dir, error_msg);
+                log_debug!(category: "Job Discovery", message: "Failed to read job info", details: "{}: {}", job_dir, error_msg);
                 failed_imports.push(FailedImport {
                     directory: job_dir,
                     reason: error_msg,
@@ -429,7 +438,7 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
             Ok(info) => info,
             Err(e) => {
                 let error_msg = format!("Invalid JSON: {}", e);
-                debug_log!("[Job Discovery] {}: {}", job_dir, error_msg);
+                log_debug!(category: "Job Discovery", message: "Invalid JSON", details: "{}: {}", job_dir, error_msg);
                 failed_imports.push(FailedImport {
                     directory: job_dir,
                     reason: error_msg,
@@ -451,12 +460,12 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
         let imported = with_database(move |db| {
             match db.load_job(&job_id_for_log) {
                 Ok(Some(_)) => {
-                    debug_log!("[Job Discovery] Job {} already exists, skipping", job_id_for_log);
+                    log_debug!(category: "Job Discovery", message: "Job already exists, skipping", details: "{}", job_id_for_log);
                     Ok(false)
                 }
                 Ok(None) => {
                     db.save_job(&job_info_clone)?;
-                    info_log!("[Job Discovery] Imported: {} ({})", job_id_for_log, job_name_for_log);
+                    log_info!(category: "Job Discovery", message: "Imported", details: "{} ({})", job_id_for_log, job_name_for_log);
                     Ok(true)
                 }
                 Err(e) => Err(e),
@@ -472,20 +481,22 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
         }
     }
 
-    info_log!(
-        "[Job Discovery] Complete - imported {} jobs, {} failures",
+    log_info!(
+        category: "Job Discovery",
+        message: "Complete",
+        details: "imported {} jobs, {} failures",
         imported_jobs.len(),
         failed_imports.len()
     );
 
     // Log imported jobs
     for job in &imported_jobs {
-        debug_log!("[Job Discovery] ✓ {} ({}) - status: {:?}", job.job_id, job.job_name, job.status);
+        log_debug!(category: "Job Discovery", message: "Imported successfully", details: "{} ({}) - status: {:?}", job.job_id, job.job_name, job.status);
     }
 
     // Log failures
     for failure in &failed_imports {
-        debug_log!("[Job Discovery] ✗ {} - {}", failure.directory, failure.reason);
+        log_debug!(category: "Job Discovery", message: "Failed import", details: "{} - {}", failure.directory, failure.reason);
     }
 
     Ok(DiscoveryReport {

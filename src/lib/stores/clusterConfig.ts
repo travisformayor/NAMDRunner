@@ -20,7 +20,6 @@ import type {
   ValidateResourceAllocationResult,
   ApiResult
 } from '../types/api';
-import { logger } from '../utils/logger';
 
 // Main store - holds full cluster capabilities from backend
 const clusterCapabilitiesStore = writable<ClusterCapabilities | null>(null);
@@ -31,27 +30,20 @@ const loadErrorStore = writable<string | null>(null);
  * Initialize cluster configuration - call once on app startup
  */
 export async function initClusterConfig(): Promise<void> {
-  logger.debug('ClusterConfig', 'Init started');
   try {
     loadErrorStore.set(null);
-    logger.debug('ClusterConfig', 'Calling backend getClusterCapabilities...');
     const result = await invoke<ApiResult<ClusterCapabilities>>('get_cluster_capabilities');
-    logger.debug('ClusterConfig', `Backend response: success=${result.success}, hasData=${!!result.data}`);
 
     if (result.success && result.data) {
-      logger.debug('ClusterConfig', `Setting cluster capabilities: ${result.data.partitions.length} partitions, ${result.data.qos_options.length} QOS, ${result.data.job_presets.length} presets`);
       clusterCapabilitiesStore.set(result.data);
       isLoadedStore.set(true);
-      logger.debug('ClusterConfig', 'Cluster config loaded successfully');
     } else {
       const error = result.error || 'Failed to load cluster configuration';
-      logger.debug('ClusterConfig', `Backend returned error: ${error}`);
       loadErrorStore.set(error);
       throw new Error(error);
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error loading cluster config';
-    logger.debug('ClusterConfig', `Exception during init: ${errorMsg}`);
     loadErrorStore.set(errorMsg);
     throw error;
   }
@@ -150,7 +142,6 @@ export async function calculateJobCost(
       gpu_count: gpuCount
     });
   } catch (error) {
-    logger.debug('ClusterConfig', `Cost calculation failed: ${error}`);
     return 0;
   }
 }
@@ -181,7 +172,6 @@ export async function suggestQos(walltimeHours: number, partitionId: string): Pr
       partition_id: partitionId
     });
   } catch (error) {
-    logger.debug('ClusterConfig', `QoS suggestion failed: ${error}`);
     // Fallback to default QoS
     const config = get(clusterCapabilitiesStore);
     const validQos = getQosForPartition(partitionId);
@@ -201,7 +191,6 @@ export async function estimateQueueTime(cores: number, partitionId: string): Pro
       partition_id: partitionId
     });
   } catch (error) {
-    logger.debug('ClusterConfig', `Queue time estimation failed: ${error}`);
     return 'Unknown';
   }
 }
@@ -233,7 +222,6 @@ export async function validateResourceRequest(
 
   // Call backend validation - pass parameters as-is, no conversion
   try {
-    logger.debug('ClusterConfig', `Calling backend validation: cores=${cores}, memory=${memory}, walltime=${walltime}, partition=${partitionId}, qos=${qosId}`);
     const result = await invoke<ValidateResourceAllocationResult>('validate_resource_allocation', {
       cores,
       memory,
@@ -241,10 +229,8 @@ export async function validateResourceRequest(
       partition_id: partitionId,
       qos_id: qosId
     });
-    logger.debug('ClusterConfig', `Backend validation result: is_valid=${result.is_valid}, issues=${JSON.stringify(result.issues)}`);
     return result;
   } catch (error) {
-    logger.debug('ClusterConfig', `Backend validation ERROR: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
     return {
       is_valid: false,
       issues: ['Validation failed: ' + (error instanceof Error ? error.message : 'Unknown error')],

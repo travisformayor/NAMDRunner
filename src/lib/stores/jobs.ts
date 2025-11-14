@@ -1,4 +1,3 @@
-import { logger } from '$lib/utils/logger';
 import { writable, derived } from 'svelte/store';
 import type {
   JobInfo,
@@ -72,7 +71,7 @@ function createJobsStore() {
           }));
         }
       } catch (error) {
-        logger.error('[Jobs]', 'Failed to load from database', error);
+        // Silently handle error
       }
     },
 

@@ -24,27 +24,27 @@ pub async fn upload_job_metadata(
     project_dir: &str,
     log_context: &str,
 ) -> Result<()> {
-    use crate::{info_log, error_log, debug_log};
+    use crate::{log_info, log_error, log_debug};
 
     // Serialize job info to pretty JSON
     let metadata = serde_json::to_string_pretty(job)
         .map_err(|e| {
-            error_log!("[{}] Failed to serialize job metadata: {}", log_context, e);
+            log_error!(category: log_context, message: "Failed to serialize job metadata", details: "{}", e);
             anyhow!("Failed to serialize job metadata: {}", e)
         })?;
 
     let metadata_path = format!("{}/job_info.json", project_dir);
 
-    info_log!("[{}] Uploading job metadata to: {}", log_context, metadata_path);
+    log_info!(category: log_context, message: "Uploading job metadata", details: "{}", metadata_path);
 
     // Upload using temporary file (secure, no command injection)
     upload_content(connection, &metadata, &metadata_path).await
         .map_err(|e| {
-            error_log!("[{}] Failed to upload job metadata: {}", log_context, e);
+            log_error!(category: log_context, message: "Failed to upload job metadata", details: "{}", e);
             anyhow!("Failed to upload job metadata: {}", e)
         })?;
 
-    debug_log!("[{}] Job metadata uploaded successfully: {}", log_context, metadata_path);
+    log_debug!(category: log_context, message: "Job metadata uploaded successfully", details: "{}", metadata_path);
 
     Ok(())
 }

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { logger } from '$lib/utils/logger';
   import { invoke } from '@tauri-apps/api/core';
   import type { ApiResult } from '$lib/types/api';
   import DynamicJobForm from './DynamicJobForm.svelte';
@@ -30,11 +29,9 @@
       if (result.success && result.data) {
         previewContent = result.data;
         showPreview = true;
-      } else {
-        logger.error('[ConfigureTab]', `Preview failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
-      logger.error('[ConfigureTab]', 'Preview error', error);
+      // Silently handle error
     } finally {
       isGeneratingPreview = false;
     }

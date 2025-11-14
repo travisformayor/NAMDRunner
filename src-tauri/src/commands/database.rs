@@ -3,18 +3,18 @@ use std::fs;
 use crate::database;
 use crate::types::ApiResult;
 use crate::types::response_data::{DatabaseInfo, DatabaseOperationData};
-use crate::{info_log, error_log};
+use crate::{log_info, log_error, toast_log};
 
 /// Get current database path and size
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_database_info() -> ApiResult<DatabaseInfo> {
-    info_log!("[DB Commands] Getting database info");
+    log_info!(category: "Database", message: "Getting database info");
 
     // Get stored database path (set during initialization)
     let db_path = match database::get_current_database_path() {
         Some(path) => path,
         None => {
-            error_log!("[DB Commands] Database not initialized");
+            log_error!(category: "Database", message: "Database not initialized");
             return ApiResult::error("Database not initialized".to_string());
         }
     };
@@ -23,7 +23,7 @@ pub async fn get_database_info() -> ApiResult<DatabaseInfo> {
     let size_bytes = match fs::metadata(&db_path) {
         Ok(metadata) => metadata.len(),
         Err(e) => {
-            error_log!("[DB Commands] Failed to get database size: {}", e);
+            log_error!(category: "Database", message: "Failed to get database size", details: "Error: {}", e);
             return ApiResult::error(format!("Failed to get database size: {}", e));
         }
     };
@@ -32,7 +32,7 @@ pub async fn get_database_info() -> ApiResult<DatabaseInfo> {
     let job_count = match crate::database::with_database(|db| db.load_all_jobs()) {
         Ok(jobs) => jobs.len(),
         Err(e) => {
-            error_log!("[DB Commands] Failed to get job count: {}", e);
+            log_error!(category: "Database", message: "Failed to get job count", details: "Error: {}", e);
             return ApiResult::error(format!("Failed to get job count: {}", e));
         }
     };
@@ -47,7 +47,7 @@ pub async fn get_database_info() -> ApiResult<DatabaseInfo> {
 /// Backup database using SQLite backup API (safe for online backup)
 #[tauri::command(rename_all = "snake_case")]
 pub async fn backup_database() -> ApiResult<DatabaseOperationData> {
-    info_log!("[DB Commands] Starting database backup");
+    log_info!(category: "Database", message: "Starting database backup");
 
     use rfd::FileDialog;
 
@@ -55,7 +55,7 @@ pub async fn backup_database() -> ApiResult<DatabaseOperationData> {
     let db_path = match database::get_current_database_path() {
         Some(path) => path,
         None => {
-            error_log!("[DB Commands] Database not initialized");
+            log_error!(category: "Database", message: "Database not initialized");
             return ApiResult::error("Database not initialized".to_string());
         }
     };
@@ -71,7 +71,7 @@ pub async fn backup_database() -> ApiResult<DatabaseOperationData> {
         Some(path) => path,
         None => {
             // User cancelled - not an error
-            info_log!("[DB Commands] Backup cancelled by user");
+            log_info!(category: "Database", message: "Backup cancelled by user");
             return ApiResult::error("Backup cancelled".to_string());
         }
     };
@@ -80,14 +80,14 @@ pub async fn backup_database() -> ApiResult<DatabaseOperationData> {
     // This works even while database is in use
     match perform_backup(&db_path, &dest_path) {
         Ok(_) => {
-            info_log!("[DB Commands] Backup successful: {}", dest_path.display());
+            toast_log!(category: "Database", message: "Database backup saved successfully");
             ApiResult::success(DatabaseOperationData {
                 path: dest_path.to_string_lossy().to_string(),
                 message: format!("Backup saved to {}", dest_path.display()),
             })
         }
         Err(e) => {
-            error_log!("[DB Commands] Backup failed: {}", e);
+            log_error!(category: "Database", message: "Backup failed", details: "Error: {}", e);
             ApiResult::error(format!("Backup failed: {}", e))
         }
     }
@@ -115,7 +115,7 @@ fn perform_backup(source_path: &std::path::Path, dest_path: &std::path::Path) ->
 /// This closes the current connection, replaces the file, and reopens
 #[tauri::command(rename_all = "snake_case")]
 pub async fn restore_database() -> ApiResult<DatabaseOperationData> {
-    info_log!("[DB Commands] Starting database restore");
+    log_info!(category: "Database", message: "Starting database restore");
 
     use rfd::FileDialog;
 
@@ -128,7 +128,7 @@ pub async fn restore_database() -> ApiResult<DatabaseOperationData> {
     let source = match source_path {
         Some(path) => path,
         None => {
-            info_log!("[DB Commands] Restore cancelled by user");
+            log_info!(category: "Database", message: "Restore cancelled by user");
             return ApiResult::error("Restore cancelled".to_string());
         }
     };
@@ -137,7 +137,7 @@ pub async fn restore_database() -> ApiResult<DatabaseOperationData> {
     let db_path = match database::get_current_database_path() {
         Some(path) => path,
         None => {
-            error_log!("[DB Commands] Database not initialized");
+            log_error!(category: "Database", message: "Database not initialized");
             return ApiResult::error("Database not initialized".to_string());
         }
     };
@@ -145,14 +145,14 @@ pub async fn restore_database() -> ApiResult<DatabaseOperationData> {
     // Close connection, replace file, reopen
     match perform_restore(&source, &db_path) {
         Ok(_) => {
-            info_log!("[DB Commands] Restore successful from: {}", source.display());
+            toast_log!(category: "Database", message: "Database restored successfully");
             ApiResult::success(DatabaseOperationData {
                 path: db_path.to_string_lossy().to_string(),
                 message: format!("Database restored from {}", source.display()),
             })
         }
         Err(e) => {
-            error_log!("[DB Commands] Restore failed: {}", e);
+            log_error!(category: "Database", message: "Restore failed", details: "Error: {}", e);
             ApiResult::error(format!("Restore failed: {}", e))
         }
     }
@@ -177,13 +177,13 @@ fn perform_restore(source: &std::path::Path, dest: &std::path::Path) -> Result<(
 /// Reset database - delete and recreate with fresh schema
 #[tauri::command(rename_all = "snake_case")]
 pub async fn reset_database() -> ApiResult<DatabaseOperationData> {
-    info_log!("[DB Commands] Resetting database");
+    log_info!(category: "Database", message: "Resetting database");
 
     // Get stored database path
     let db_path = match database::get_current_database_path() {
         Some(path) => path,
         None => {
-            error_log!("[DB Commands] Database not initialized");
+            log_error!(category: "Database", message: "Database not initialized");
             return ApiResult::error("Database not initialized".to_string());
         }
     };
@@ -191,14 +191,14 @@ pub async fn reset_database() -> ApiResult<DatabaseOperationData> {
     // Delete and reinitialize
     match perform_reset(&db_path) {
         Ok(_) => {
-            info_log!("[DB Commands] Database reset successful");
+            toast_log!(category: "Database", message: "Database reset successfully");
             ApiResult::success(DatabaseOperationData {
                 path: db_path.to_string_lossy().to_string(),
                 message: "Database reset successfully".to_string(),
             })
         }
         Err(e) => {
-            error_log!("[DB Commands] Reset failed: {}", e);
+            log_error!(category: "Database", message: "Reset failed", details: "Error: {}", e);
             ApiResult::error(format!("Reset failed: {}", e))
         }
     }
@@ -217,7 +217,7 @@ fn perform_reset(db_path: &std::path::Path) -> Result<()> {
         drop(database_lock); // Release lock before file operation
 
         fs::remove_file(db_path)?;
-        info_log!("[DB Commands] Deleted database file");
+        log_info!(category: "Database", message: "Deleted database file");
     }
 
     // Reinitialize creates new DB with schema

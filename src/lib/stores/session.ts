@@ -7,7 +7,6 @@ import type {
 } from '../types/api';
 import { invoke } from '@tauri-apps/api/core';
 import { jobsStore } from './jobs';
-import { logger } from '../utils/logger';
 
 // Session state store
 interface SessionState {
@@ -38,8 +37,6 @@ export const lastError = derived(sessionStore, ($session) => $session.lastError)
 export const sessionActions = {
   // Connect to cluster
   async connect(host: string, username: string, password: string): Promise<boolean> {
-    logger.debug('SSH', `Starting connection attempt to ${host} as ${username}`);
-
     sessionStore.update((state) => ({
       ...state,
       isConnecting: true,
@@ -51,11 +48,7 @@ export const sessionActions = {
         params: { host, username, password }
       });
 
-      logger.debug('SSH', `Connection result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
-
       if (result.success) {
-        logger.debug('SSH', 'Connection established successfully');
-
         sessionStore.update((state) => ({
           ...state,
           connectionState: 'Connected',
@@ -69,8 +62,6 @@ export const sessionActions = {
 
         return true;
       } else {
-        logger.error('SSH', `Connection failed: ${result.error || 'Unknown error'}`);
-
         sessionStore.update((state) => ({
           ...state,
           connectionState: 'Disconnected',
@@ -81,8 +72,6 @@ export const sessionActions = {
         return false;
       }
     } catch (error) {
-      logger.error('SSH', `Connection exception: ${error instanceof Error ? error.message : 'Unknown error'}`);
-
       sessionStore.update((state) => ({
         ...state,
         connectionState: 'Disconnected',

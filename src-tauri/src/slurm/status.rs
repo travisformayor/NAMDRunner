@@ -1,6 +1,7 @@
 use crate::types::JobStatus;
 use crate::ssh::get_connection_manager;
 use super::commands::*;
+use crate::log_warn;
 use anyhow::{Result, anyhow};
 
 pub struct SlurmStatusSync {}
@@ -36,7 +37,11 @@ impl SlurmStatusSync {
             }
             Err(e) => {
                 // If squeue fails, try sacct as fallback
-                log::warn!("squeue failed for job {}: {}, trying sacct", slurm_job_id, e);
+                log_warn!(
+                    category: "SLURM",
+                    message: "squeue fallback to sacct",
+                    details: "squeue failed for job {}: {}", slurm_job_id, e
+                );
                 self.check_completed_job(slurm_job_id).await
             }
         }
@@ -95,7 +100,11 @@ impl SlurmStatusSync {
 
             // Handle unknown states
             _ => {
-                log::warn!("Unknown SLURM status: {}", status);
+                log_warn!(
+                    category: "SLURM",
+                    message: "Unknown SLURM status",
+                    details: "Unknown SLURM status: {}", status
+                );
                 Err(anyhow!("Unknown SLURM status: {}", status))
             }
         }
@@ -120,7 +129,11 @@ impl SlurmStatusSync {
             }
             Err(_) => {
                 // If batch fails, fall back to individual queries
-                log::warn!("Batch SLURM query failed, falling back to individual queries");
+                log_warn!(
+                    category: "SLURM",
+                    message: "Batch query fallback",
+                    details: "Batch SLURM query failed, falling back to individual queries"
+                );
 
                 for job_id in job_ids {
                     let status_result = self.sync_job_status(job_id).await;

@@ -4,7 +4,7 @@ use crate::templates::{Template, TemplateSummary};
 use anyhow::{Result, anyhow};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use crate::{info_log, debug_log};
+use crate::{log_info, log_debug};
 use tauri::Manager;
 
 /// Simple document-store database for jobs and templates
@@ -262,7 +262,11 @@ pub fn get_database_path(app_handle: &tauri::AppHandle) -> Result<PathBuf> {
 }
 
 pub fn initialize_database(db_path: &str) -> Result<()> {
-    info_log!("[Database] Initializing database: {}", db_path);
+    log_info!(
+        category: "Database",
+        message: "Initializing database",
+        details: "{}", db_path
+    );
 
     let db = JobDatabase::new(db_path)?;
 
@@ -279,19 +283,29 @@ pub fn initialize_database(db_path: &str) -> Result<()> {
 /// Close and reinitialize database connection
 /// Used for restore and reset operations
 pub fn reinitialize_database(db_path: &str) -> Result<()> {
-    info_log!("[Database] Reinitializing database connection: {}", db_path);
+    log_info!(
+        category: "Database",
+        message: "Reinitializing database connection",
+        details: "{}", db_path
+    );
 
     let mut database_lock = DATABASE.lock().unwrap();
 
     // Drop existing connection (closes SQLite connection)
     if database_lock.is_some() {
-        debug_log!("[Database] Closing existing connection");
+        log_debug!(
+            category: "Database",
+            message: "Closing existing connection"
+        );
         *database_lock = None;
         // JobDatabase is dropped here, closing the Connection
     }
 
     // Create new connection
-    debug_log!("[Database] Opening new connection");
+    log_debug!(
+        category: "Database",
+        message: "Opening new connection"
+    );
     let db = JobDatabase::new(db_path)?;
     *database_lock = Some(db);
 
@@ -302,7 +316,10 @@ pub fn reinitialize_database(db_path: &str) -> Result<()> {
     // Reset default templates flag (force reload for new DB)
     DEFAULTS_LOADED.store(false, Ordering::Relaxed);
 
-    info_log!("[Database] Database reinitialized successfully");
+    log_info!(
+        category: "Database",
+        message: "Database reinitialized successfully"
+    );
     Ok(())
 }
 
@@ -326,7 +343,10 @@ pub fn ensure_default_templates_loaded() -> Result<()> {
     DEFAULTS_LOADED.store(true, Ordering::Relaxed);
 
     // Load defaults from JSON files
-    info_log!("[Templates] First template access - checking for default templates");
+    log_info!(
+        category: "Templates",
+        message: "First template access - checking for default templates"
+    );
     with_database(load_default_templates)
 }
 
@@ -340,7 +360,11 @@ fn load_default_templates(db: &JobDatabase) -> Result<()> {
         ("explicit_solvent_npt_v1", include_str!("../../templates/explicit_solvent_npt_v1.json")),
     ];
 
-    info_log!("[Templates] Loading {} default template(s) from embedded data", TEMPLATE_FILES.len());
+    log_info!(
+        category: "Templates",
+        message: "Loading default templates from embedded data",
+        details: "Loading {} default template(s)", TEMPLATE_FILES.len()
+    );
 
     for (template_id, json_content) in TEMPLATE_FILES {
         // Parse template JSON
@@ -351,7 +375,11 @@ fn load_default_templates(db: &JobDatabase) -> Result<()> {
         if db.load_template(&template.id)?.is_none() {
             // Template doesn't exist, insert it
             db.save_template(&template)?;
-            info_log!("[Templates] Loaded: {}", template.name);
+            log_info!(
+                category: "Templates",
+                message: "Loaded default template",
+                details: "{}", template.name
+            );
         }
     }
 

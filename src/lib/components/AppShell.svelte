@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { logger } from '../utils/logger';
   import AppSidebar from './layout/AppSidebar.svelte';
   import AppHeader from './layout/AppHeader.svelte';
   import LogsPanel from './layout/LogsPanel.svelte';
+  import ToastContainer from './ui/ToastContainer.svelte';
   import JobsPage from './pages/JobsPage.svelte';
   import JobDetailPage from './pages/JobDetailPage.svelte';
   import CreateJobPage from './pages/CreateJobPage.svelte';
@@ -14,6 +14,7 @@
   import { clusterConfig } from '../stores/clusterConfig';
   import { initializeTemplateStore } from '../stores/templateStore';
   import { jobsStore } from '../stores/jobs';
+  import { toasts } from '../stores/toasts';  // Imported to initialize toast event listener
 
   onMount(() => {
     // Initialize cluster configuration from backend (async, but don't block mount)
@@ -21,21 +22,20 @@
       try {
         await clusterConfig.init();
       } catch (error) {
-        logger.error('AppShell', 'Failed to load cluster configuration', error);
         // App can still run but cluster-dependent features won't work
       }
 
       try {
         await initializeTemplateStore();
       } catch (error) {
-        logger.error('AppShell', 'Failed to load templates', error);
+        // Silently handle error
       }
 
       // Load jobs from database for offline viewing
       try {
         await jobsStore.loadFromDatabase();
       } catch (error) {
-        logger.error('AppShell', 'Failed to load jobs from database', error);
+        // Silently handle error
       }
     })();
 
@@ -90,6 +90,9 @@
     <!-- Logs Panel -->
     <LogsPanel />
   </div>
+
+  <!-- Toast Notifications -->
+  <ToastContainer />
 </div>
 
 <style>

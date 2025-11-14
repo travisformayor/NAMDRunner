@@ -2,7 +2,7 @@ use ssh2::{Session, DisconnectCode};
 use std::time::Duration;
 use anyhow::Result;
 use super::errors::SSHError;
-use crate::{debug_log, info_log, error_log};
+use crate::{log_debug, log_info, log_error, toast_log};
 
 /// Configuration for SSH connections
 #[derive(Debug, Clone)]
@@ -69,7 +69,7 @@ impl SSHConnection {
 
     /// Connect to the SSH server with password authentication
     pub async fn connect(&mut self, password: &str) -> Result<()> {
-        info_log!("[SSH] Starting connection to {}:{} as {}", self.host, self.port, self.username);
+        log_info!(category: "SSH", message: "Starting connection", details: "{}:{} as {}", self.host, self.port, self.username);
 
         // Clear any existing session
         self.disconnect().await?;
@@ -81,19 +81,19 @@ impl SSHConnection {
         let socket_addrs = match tokio::net::lookup_host(&tcp_addr_string).await {
             Ok(addrs) => {
                 let addr_list: Vec<std::net::SocketAddr> = addrs.collect();
-                debug_log!("[SSH] DNS resolved {} addresses", addr_list.len());
+                log_debug!(category: "SSH", message: "DNS resolved addresses", details: "{} addresses", addr_list.len());
                 addr_list
             }
             Err(e) => {
                 let error_msg = format!("DNS resolution failed for {}: {}", self.host, e);
-                error_log!("[SSH] ERROR: {}", error_msg);
+                log_error!(category: "SSH", message: "DNS resolution failed", details: "{}", error_msg);
                 return Err(SSHError::NetworkError(error_msg).into());
             }
         };
 
         if socket_addrs.is_empty() {
             let error_msg = format!("No IP addresses found for hostname: {}", self.host);
-            error_log!("[SSH] ERROR: {}", error_msg);
+            log_error!(category: "SSH", message: "No IP addresses found", details: "{}", error_msg);
             return Err(SSHError::NetworkError(error_msg).into());
         }
 
@@ -106,17 +106,17 @@ impl SSHConnection {
                 Duration::from_secs(self.config.timeout)
             ) {
                 Ok(tcp) => {
-                    debug_log!("[SSH] Connected to {}", socket_addr);
+                    log_debug!(category: "SSH", message: "TCP connected", details: "{}", socket_addr);
 
                     // Configure TCP
                     if let Err(e) = tcp.set_nodelay(self.config.tcp_nodelay) {
-                        debug_log!("[SSH] Warning: Failed to set TCP nodelay: {}", e);
+                        log_debug!(category: "SSH", message: "Failed to set TCP nodelay", details: "{}", e);
                     }
                     if let Err(e) = tcp.set_read_timeout(Some(Duration::from_secs(self.config.timeout))) {
-                        debug_log!("[SSH] Warning: Failed to set read timeout: {}", e);
+                        log_debug!(category: "SSH", message: "Failed to set read timeout", details: "{}", e);
                     }
                     if let Err(e) = tcp.set_write_timeout(Some(Duration::from_secs(self.config.timeout))) {
-                        debug_log!("[SSH] Warning: Failed to set write timeout: {}", e);
+                        log_debug!(category: "SSH", message: "Failed to set write timeout", details: "{}", e);
                     }
 
                     // Create and configure SSH session
@@ -124,7 +124,7 @@ impl SSHConnection {
                 }
                 Err(e) => {
                     let error_msg = format!("TCP connection failed to {}: {}", socket_addr, e);
-                    debug_log!("[SSH] {}", error_msg);
+                    log_debug!(category: "SSH", message: "TCP connection failed", details: "{}", error_msg);
                     last_error = Some(error_msg);
                     continue;
                 }
@@ -138,12 +138,12 @@ impl SSHConnection {
 
     /// Establish SSH session over an existing TCP connection
     async fn establish_ssh_session(&mut self, tcp: std::net::TcpStream, password: &str) -> Result<()> {
-        info_log!("[SSH] Establishing SSH session...");
+        log_info!(category: "SSH", message: "Establishing SSH session");
 
         // Create SSH session
         let mut session = Session::new().map_err(|e| {
             let error_msg = format!("Failed to create SSH session: {}", e);
-            error_log!("[SSH] ERROR: {}", error_msg);
+            log_error!(category: "SSH", message: "Failed to create SSH session", details: "{}", error_msg);
             SSHError::HandshakeError(error_msg)
         })?;
 
@@ -158,54 +158,53 @@ impl SSHConnection {
         // This will be updated to file_transfer_timeout when doing SFTP operations
         let timeout_ms = (self.config.timeout * 1000) as u32;
         session.set_timeout(timeout_ms);
-        debug_log!("[SSH] Set session blocking timeout to {} ms ({} seconds)",
-                   timeout_ms, self.config.timeout);
+        log_debug!(category: "SSH", message: "Set session timeout", details: "{} ms ({} seconds)", timeout_ms, self.config.timeout);
 
-        info_log!("[SSH] Starting SSH handshake...");
+        log_info!(category: "SSH", message: "Starting SSH handshake");
         session.handshake().map_err(|e| {
             let error_msg = format!("SSH handshake failed: {}", e);
-            error_log!("[SSH] ERROR: {}", error_msg);
+            log_error!(category: "SSH", message: "SSH handshake failed", details: "{}", error_msg);
             SSHError::HandshakeError(error_msg)
         })?;
 
-        info_log!("[SSH] SSH handshake successful");
+        log_info!(category: "SSH", message: "SSH handshake successful");
 
         // Log SSH server information
         if let Some(remote) = session.banner() {
-            debug_log!("[SSH] Server: {}", remote);
+            log_debug!(category: "SSH", message: "SSH server banner", details: "{}", remote);
         }
 
         // Set keepalive if configured
         if self.config.keepalive_interval > 0 {
-            debug_log!("[SSH] Setting keepalive interval to {} seconds", self.config.keepalive_interval);
+            log_debug!(category: "SSH", message: "Setting keepalive interval", details: "{} seconds", self.config.keepalive_interval);
             session.set_keepalive(true, self.config.keepalive_interval);
         }
 
         // Log available authentication methods
         if let Ok(methods) = session.auth_methods(&self.username) {
-            debug_log!("[SSH] Available auth methods: {}", methods);
+            log_debug!(category: "SSH", message: "Available auth methods", details: "{}", methods);
         }
 
         // Attempt password authentication
         let pwd_string = password.to_string();
-        info_log!("[SSH] Authenticating user '{}'", self.username);
+        log_info!(category: "SSH", message: "Authenticating user", details: "{}", self.username);
         session.userauth_password(&self.username, &pwd_string).map_err(|e| {
             let error_msg = format!("Authentication failed for user {}: {}", self.username, e);
-            error_log!("[SSH] {}", error_msg);
-            debug_log!("[SSH] SSH2 Error code: {:?}", e.code());
+            log_error!(category: "SSH", message: "Authentication failed", details: "{}", error_msg);
+            log_debug!(category: "SSH", message: "SSH2 error code", details: "{:?}", e.code());
             SSHError::AuthenticationError(error_msg)
         })?;
 
         // Verify authentication succeeded
         if !session.authenticated() {
             let error_msg = "Authentication failed - session not authenticated".to_string();
-            error_log!("[SSH] ERROR: {}", error_msg);
+            log_error!(category: "SSH", message: "Authentication failed", details: "{}", error_msg);
             return Err(SSHError::AuthenticationError(error_msg).into());
         }
 
-        info_log!("[SSH] Authentication successful");
+        log_info!(category: "SSH", message: "Authentication successful");
         self.session = Some(session);
-        info_log!("[SSH] Connection fully established");
+        toast_log!(category: "SSH", message: "Connection established");
         Ok(())
     }
 
@@ -247,8 +246,7 @@ impl SSHConnection {
         if let Some(session) = &mut self.session {
             let timeout_ms = (self.config.file_transfer_timeout * 1000) as u32;
             session.set_timeout(timeout_ms);
-            debug_log!("[SSH] Updated session timeout to {} ms ({} seconds) for file transfers",
-                       timeout_ms, self.config.file_transfer_timeout);
+            log_debug!(category: "SSH", message: "Updated session timeout for file transfers", details: "{} ms ({} seconds)", timeout_ms, self.config.file_transfer_timeout);
         }
         Ok(())
     }
@@ -259,8 +257,7 @@ impl SSHConnection {
         if let Some(session) = &mut self.session {
             let timeout_ms = (self.config.timeout * 1000) as u32;
             session.set_timeout(timeout_ms);
-            debug_log!("[SSH] Reset session timeout to {} ms ({} seconds) for commands",
-                       timeout_ms, self.config.timeout);
+            log_debug!(category: "SSH", message: "Reset session timeout for commands", details: "{} ms ({} seconds)", timeout_ms, self.config.timeout);
         }
         Ok(())
     }

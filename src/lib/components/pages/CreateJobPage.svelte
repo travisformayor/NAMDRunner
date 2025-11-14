@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { logger } from '../../utils/logger';
   import { uiStore } from '../../stores/ui';
   import { jobsStore } from '../../stores/jobs';
   import { isConnected } from '../../stores/session';
@@ -46,7 +45,6 @@
     unlistenFileList = await listen('file-upload-list', (event) => {
       const fileList = event.payload as string[];
       uploadFileList = fileList;
-      logger.debug('[CreateJob]', `Received file upload list: ${fileList.join(', ')}`);
     });
 
     // Listen for file upload progress
@@ -94,7 +92,7 @@
       }
       // Errors handled by jobsStore and displayed in UI
     } catch (error) {
-      logger.error('CreateJob', 'Job creation error', error);
+      // Silently handle error
     } finally {
       isSubmitting = false;
     }

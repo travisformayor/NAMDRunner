@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { logger } from '$lib/utils/logger';
   import { invoke } from '@tauri-apps/api/core';
   import type { ApiResult, JobPreset } from '$lib/types/api';
   import { jobPresets, partitions, allQosOptions, validateResourceRequest, calculateJobCost, estimateQueueTime, walltimeToHours } from '$lib/stores/clusterConfig';
@@ -74,11 +73,9 @@
       if (result.success && result.data) {
         scriptPreviewContent = result.data;
         showScriptPreview = true;
-      } else {
-        logger.error('[ResourcesTab]', `Script preview failed: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
-      logger.error('[ResourcesTab]', 'Script preview error', error);
+      // Silently handle error
     } finally {
       isGeneratingScript = false;
     }

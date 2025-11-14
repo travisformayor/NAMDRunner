@@ -1,4 +1,3 @@
-import { logger } from '$lib/utils/logger';
 import { writable, derived } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
 import type {
@@ -50,7 +49,6 @@ function createTemplateStore() {
           }));
         }
       } catch (error) {
-        logger.error('[Templates]', 'Failed to load templates', error);
         update(state => ({
           ...state,
           error: `Error loading templates: ${error}`,
@@ -82,7 +80,6 @@ function createTemplateStore() {
           return null;
         }
       } catch (error) {
-        logger.error('[Templates]', 'Failed to load template', error);
         update(state => ({
           ...state,
           error: `Error loading template: ${error}`,
@@ -112,7 +109,6 @@ function createTemplateStore() {
           return false;
         }
       } catch (error) {
-        logger.error('[Templates]', 'Failed to create template', error);
         update(state => ({
           ...state,
           error: `Error creating template: ${error}`,
@@ -142,7 +138,6 @@ function createTemplateStore() {
           return false;
         }
       } catch (error) {
-        logger.error('[Templates]', 'Failed to update template', error);
         update(state => ({
           ...state,
           error: `Error updating template: ${error}`,
@@ -179,7 +174,6 @@ function createTemplateStore() {
           return false;
         }
       } catch (error) {
-        logger.error('[Templates]', 'Failed to delete template', error);
         update(state => ({
           ...state,
           error: `Error deleting template: ${error}`,
@@ -241,7 +235,6 @@ export async function validateTemplateValues(
 
     return result;
   } catch (error) {
-    logger.error('[Templates]', 'Failed to validate values', error);
     return {
       is_valid: false,
       issues: [`Validation error: ${error}`],

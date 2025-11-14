@@ -3,7 +3,6 @@
   import { settingsStore } from '$lib/stores/settings';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import AlertDialog from '../ui/AlertDialog.svelte';
-  import { logger } from '$lib/utils/logger';
   import { jobsStore } from '$lib/stores/jobs';
   import { templateStore } from '$lib/stores/templateStore';
 
@@ -44,11 +43,10 @@
 
   // Backup handler
   async function handleBackup() {
-    logger.debug('Settings', 'Starting database backup');
     const result = await settingsStore.backupDatabase();
 
     if (result.success) {
-      // Success feedback shown via logger
+      // Success
     } else if (result.error !== 'Backup cancelled') {
       // Show error (cancelled is user action, not an error)
       showAlertDialog('Backup Failed', `Backup failed: ${result.error}`, 'error');
@@ -62,7 +60,6 @@
 
   async function handleRestoreConfirm() {
     showRestoreWarning = false;
-    logger.debug('Settings', 'Starting database restore');
 
     const result = await settingsStore.restoreDatabase();
 
@@ -83,7 +80,6 @@
 
   async function handleResetConfirm() {
     showResetWarning = false;
-    logger.debug('Settings', 'Resetting database');
 
     const result = await settingsStore.resetDatabase();
 

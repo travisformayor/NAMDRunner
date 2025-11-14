@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { logger } from '../../utils/logger';
   import { isConnected, connectionState, sessionActions, lastError } from '../../stores/session';
 
   let isOpen = false;
@@ -60,13 +59,9 @@
       isConnecting = true;
       connectionError = '';
 
-      logger.command(`ssh ${username}@${host}`);
-      logger.debug('CONNECTION', `Attempting to connect to ${host} as ${username}`);
-
       try {
         const success = await sessionActions.connect(host, username, password);
         if (success) {
-          logger.debug('CONNECTION', `Successfully connected to ${host}`);
           closeDropdown();
           password = ''; // Clear password on successful connection
         } else {
@@ -74,13 +69,11 @@
           // Get detailed error from session store instead of generic message
           const errorMsg = $lastError || 'Connection failed - no error details available';
           connectionError = errorMsg;
-          logger.debug('CONNECTION', `Connection failed: ${errorMsg}`);
         }
       } catch (error) {
         // Connection threw exception
         const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
         connectionError = errorMsg;
-        logger.debug('CONNECTION', `Connection exception: ${errorMsg}`);
       } finally {
         isConnecting = false;
       }
@@ -89,12 +82,9 @@
 
   async function handleDisconnect() {
     try {
-      logger.debug('CONNECTION', `Disconnecting from ${host}`);
       await sessionActions.disconnect();
-      logger.debug('CONNECTION', 'Successfully disconnected');
     } catch (error) {
       // Disconnect failed - error handled by UI state
-      logger.debug('CONNECTION', `Disconnect failed: ${error}`);
     }
     password = '';
     closeDropdown();

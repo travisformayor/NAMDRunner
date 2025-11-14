@@ -1,6 +1,5 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { logger } from '$lib/utils/logger';
   import { extractVariablesFromTemplate } from '$lib/utils/template-utils';
   import { onMount } from 'svelte';
   import { templates, templateStore, validateTemplateValues } from '$lib/stores/templateStore';
@@ -95,7 +94,7 @@
         templateValues[key] = selected.path;
       }
     } catch (error) {
-      logger.error('[DynamicJobForm]', 'File selection error', error);
+      // Silently handle error
     }
   }
 

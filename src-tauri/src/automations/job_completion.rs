@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use crate::types::{JobStatus, JobInfo};
-use crate::{info_log, error_log};
+use crate::{log_info, log_error};
 use crate::automations::common;
 
 /// Execute job completion automation (called automatically when job reaches terminal state)
@@ -13,7 +13,7 @@ use crate::automations::common;
 /// Called automatically by job_sync when a job reaches terminal state (Completed, Failed, etc.)
 pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     let job_id = job.job_id.clone();
-    info_log!("[Job Completion] Starting automatic completion for: {}", job_id);
+    log_info!(category: "Job Completion", message: "Starting automatic completion", details: "{}", job_id);
 
     // Validate job is in terminal state
     if !matches!(job.status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
@@ -31,32 +31,32 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     // This preserves all results including SLURM logs before they're cleaned up
     let source_with_slash = common::ensure_trailing_slash(&scratch_dir);
 
-    info_log!("[Job Completion] Rsyncing scratch→project: {} -> {}", scratch_dir, project_dir);
+    log_info!(category: "Job Completion", message: "Rsyncing scratch to project", details: "{} -> {}", scratch_dir, project_dir);
     connection_manager.sync_directory_rsync(&source_with_slash, &project_dir).await
         .map_err(|e| {
-            error_log!("[Job Completion] Rsync failed: {}", e);
+            log_error!(category: "Job Completion", message: "Rsync failed", details: "{}", e);
             anyhow!("Failed to rsync: {}", e)
         })?;
 
-    info_log!("[Job Completion] Rsync complete - all files now in project directory");
+    log_info!(category: "Job Completion", message: "Rsync complete - all files now in project directory");
 
     // Fetch logs from project directory (after rsync)
     if let Err(e) = crate::automations::fetch_slurm_logs_if_needed(job).await {
-        error_log!("[Job Completion] Failed to fetch logs: {}", e);
+        log_error!(category: "Job Completion", message: "Failed to fetch logs", details: "{}", e);
         // Don't fail completion if log fetch fails - logs are nice-to-have
     }
 
     // Fetch output file metadata from project directory (after rsync)
     let output_dir = format!("{}/outputs", project_dir);
-    info_log!("[Job Completion] Fetching output file metadata from: {}", output_dir);
+    log_info!(category: "Job Completion", message: "Fetching output file metadata", details: "{}", output_dir);
 
     match connection_manager.list_files_with_metadata(&output_dir).await {
         Ok(output_files) => {
-            info_log!("[Job Completion] Found {} output files", output_files.len());
+            log_info!(category: "Job Completion", message: "Found output files", details: "{} files", output_files.len());
             job.output_files = Some(output_files);
         }
         Err(e) => {
-            error_log!("[Job Completion] Failed to fetch output file metadata: {}", e);
+            log_error!(category: "Job Completion", message: "Failed to fetch output file metadata", details: "{}", e);
             // Don't fail completion if metadata fetch fails - it's nice-to-have
             job.output_files = None;
         }
@@ -66,12 +66,9 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     common::touch_job_timestamp(job);
     common::save_job_to_database(job, "Job Completion")?;
 
-    info_log!("[Job Completion] Job completion successful: {}", job_id);
+    log_info!(category: "Job Completion", message: "Job completion successful", details: "{}", job_id);
     Ok(())
 }
-
-// Job completion automation logic doesn't depend on NAMD config structure
-// TODO: Add tests for template-based job completion in future phase
 
 #[cfg(test)]
 mod tests {

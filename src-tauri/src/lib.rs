@@ -10,6 +10,8 @@ mod logging;
 pub mod automations;
 pub mod cluster;
 pub mod templates;
+// #[cfg(test)]
+// mod logging_test;
 #[cfg(test)]
 // DISABLED: security_tests - needs rewrite for template system (uses demo mode)
 // mod security_tests;

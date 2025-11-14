@@ -6,7 +6,7 @@ use crate::validation::job_validation::ValidationResult;
 use crate::database::with_database;
 use crate::commands::helpers;
 use crate::automations;
-use crate::{info_log, error_log};
+use crate::{log_info, log_error};
 use tauri::Emitter;
 
 #[tauri::command(rename_all = "snake_case")]
@@ -80,12 +80,12 @@ pub async fn get_job_status(job_id: String) -> ApiResult<JobInfo> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_all_jobs() -> ApiResult<Vec<JobInfo>> {
-    info_log!("[Get All Jobs] Loading jobs from database");
+    log_info!(category: "Jobs", message: "Loading jobs from database");
 
     match with_database(|db| db.load_all_jobs()) {
         Ok(jobs) => ApiResult::success(jobs),
         Err(e) => {
-            error_log!("[Get All Jobs] Database error: {}", e);
+            log_error!(category: "Jobs", message: "Failed to load jobs", details: "Database error: {}", e);
             ApiResult::error(format!("Failed to load jobs: {}", e))
         }
     }
@@ -93,15 +93,15 @@ pub async fn get_all_jobs() -> ApiResult<Vec<JobInfo>> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn sync_jobs() -> SyncJobsResult {
-    info_log!("[Sync Jobs] Starting job sync");
+    log_info!(category: "Jobs", message: "Starting job sync");
 
     match automations::sync_all_jobs().await {
         Ok(result) => {
-            info_log!("[Sync Jobs] Successfully synced {} jobs", result.jobs_updated);
+            log_info!(category: "Jobs", message: "Job sync completed", details: "Synced {} jobs", result.jobs_updated);
             result
         }
         Err(e) => {
-            error_log!("[Sync Jobs] Failed to sync jobs: {}", e);
+            log_error!(category: "Jobs", message: "Job sync failed", details: "Error: {}", e);
             SyncJobsResult {
                 success: false,
                 jobs: vec![],
@@ -180,7 +180,7 @@ pub async fn preview_slurm_script(
     partition: Option<String>,
     qos: Option<String>
 ) -> ApiResult<String> {
-    info_log!("[Jobs] Generating SLURM script preview");
+    log_info!(category: "Jobs", message: "Generating SLURM script preview");
 
     let slurm_config = crate::types::SlurmConfig {
         cores,
@@ -192,11 +192,11 @@ pub async fn preview_slurm_script(
 
     match crate::slurm::script_generator::SlurmScriptGenerator::preview_script(job_name, slurm_config) {
         Ok(script) => {
-            info_log!("[Jobs] SLURM script preview generated");
+            log_info!(category: "Jobs", message: "SLURM script preview generated");
             ApiResult::success(script)
         }
         Err(e) => {
-            error_log!("[Jobs] SLURM script preview failed: {}", e);
+            log_error!(category: "Jobs", message: "SLURM script preview failed", details: "Error: {}", e);
             ApiResult::error(format!("Script generation error: {}", e))
         }
     }

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { logger } from '$lib/utils/logger';
   import { invoke } from '@tauri-apps/api/core';
   import type { JobValidationResult } from '$lib/types/api';
   import ResourcesTab from './ResourcesTab.svelte';
@@ -95,7 +94,7 @@
         errors = newErrors;
       }
     } catch (error) {
-      logger.error('[CreateJobTabs]', 'Validation error', error);
+      // Silently handle error
     }
   }
 </script>
