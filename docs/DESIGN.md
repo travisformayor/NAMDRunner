@@ -91,7 +91,7 @@ NAMDRunner is a desktop application for managing NAMD molecular dynamics simulat
 - SLURM Job ID
 
 [Tab Navigation]
-- Overview | SLURM Logs | Input Files | Output Files | Configuration
+- Overview | Input Files | Output Files | SLURM Logs
 
 [Tab Content Area]
 - Content varies by selected tab
@@ -103,8 +103,9 @@ NAMDRunner is a desktop application for managing NAMD molecular dynamics simulat
 
 #### Tab Contents
 - **Overview**: Simulation progress, resource allocation, job information, template configuration values
+- **Input Files**: List of uploaded input files with individual download buttons and bulk download option
+- **Output Files**: List of output files with file sizes, individual download buttons, and bulk download option
 - **SLURM Logs**: stdout and stderr output viewers
-- **Output Files**: List with download buttons for each file
 
 #### Delete Confirmation
 Modal dialog:
@@ -430,7 +431,9 @@ Uses `[data-theme="dark"]` selector to override variables. Toggle via `uiStore.s
 ```
 
 #### Centralized Styling Approach
-**CSS Variables** are defined in `app.css` and referenced in component styles:
+**CSS Variables** are defined in `app.css` and referenced in component styles.
+
+**Form Inputs**: All text inputs, textareas, and select elements use the `.namd-input` class. No component-specific input styles exist.
 
 ```svelte
 <!-- Component uses CSS variables -->
@@ -523,6 +526,82 @@ NAMDRunner uses a centralized button system defined in `app.css`. All components
   color: var(--namd-error-fg);
   font-size: var(--namd-font-size-xs);
   margin-top: 0.25rem;
+}
+
+/* File Lists */
+.namd-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--namd-spacing-sm);
+}
+
+.namd-file-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: var(--namd-spacing-sm) var(--namd-spacing-md);
+  background-color: var(--namd-bg-primary);
+  border: 1px solid var(--namd-border);
+  border-radius: var(--namd-border-radius-sm);
+}
+
+.namd-file-content {
+  display: flex;
+  align-items: center;
+  gap: var(--namd-spacing-sm);
+  flex: 1;
+}
+
+.namd-file-name {
+  flex: 1;
+  font-family: var(--namd-font-mono);
+}
+
+.namd-file-metadata {
+  color: var(--namd-text-secondary);
+  font-size: var(--namd-font-size-sm);
+}
+
+.namd-file-progress-bg {
+  /* Animated background for upload progress */
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background-color: var(--namd-primary-bg);
+  transition: width 0.3s ease;
+}
+
+.namd-file-progress-text {
+  margin-left: auto;
+  font-weight: var(--namd-font-weight-semibold);
+  color: var(--namd-primary);
+}
+
+.namd-file-list-empty {
+  color: var(--namd-text-secondary);
+  font-style: italic;
+  padding: var(--namd-spacing-lg);
+  text-align: center;
+  background-color: var(--namd-bg-muted);
+  border-radius: var(--namd-border-radius-sm);
+  border: 1px dashed var(--namd-border);
+}
+
+.namd-file-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--namd-spacing-md);
+}
+
+.namd-file-list-error {
+  padding: var(--namd-spacing-sm) var(--namd-spacing-md);
+  background-color: var(--namd-error-bg);
+  color: var(--namd-error);
+  border-radius: var(--namd-border-radius-sm);
+  border: 1px solid var(--namd-error);
+  margin-bottom: var(--namd-spacing-md);
 }
 ```
 
@@ -813,11 +892,12 @@ components/
 │   ├── TemplateEditor.svelte      # Template CRUD form
 │   └── VariableEditor.svelte      # Variable metadata editor modal
 ├── job-detail/
-│   ├── JobTabs.svelte             # Tab container for job details
+│   ├── JobTabs.svelte             # Tab container for job details (4 tabs)
 │   └── tabs/
 │       ├── OverviewTab.svelte     # Progress, resources, template values
-│       ├── SlurmLogsTab.svelte    # stdout/stderr viewers
-│       └── OutputFilesTab.svelte  # Download interface
+│       ├── InputFilesTab.svelte   # Input file downloads with bulk download
+│       ├── OutputFilesTab.svelte  # Output file downloads with bulk download
+│       └── SlurmLogsTab.svelte    # stdout/stderr viewers
 ├── jobs/
 │   ├── JobsTable.svelte           # Table with sortable columns
 │   └── SyncControls.svelte        # Sync status/controls
@@ -898,19 +978,41 @@ components/
 - Review tab: Summary banner showing error count
 - Create Job button disabled when errors exist
 
-### File Upload with Progress
+### File Management Pattern
 
-**Upload Flow:**
+NAMDRunner uses a unified `.namd-file-list` CSS pattern for all file operations (upload and download contexts).
+
+**File Upload (Create Job Flow):**
 1. User selects files via Tauri dialog in Configure tab
 2. File paths stored in template values
-3. Review tab extracts file variables and shows list
+3. Review tab extracts file variables and shows list with `.namd-file-list`
 4. During job creation, files uploaded via SFTP
-5. Progress events update UI with percentage
+5. Progress events update UI with animated `.namd-file-progress-bg`
+6. Percentage displayed in `.namd-file-progress-text`
 
-**Progress Display:**
-- Animated background bar showing upload percentage
-- Percentage text displayed next to filename
-- Progress tracked per file in Map structure
+**File Download (Job Details Tabs):**
+- **InputFilesTab**: Lists uploaded input files tracked in `job.input_files`
+  - Individual download buttons per file
+  - Bulk "Download All" button for ZIP archive
+- **OutputFilesTab**: Lists output files from `job.output_files`
+  - Shows file sizes with `.namd-file-metadata`
+  - Individual and bulk download options
+  - Empty state messages based on job status
+
+**Unified Pattern Classes:**
+- `.namd-file-list` - Container for file items
+- `.namd-file-item` - Individual file row
+- `.namd-file-content` - File icon, name, metadata layout
+- `.namd-file-icon` - File type icon
+- `.namd-file-name` - Filename in monospace
+- `.namd-file-metadata` - File size or status text
+- `.namd-file-action` - Action button container
+- `.namd-file-progress-bg` - Animated upload progress background
+- `.namd-file-progress-text` - Progress percentage text
+- `.namd-file-error` - Error message below file item
+- `.namd-file-list-empty` - Empty state message
+- `.namd-file-list-header` - Header with title and bulk actions
+- `.namd-file-list-error` - Bulk operation error message
 
 ---
 

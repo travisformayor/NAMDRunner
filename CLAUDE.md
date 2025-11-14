@@ -9,6 +9,15 @@ NAMDRunner: Desktop app for NAMD molecular dynamics on SLURM clusters built with
 - **Reliability**: Scientists need stability over features
 - **Pattern-Driven**: Use proven architectural patterns and cluster integration approaches
 
+## Guidance for Conversations and Planning
+
+**When brainstorming or planning with the user (for features, workflows, or implementation approaches):**
+- **Do *not* include large code blocks or full-file examples in responses.**
+- **Prefer** brief, focused *small code snippets* (a few relevant lines) only when they *directly clarify an idea* or *illustrate a plan*.
+- **Use pseudocode or structured lists over verbose code:** Only show real code for essential examples.
+- **Goal:** Keep planning-focused messages concise, conceptual, and easy to scan – avoid response bloat.
+- **Reserve full code implementations for follow-up responses when user explicitly asks for code, or as final deliverables.**
+
 ## Context-Specific Reading Guide
 
 **Quick navigation: What should I read for my current task?**
@@ -162,15 +171,19 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 - Investigate and fix ALL warnings, every time
 
 **Holistic Refactoring Over Patches:**
+- **Ask "starting from scratch" question** - "If I could redo this from scratch knowing what I know now, what would I do differently?"
 - **Never patch on top of patches** - If code needs changing, step back and ask: "If I knew the requirement from the start, how would I implement this correctly?"
 - Delete and refactor rather than adding conditional logic to existing code
 - Don't be biased toward keeping existing code just because it exists
 - Prefer solutions that result in less code, simpler code, easier-to-reason-about code
+- Focus on the best final state, not the simplest change from current state
 
 **No "Quick Fixes":**
 - Always choose the solution that removes the most tech debt, even if it takes longer
 - "This is easier" is never a reason to choose inferior approach
+- Don't avoid important changes just because they require updating many call sites
 - Centralize patterns, extract utilities, remove duplication - do it right the first time
+- Ask: "What would I build if starting fresh?" not "What's the minimal change?"
 
 **Complete Work Honestly:**
 - Never claim work is "complete" or "100% done" if stubs, broken tests, or known issues remain
@@ -189,11 +202,28 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 - Don't use "priority" as excuse to defer work
 - If something is truly optional, discuss explicitly - don't just deprioritize
 
+**Prefer Unified Systems:**
+- **If unified infrastructure exists, use it everywhere** - Consistency matters more than saving a few lines
+- Don't create ad-hoc solutions when centralized systems exist
+- Code simplification is about eliminating parallel approaches, not just line count
+- Examples of unified systems to always use:
+  - **Dialog.svelte** - Never create inline modal overlays
+  - **logger utility** - Never use console.log
+  - **ApiResult<T>** - Never create custom result structs with success/data/error pattern
+  - **Design system CSS** - Never write custom .btn or .form-control styles
+  - **invoke() directly** - Never create thin wrapper layers over it
+  - **ValidationResult** - Never create simplified validation result types
+  - **parse_memory_gb()** - Never create alternative memory parsers
+- Remove one-off implementations even if only 10-20 lines - using unified systems is always simpler
+
 **Balance in Abstraction:**
 - Avoid both extremes: don't copy-paste code, but don't over-abstract for DRY's sake
 - Extract when sharing logic reduces errors and improves maintainability
 - Don't create abstractions that make code harder to understand
 - Prefer simple, obvious code over clever abstractions
+- **Delete thin wrappers** - If 95% of methods are pure pass-through, delete the layer entirely
+- Call underlying systems directly (invoke(), parse functions, etc.) instead of wrapping them
+- Ask: "Does this abstraction add value or just add indirection?"
 
 ### Cluster Integration Pitfalls
 - **Don't hardcode module versions** - Make configurable (gcc/14.2.0, etc.)
@@ -209,6 +239,7 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 - **Don't implement business logic in frontend** - Validation, calculations, cluster config belong in Rust
 - **Don't keep orphaned code** - Delete service layers and utilities that production code never imports
 - **Don't treat test usage as real usage** - If only tests use code, delete both the code and tests
+- **Delete bypassed abstractions** - If new code routes around an abstraction layer, delete the layer (not a guideline, the exception proves the pattern is wrong)
 
 ## What Success Looks Like
 - **Complete functionality** - All planned features working reliably in Tauri

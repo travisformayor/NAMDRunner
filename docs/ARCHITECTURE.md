@@ -340,7 +340,10 @@ NAMDRunner updates server metadata (`job_info.json`) only at job lifecycle bound
   - All validation happens in backend (single source of truth)
   - Dynamic form generation from template definitions
   > **For UI/UX design patterns**, see [`docs/DESIGN.md`](DESIGN.md)
-- **Backend**: Rust command handlers - all business logic, validation, and cluster configuration
+- **Backend**: Layered architecture with clear separation of concerns
+  - **Commands layer** (`commands/`): Thin IPC adapters that validate input, call business logic, and wrap results in ApiResult
+  - **Automations layer** (`automations/`): Business logic for job lifecycle workflows with progress tracking
+  - **Core services**: Cluster capabilities (`cluster.rs`), validation (`validation/`), templates (`templates/`), SSH/SFTP (`ssh/`)
   - Cluster capabilities (partitions, QOS, billing) in `cluster.rs`
   - Resource validation in `validation/job_validation.rs`
   - Input sanitization and security validation in `validation.rs`
@@ -357,10 +360,6 @@ NAMDRunner updates server metadata (`job_info.json`) only at job lifecycle bound
 ```
 src/
 ├── lib/
-│   ├── ports/                   # IPC communication layer
-│   │   ├── coreClient.ts        # IPC interface definition
-│   │   ├── coreClient-tauri.ts  # Production Tauri implementation
-│   │   └── clientFactory.ts     # Client selection
 │   ├── types/                   # TypeScript type definitions
 │   │   ├── api.ts               # Core API types matching Rust types
 │   │   ├── template.ts          # Template types matching Rust types
@@ -389,7 +388,12 @@ src/
 │   │   ├── templates/           # Template management components
 │   │   │   ├── TemplateEditor.svelte    # Template creation/editing
 │   │   │   └── VariableEditor.svelte    # Variable definition editor
-│   │   ├── job-detail/          # Job details and management components
+│   │   ├── job-detail/          # Job details and management components (4 tabs)
+│   │   │   ├── JobTabs.svelte           # Tab navigation and routing
+│   │   │   ├── tabs/OverviewTab.svelte  # Job overview and metadata
+│   │   │   ├── tabs/InputFilesTab.svelte  # Input files listing
+│   │   │   ├── tabs/OutputFilesTab.svelte # Output files listing
+│   │   │   └── tabs/SlurmLogsTab.svelte   # SLURM logs display
 │   │   ├── jobs/                # Job listing and management components
 │   │   ├── pages/               # Page-level components
 │   │   │   ├── TemplatesPage.svelte      # Template management page
@@ -405,7 +409,9 @@ src/
 │   │   └── cluster.ts           # Cluster capability types (matches backend)
 │   ├── styles/                  # Global styles and themes
 │   ├── utils/                   # Utility functions
-│   │   └── file-helpers.ts      # File display formatting utilities
+│   │   ├── file-helpers.ts      # File display formatting utilities
+│   │   ├── logger.ts            # Frontend logging utilities
+│   │   └── template-utils.ts    # Template rendering and validation utilities
 │   └── test/                    # Testing infrastructure
 │       ├── fixtures/            # Test data and scenarios
 │       │   ├── testDataManager.ts # Test data management
@@ -426,20 +432,25 @@ src-tauri/
 ├── src/
 │   ├── main.rs                  # Application entry point
 │   ├── lib.rs                   # Tauri app configuration and command registration
-│   ├── commands/                # Tauri IPC command handlers
+│   ├── commands/                # Tauri IPC command handlers (thin adapters)
 │   │   ├── mod.rs              # Command module exports
 │   │   ├── connection.rs       # SSH connection lifecycle commands
 │   │   ├── cluster.rs          # Cluster configuration and validation commands
 │   │   ├── jobs.rs             # Job lifecycle commands (create/submit/sync/delete/complete)
 │   │   ├── files.rs            # File management commands
 │   │   ├── templates.rs        # Template management commands (list/get/create/update/delete/validate)
-│   │   └── database.rs         # Database management commands (info/backup/restore/reset)
+│   │   ├── database.rs         # Database management commands (info/backup/restore/reset)
+│   │   └── helpers.rs          # Reusable command helpers (4 functions: require_connection, load_job_or_fail, get_cluster_username, load_template_or_fail)
 │   ├── automations/            # Job lifecycle automation system
 │   │   ├── mod.rs              # Automation module exports
 │   │   ├── job_creation.rs     # Job creation automation with progress tracking
 │   │   ├── job_submission.rs   # Job submission automation
 │   │   ├── job_completion.rs   # Job completion and results preservation
-│   │   └── job_sync.rs         # Job status synchronization
+│   │   ├── job_deletion.rs     # Job deletion automation
+│   │   ├── job_sync.rs         # Job status synchronization
+│   │   ├── common.rs           # Shared automation helpers (7 functions: save_job_to_database, require_connection_with_username, require_project_dir, etc.)
+│   │   ├── errors.rs           # Automation error types and handling
+│   │   └── progress.rs         # Progress tracking types and utilities
 │   ├── templates/              # Template system
 │   │   ├── mod.rs              # Template module exports
 │   │   ├── types.rs            # Template and variable definition types
@@ -452,6 +463,7 @@ src-tauri/
 │   │   ├── commands.rs         # SSH command execution and parsing
 │   │   ├── sftp.rs             # File transfer operations
 │   │   ├── metadata.rs         # Job metadata upload utilities
+│   │   ├── directory_structure.rs # Standard job directory structure definitions
 │   │   ├── errors.rs           # SSH error mapping and classification
 │   │   └── test_utils.rs       # Development utilities
 │   ├── slurm/                  # SLURM integration
@@ -463,8 +475,9 @@ src-tauri/
 │   │   └── mod.rs              # Database with jobs and templates tables
 │   ├── types/                  # Rust type definitions
 │   │   ├── mod.rs              # Type module exports
-│   │   ├── core.rs             # Core domain types (JobInfo, SessionInfo, ApiResult)
-│   │   └── commands.rs         # Command parameter and result types
+│   │   ├── core.rs             # Core domain types (JobInfo, SessionInfo, ApiResult, JobStatus, ConnectionState, etc.)
+│   │   ├── commands.rs         # Command parameter and result types
+│   │   └── response_data.rs    # Response data structures for IPC commands
 │   ├── validation/             # Validation system
 │   │   ├── mod.rs              # Input sanitization and path safety
 │   │   └── job_validation.rs   # Resource and business logic validation
@@ -488,6 +501,7 @@ NAMDRunner implements a backend-first architecture where all business logic, val
 
 **Key Architecture Principles:**
 - **Stores as pure caches** - No business logic, workflow orchestration, or validation. Stores receive complete state from backend and reactively update UI.
+- **Store factory pattern** - Stores use factory functions (e.g., `createJobsStore()`) for encapsulation and testability
 - **Backend is source of truth** - All validation, calculations, and workflow orchestration happen in Rust. Frontend makes single backend calls.
 - **Type-safe IPC boundary** - Consistent snake_case contracts between TypeScript and Rust
 - **Single backend calls** - No multi-step orchestration (e.g., sync returns complete job list including discovered jobs)
@@ -505,7 +519,7 @@ NAMDRunner uses a centralized design system with comprehensive theming support.
 - **Theme consistency** - All interactive elements use `--namd-*` CSS variables (no hardcoded colors)
 
 **Frontend Responsibilities:**
-- Reactive state caching via Svelte stores ([`jobs.ts`](../src/lib/stores/jobs.ts), [`session.ts`](../src/lib/stores/session.ts), [`templateStore.ts`](../src/lib/stores/templateStore.ts), [`settings.ts`](../src/lib/stores/settings.ts))
+- Reactive state caching via Svelte stores with factory pattern ([`jobs.ts`](../src/lib/stores/jobs.ts), [`session.ts`](../src/lib/stores/session.ts), [`templateStore.ts`](../src/lib/stores/templateStore.ts), [`settings.ts`](../src/lib/stores/settings.ts))
 - UI presentation and user interaction
 - Progress event handling from backend
 - Display formatting (status badges, file icons, etc.)
@@ -577,6 +591,7 @@ interface JobInfo {
   slurm_job_id?: SlurmJobId;
   template_id: string;                     // Template used for this job
   template_values: Record<string, any>;    // Variable values at submission
+  input_files?: string[];                  // List of uploaded input filenames
   created_at: Timestamp;
   updated_at?: Timestamp;
   // ... additional fields
@@ -685,6 +700,11 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
 ### Key Implementation Areas
 
 **Backend (Rust):**
+- **Commands Layer** - Thin IPC adapters with minimal logic
+  - Commands pattern: Validate input → Call automation/business logic → Wrap result in ApiResult
+  - No business logic in commands (moved to `automations/` modules)
+  - Helper functions in `commands/helpers.rs` for common patterns (connection checks, database loading)
+  - Example refactoring: `commands/jobs.rs` reduced from 590 to 210 lines by extracting workflows to `automations/`
 - **Template System** - Template-based NAMD configuration with database storage
   - Template types: `src-tauri/src/templates/types.rs` (Template, VariableDefinition, VariableType)
   - Template rendering: `src-tauri/src/templates/renderer.rs::render_template()` (regex-based variable substitution)
@@ -726,12 +746,11 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
   - Template validation: `src-tauri/src/templates/validation.rs` (variable type checking)
 
 **Frontend (TypeScript/Svelte):**
-- **IPC Communication** - Strongly-typed commands with consistent error handling
+- **IPC Communication** - Direct Tauri invoke with strongly-typed commands
   > **For detailed IPC interfaces and command specifications**, see [`docs/API.md`](API.md)
-  - Main client: `src/lib/ports/coreClient.ts::ICoreClient` interface
-  - Tauri implementation: `src/lib/ports/coreClient-tauri.ts::TauriCoreClient` (production)
-  - Client factory: `src/lib/ports/clientFactory.ts::CoreClientFactory`
-  - Test mocking: Vitest `vi.mock()` for isolated component testing
+  - Direct usage: `invoke<T>(command, params)` from `@tauri-apps/api/core`
+  - No abstraction layer: Stores call invoke directly for type safety and simplicity
+  - Test mocking: Vitest `vi.mock('@tauri-apps/api/core')` for isolated component testing
 - **Reactive State Management** - UI state caching backend data
   - Job state: `src/lib/stores/jobs.ts` (caches job list, handles real-time updates)
   - Template state: `src/lib/stores/templateStore.ts` (template management)

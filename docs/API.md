@@ -8,6 +8,7 @@ This document defines all interfaces and data contracts for NAMDRunner, consolid
   - [Connection State Management](#connection-state-management)
   - [Job Lifecycle States](#job-lifecycle-states)
   - [Basic Types](#basic-types)
+  - [ApiResult Pattern](#apiresult-pattern)
 - [Connection Management Commands](#connection-management-commands)
   - [IPC Interface](#ipc-interface)
 - [Job Management Commands](#job-management-commands)
@@ -91,20 +92,43 @@ type SlurmJobId = string;   // SLURM's job ID (numbers)
 type Timestamp = string;    // ISO 8601 format
 ```
 
+### ApiResult Pattern
+
+Most commands return `ApiResult<T>`, a generic wrapper providing consistent success/error handling:
+
+```typescript
+interface ApiResult<T> {
+  success: boolean;
+  data?: T;         // Present when success is true
+  error?: string;   // Present when success is false
+}
+
+// Usage examples:
+// - ApiResult<JobInfo> for get_job_status
+// - ApiResult<JobInfo[]> for get_all_jobs
+// - ApiResult<string> for preview_slurm_script
+// - ApiResult<void> for disconnect, delete operations
+```
+
+Commands with unique multi-field responses use specialized result types (e.g., `SyncJobsResult`, `UploadResult`, `ValidationResult`).
+
 
 ## Connection Management Commands
 
 ### IPC Interface
+
+All commands return `ApiResult<T>` which wraps the result with success/error information (see [ApiResult Pattern](#apiresult-pattern)).
+
 ```typescript
 interface IConnectionCommands {
   // Establish SSH connection to cluster
-  connect_to_cluster(params: ConnectParams): Promise<ConnectResult>;
+  connect_to_cluster(params: ConnectParams): Promise<ApiResult<SessionInfo>>;
 
   // Close SSH connection
-  disconnect(): Promise<DisconnectResult>;
+  disconnect(): Promise<ApiResult<void>>;
 
   // Check current connection status
-  get_connection_status(): Promise<ConnectionStatusResult>;
+  get_connection_status(): Promise<ApiResult<ConnectionStatus>>;
 
   // Get cluster capabilities (partitions, QoS options, etc.)
   get_cluster_capabilities(): Promise<ApiResult<ClusterCapabilities>>;
@@ -118,34 +142,15 @@ interface IConnectionCommands {
   validate_resource_allocation(cores: number, memory: string, walltime: string, partition_id: string, qos_id: string): Promise<ValidationResult>;
 }
 
-interface ConnectResult {
-  success: boolean;
-  session_info?: {
-    host: string;
-    username: string;
-    connected_at: Timestamp;
-  };
-  error?: string;
+interface SessionInfo {
+  host: string;
+  username: string;
+  connected_at: Timestamp;
 }
 
-interface DisconnectResult {
-  success: boolean;
-  error?: string;
-}
-
-interface ConnectionStatusResult {
+interface ConnectionStatus {
   state: ConnectionState;
-  session_info?: {
-    host: string;
-    username: string;
-    connected_at: Timestamp;
-  };
-}
-
-interface GetClusterCapabilitiesResult {
-  success: boolean;
-  data?: ClusterCapabilities;
-  error?: string;
+  session_info?: SessionInfo;
 }
 
 interface ClusterCapabilities {
@@ -163,7 +168,9 @@ interface ClusterCapabilities {
 
 ### IPC Interface
 
-**Important**: All command parameters use snake_case naming per Implementation Note #9. Example invocation:
+All commands return `ApiResult<T>` or specialized result types. Commands use snake_case naming per Implementation Note #9.
+
+Example invocation:
 ```typescript
 // Correct - snake_case matches Rust backend
 await invoke('submit_job', { job_id: "test1_123" });
@@ -175,42 +182,37 @@ await invoke('submit_job', { jobId: "test1_123" });
 ```typescript
 interface IJobCommands {
   // Create new job (local only, not submitted yet)
-  createJob(params: CreateJobParams): Promise<CreateJobResult>;
+  create_job(params: CreateJobParams): Promise<ApiResult<JobInfo>>;
 
   // Submit job to SLURM cluster
-  submitJob(job_id: JobId): Promise<SubmitJobResult>;
+  submit_job(job_id: JobId): Promise<ApiResult<JobSubmissionData>>;
 
   // Get status of specific job
-  getJobStatus(job_id: JobId): Promise<JobStatusResult>;
+  get_job_status(job_id: JobId): Promise<ApiResult<JobInfo>>;
 
   // Get all jobs from local cache
-  getAllJobs(): Promise<GetAllJobsResult>;
+  get_all_jobs(): Promise<ApiResult<JobInfo[]>>;
 
   // Sync job statuses with cluster (includes automatic discovery if database empty)
-  syncJobs(): Promise<SyncJobsResult>;
-
-  // Discover jobs from server by scanning remote directory (only when database empty)
-  discover_jobs_from_server(): Promise<DiscoverJobsResult>;
+  sync_jobs(): Promise<SyncJobsResult>;
 
   // Delete job (local and optionally remote)
-  deleteJob(job_id: JobId, delete_remote: boolean): Promise<DeleteJobResult>;
+  delete_job(job_id: JobId, delete_remote: boolean): Promise<ApiResult<void>>;
 
   // Refetch SLURM logs from server (overwrites cached logs)
-  refetchSlurmLogs(job_id: JobId): Promise<RefetchLogsResult>;
+  refetch_slurm_logs(job_id: JobId): Promise<ApiResult<JobInfo>>;
 
   // Preview SLURM script before submission
-  preview_slurm_script(job_name: string, cores: number, memory: string, walltime: string, partition?: string, qos?: string): Promise<PreviewResult>;
+  preview_slurm_script(job_name: string, cores: number, memory: string, walltime: string, partition?: string, qos?: string): Promise<ApiResult<string>>;
 
   // Validate complete job configuration
-  validate_job_config(job_name: string, template_id: string, template_values: Record<string, any>, cores: number, memory: string, walltime: string, partition?: string, qos?: string): Promise<JobValidationResult>;
+  validate_job_config(params: ValidateJobConfigParams): Promise<ValidationResult>;
 }
 ```
 
-**Note**: Command names use `snake_case` per Rust convention. The TypeScript client should maintain this naming.
-
 **Job Discovery Integration:**
 
-The `syncJobs()` command automatically handles job discovery when the local database is empty (e.g., first connection after database reset). This eliminates the need for separate discovery commands and multi-step frontend orchestration.
+The `sync_jobs()` command automatically handles job discovery when the local database is empty (e.g., first connection after database reset). This eliminates the need for separate discovery commands and multi-step frontend orchestration.
 
 **Workflow:**
 1. Query SLURM for active job status updates
@@ -245,25 +247,6 @@ interface CreateJobParams {
 //   "execution_command": "minimize"
 // }
 
-interface CreateJobResult {
-  success: boolean;
-  job_id?: JobId;
-  error?: string;
-}
-
-interface SubmitJobResult {
-  success: boolean;
-  slurm_job_id?: SlurmJobId;
-  submitted_at?: Timestamp;
-  error?: string;
-}
-
-interface JobStatusResult {
-  success: boolean;
-  job_info?: JobInfo;
-  error?: string;
-}
-
 interface JobInfo {
   job_id: JobId;
   job_name: string;
@@ -281,50 +264,33 @@ interface JobInfo {
   template_id: string;                     // Template used for this job
   template_values: Record<string, any>;    // Variable values for template
   slurm_config: SlurmConfig;
+  input_files?: string[];                  // List of uploaded input files
   output_files?: OutputFile[];
   remote_directory: string;
 }
 
-interface GetAllJobsResult {
-  success: boolean;
-  jobs?: JobInfo[];
-  error?: string;
+interface JobSubmissionData {
+  slurm_job_id: SlurmJobId;
+  submitted_at: Timestamp;
+  job_id: JobId;             // Local job ID
 }
 
 interface SyncJobsResult {
   success: boolean;
   jobs: JobInfo[];           // Complete job list (discovery + sync results)
-  jobs_updated: number;       // Count of jobs that had status updates
+  jobs_updated: number;      // Count of jobs that had status updates (u32 in Rust)
   errors: string[];
 }
 
-interface DiscoverJobsResult {
-  success: boolean;
-  jobs_found: number;         // Total job directories found on server
-  jobs_imported: number;      // Number of new jobs imported
-  error?: string;
-}
-
-interface DeleteJobResult {
-  success: boolean;
-  error?: string;
-}
-
-interface RefetchLogsResult {
-  success: boolean;
-  job_info?: JobInfo;     // Updated job with refreshed logs
-  error?: string;
-}
-
-interface JobValidationResult {
-  is_valid: boolean;
-  errors: string[];
-}
-
-interface PreviewResult {
-  success: boolean;
-  content?: string;  // Rendered content (NAMD config or SLURM script)
-  error?: string;
+interface ValidateJobConfigParams {
+  job_name: string;
+  template_id: string;
+  template_values: Record<string, any>;
+  cores: number;
+  memory: string;
+  walltime: string;
+  partition?: string;
+  qos?: string;
 }
 
 interface ValidationResult {
@@ -340,22 +306,41 @@ interface ValidationResult {
 ### IPC Interface
 ```typescript
 interface IFileCommands {
+  // Detect NAMD file type from filename
+  detect_file_type(filename: string): Promise<string>;
+
+  // Open file dialog to select a single NAMD input file
+  select_input_file(): Promise<SelectedFile | null>;
+
   // Upload files to job directory on cluster
-  uploadJobFiles(job_id: JobId, files: FileUpload[]): Promise<UploadResult>;
+  upload_job_files(job_id: JobId, files: FileUpload[]): Promise<UploadResult>;
 
   // Download single job output file (shows native save dialog)
-  downloadJobOutput(job_id: JobId, file_path: string): Promise<DownloadResult>;
+  download_job_output(job_id: JobId, file_path: string): Promise<ApiResult<DownloadInfo>>;
 
   // Download all output files as ZIP archive (shows native save dialog)
-  downloadAllOutputs(job_id: JobId): Promise<DownloadResult>;
+  download_all_outputs(job_id: JobId): Promise<ApiResult<DownloadInfo>>;
+
+  // Download single job input file (shows native save dialog)
+  download_job_input(job_id: JobId, file_path: string): Promise<ApiResult<DownloadInfo>>;
+
+  // Download all input files as ZIP archive (shows native save dialog)
+  download_all_inputs(job_id: JobId): Promise<ApiResult<DownloadInfo>>;
 
   // List files in job directory
-  listJobFiles(job_id: JobId): Promise<ListFilesResult>;
+  list_job_files(job_id: JobId): Promise<ApiResult<RemoteFile[]>>;
 }
 
 interface FileUpload {
   local_path: string;
   remote_name: string;
+}
+
+interface SelectedFile {
+  name: string;          // Filename
+  path: string;          // Full local path
+  size: number;          // File size in bytes
+  file_type: string;     // File extension (e.g., ".pdb")
 }
 
 interface UploadResult {
@@ -367,11 +352,9 @@ interface UploadResult {
   }>;
 }
 
-interface DownloadResult {
-  success: boolean;
-  saved_to?: string;     // Local path where file was saved (via native dialog)
-  file_size?: number;
-  error?: string;
+interface DownloadInfo {
+  saved_to: string;      // Local path where file was saved (via native dialog)
+  file_size: number;     // File size in bytes
 }
 
 interface RemoteFile {
@@ -381,12 +364,6 @@ interface RemoteFile {
   modified_at: Timestamp;
   file_type: 'input' | 'output' | 'config' | 'log';
 }
-
-interface ListFilesResult {
-  success: boolean;
-  files?: RemoteFile[];
-  error?: string;
-}
 ```
 
 ## Database Management Commands
@@ -394,30 +371,28 @@ interface ListFilesResult {
 ### IPC Interface
 ```typescript
 interface IDatabaseCommands {
-  // Get database path and size information
-  get_database_info(): Promise<DatabaseInfoResult>;
+  // Get database path, size, and job count
+  get_database_info(): Promise<ApiResult<DatabaseInfo>>;
 
   // Backup database to user-selected location
-  backup_database(): Promise<DatabaseOperationResult>;
+  backup_database(): Promise<ApiResult<DatabaseOperationData>>;
 
   // Restore database from user-selected backup file
-  restore_database(): Promise<DatabaseOperationResult>;
+  restore_database(): Promise<ApiResult<DatabaseOperationData>>;
 
   // Reset database (delete all data and recreate schema)
-  reset_database(): Promise<DatabaseOperationResult>;
+  reset_database(): Promise<ApiResult<DatabaseOperationData>>;
 }
 
-interface DatabaseInfoResult {
-  success: boolean;
-  path?: string;          // Full path to database file
-  size_bytes?: number;    // Database file size in bytes
-  error?: string;
+interface DatabaseInfo {
+  path: string;           // Full path to database file
+  size_bytes: number;     // Database file size in bytes
+  job_count: number;      // Number of jobs in database
 }
 
-interface DatabaseOperationResult {
-  success: boolean;
-  message?: string;       // Success message (e.g., "Backup saved to /path/to/backup.db")
-  error?: string;
+interface DatabaseOperationData {
+  path: string;           // Path to database file
+  message: string;        // Operation result message
 }
 ```
 
@@ -431,31 +406,34 @@ interface DatabaseOperationResult {
 ```typescript
 interface ITemplateCommands {
   // List all templates (returns summary for template selection)
-  list_templates(): Promise<ListTemplatesResult>;
+  list_templates(): Promise<ApiResult<TemplateSummary[]>>;
 
   // Get full template definition (for editing or job creation)
-  get_template(template_id: string): Promise<GetTemplateResult>;
+  get_template(template_id: string): Promise<ApiResult<Template>>;
 
   // Create new user template
-  create_template(template: Template): Promise<CreateTemplateResult>;
+  create_template(template: Template): Promise<ApiResult<string>>;
 
   // Update existing template
-  update_template(template_id: string, template: Template): Promise<UpdateTemplateResult>;
+  update_template(template_id: string, template: Template): Promise<ApiResult<void>>;
 
   // Delete template (blocked if jobs exist using it)
-  delete_template(template_id: string): Promise<DeleteTemplateResult>;
+  delete_template(template_id: string): Promise<ApiResult<void>>;
 
   // Validate template values against template definition
   validate_template_values(
     template_id: string,
     values: Record<string, any>
-  ): Promise<ValidateTemplateValuesResult>;
+  ): Promise<ValidationResult>;
 
   // Preview rendered NAMD config with user values
   preview_namd_config(
     template_id: string,
     values: Record<string, any>
-  ): Promise<PreviewResult>;
+  ): Promise<ApiResult<string>>;
+
+  // Preview template with default/sample values (for template editor testing)
+  preview_template_with_defaults(template_id: string): Promise<ApiResult<string>>;
 }
 
 interface Template {
@@ -482,44 +460,11 @@ type VariableType =
   | { Boolean: { default: boolean } }
   | { FileUpload: { extensions: string[] } };
 
-interface ListTemplatesResult {
-  success: boolean;
-  templates?: TemplateSummary[];
-  error?: string;
-}
-
 interface TemplateSummary {
   id: string;
   name: string;
   description: string;
   is_builtin: boolean;
-}
-
-interface GetTemplateResult {
-  success: boolean;
-  template?: Template;
-  error?: string;
-}
-
-interface CreateTemplateResult {
-  success: boolean;
-  template_id?: string;
-  error?: string;
-}
-
-interface UpdateTemplateResult {
-  success: boolean;
-  error?: string;
-}
-
-interface DeleteTemplateResult {
-  success: boolean;
-  error?: string;  // e.g., "Cannot delete template: 3 job(s) are using it"
-}
-
-interface ValidateTemplateValuesResult {
-  valid: boolean;
-  errors: string[];  // Field-level validation errors
 }
 ```
 
@@ -640,6 +585,7 @@ pub struct JobInfo {
     pub template_values: HashMap<String, serde_json::Value>,
 
     pub slurm_config: SlurmConfig,
+    pub input_files: Option<Vec<String>>,   // List of uploaded input files
     pub output_files: Option<Vec<OutputFile>>,
     pub remote_directory: String,
 }
@@ -693,37 +639,69 @@ pub enum VariableType {
 **Location**: [src-tauri/src/types/core.rs](../src-tauri/src/types/core.rs), [src-tauri/src/templates/types.rs](../src-tauri/src/templates/types.rs)
 
 ### Command Result Types
+
+**Generic Result Pattern**: Most commands return `ApiResult<T>`:
+
 ```rust
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiResult<T> {
     pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ConnectResult {
-    pub success: bool,
-    pub session_info: Option<SessionInfo>,
-    pub error: Option<String>,
-}
+// Usage examples:
+// - ApiResult<JobInfo> for get_job_status
+// - ApiResult<Vec<JobInfo>> for get_all_jobs
+// - ApiResult<String> for preview_slurm_script
+// - ApiResult<()> for disconnect, delete operations
+// - ApiResult<SessionInfo> for connect_to_cluster
+// - ApiResult<ConnectionStatus> for get_connection_status
+// - ApiResult<DownloadInfo> for download commands
+// - ApiResult<Vec<RemoteFile>> for list_job_files
+// - ApiResult<DatabaseInfo> for get_database_info
+// - ApiResult<DatabaseOperationData> for backup/restore/reset operations
+```
 
-#[derive(Debug, Serialize)]
+**Specialized Result Types** (for commands with unique multi-field responses):
+
+```rust
+// Session information (wrapped in ApiResult by connect_to_cluster)
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub host: String,
     pub username: String,
     pub connected_at: String,  // RFC3339 timestamp
 }
 
-#[derive(Debug, Serialize)]
-pub struct CreateJobResult {
-    pub success: bool,
-    pub job_id: Option<String>,
-    pub job: Option<JobInfo>,
-    pub error: Option<String>,
+// Connection status (wrapped in ApiResult by get_connection_status)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionStatus {
+    pub state: ConnectionState,
+    pub session_info: Option<SessionInfo>,
 }
 
+// Job submission response (wrapped in ApiResult by submit_job)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobSubmissionData {
+    pub slurm_job_id: String,
+    pub submitted_at: String,
+    pub job_id: String,
+}
+
+// Job sync result (not wrapped - contains its own success field)
 #[derive(Debug, Serialize)]
+pub struct SyncJobsResult {
+    pub success: bool,
+    pub jobs: Vec<JobInfo>,
+    pub jobs_updated: u32,
+    pub errors: Vec<String>,
+}
+
+// Validation result (not wrapped - contains its own is_valid field)
+#[derive(Debug, Clone, Serialize)]
 pub struct ValidationResult {
     pub is_valid: bool,
     pub issues: Vec<String>,
@@ -731,26 +709,44 @@ pub struct ValidationResult {
     pub suggestions: Vec<String>,
 }
 
-// Database management result types
+// File upload result (not wrapped - contains its own success field)
 #[derive(Debug, Serialize)]
-pub struct DatabaseInfoResult {
+pub struct UploadResult {
     pub success: bool,
-    pub path: Option<String>,
-    pub size_bytes: Option<u64>,
-    pub error: Option<String>,
+    pub uploaded_files: Option<Vec<String>>,
+    pub failed_uploads: Option<Vec<FailedUpload>>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct DatabaseOperationResult {
-    pub success: bool,
-    pub message: Option<String>,
-    pub error: Option<String>,
+pub struct FailedUpload {
+    pub file_name: String,
+    pub error: String,
 }
 
-// Additional result types follow same pattern...
+// Download info (wrapped in ApiResult by download commands)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadInfo {
+    pub saved_to: String,
+    pub file_size: u64,
+}
+
+// Database info (wrapped in ApiResult by get_database_info)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseInfo {
+    pub path: String,
+    pub size_bytes: u64,
+    pub job_count: usize,
+}
+
+// Database operation result (wrapped in ApiResult by backup/restore/reset)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseOperationData {
+    pub path: String,
+    pub message: String,
+}
 ```
 
-**Location**: [src-tauri/src/types/commands.rs](../src-tauri/src/types/commands.rs), [src-tauri/src/types/core.rs](../src-tauri/src/types/core.rs), [src-tauri/src/commands/database.rs](../src-tauri/src/commands/database.rs)
+**Location**: [src-tauri/src/types/core.rs](../src-tauri/src/types/core.rs), [src-tauri/src/types/commands.rs](../src-tauri/src/types/commands.rs), [src-tauri/src/types/response_data.rs](../src-tauri/src/types/response_data.rs), [src-tauri/src/validation/job_validation.rs](../src-tauri/src/validation/job_validation.rs)
 
 ## SLURM Integration
 

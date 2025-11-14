@@ -152,6 +152,7 @@ The `execute_job_creation_with_progress` function handles the complete job creat
    - Extract filename from local path and update template_values with just filename
    - Progress tracking per file with validation
    - Uses ConnectionManager with retry logic
+   - Store uploaded filenames in `input_files` field for job tracking
 
 5. **Render NAMD Configuration from Template**
    - Use `crate::templates::render_template()` with template and values
@@ -283,6 +284,10 @@ The `sync_all_jobs()` function handles complete synchronization workflow, includ
      - Scan `/projects/$USER/namdrunner_jobs/` for job directories
      - Download `job_info.json` from each directory
      - Parse and import to database
+     - Returns `DiscoveryReport` struct containing:
+       - `imported_jobs: Vec<JobSummary>` - Successfully imported jobs with key details
+       - `failed_imports: Vec<FailedImport>` - Jobs that failed with specific error reasons
+     - Logs detailed results: which jobs imported successfully, which failed and why
      - For jobs with status=PENDING/RUNNING, they'll sync on next cycle
    - If discovery fails, log error but continue with sync
 
@@ -382,36 +387,57 @@ Terminal State Detected
 
 ---
 
-### 5. Job Cleanup Automation Chain
+### 5. Job Deletion Automation Chain
 
-**Trigger**: User clicks "Delete Job" button with "Delete Remote Files" option
-**Purpose**: Safely remove job directories from cluster while preserving database record option
-**Status**: ✅ **IMPLEMENTED** in `src-tauri/src/commands/jobs.rs`
+**Trigger**: User clicks "Delete Job" button with optional "Delete Remote Files" checkbox
+**Purpose**: Cancel active SLURM jobs, safely remove job directories from cluster, and clean up local database
+**Status**: ✅ **IMPLEMENTED** in `src-tauri/src/automations/job_deletion.rs`
 
 #### Implementation:
 
-The job deletion automation performs safe cleanup with multiple validation steps:
+The `execute_job_deletion` function handles complete job cleanup with safety validation and progress tracking:
 
-1. **Input Validation**: Sanitize job ID to prevent injection attacks
-2. **Load Job Information**: Retrieve job details from local database
-3. **Connection Verification**: Ensure active SSH connection to cluster
-4. **Directory Safety Validation**:
-   - Verify paths contain "namdrunner_jobs" to prevent accidental deletion
-   - Block dangerous patterns (.., /, /etc, /usr)
-   - Validate both project and scratch directory paths
-5. **Safe Directory Removal**:
-   - Delete project directory: `/projects/$USER/namdrunner_jobs/{job_id}/`
-   - Delete scratch directory: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/`
-   - Use ConnectionManager with retry logic for network resilience
-6. **Database Cleanup**: Remove job record from local SQLite database
+1. **Load Job Information**
+   - Retrieve job from local database by job ID
+   - Validate job exists
+   - Extract status, SLURM job ID, project_dir, scratch_dir for cleanup operations
+
+2. **Cancel SLURM Job** (if active)
+   - Check if job status is Pending or Running
+   - If active and has SLURM job ID:
+     - Verify SSH connection is active
+     - Get cluster username for SLURM commands
+     - Cancel job using `scancel` via SlurmStatusSync
+     - Prevents orphaned cluster processes consuming resources
+   - If job already completed or has no SLURM ID, skip cancellation
+
+3. **Delete Remote Directories** (if requested)
+   - Only executes if user checked "Delete Remote Files" option
+   - Verify SSH connection is active before any operations
+   - Collect directories to delete:
+     - Project directory: `/projects/$USER/namdrunner_jobs/{job_id}/` (if present)
+     - Scratch directory: `/scratch/alpine/$USER/namdrunner_jobs/{job_id}/` (if present)
+   - **Directory Safety Validation** (for each directory):
+     - Verify path contains `JOB_BASE_DIRECTORY` constant ("namdrunner_jobs")
+     - Block dangerous patterns: `..` (traversal), `/` (root), `/etc`, `/usr`
+     - Return error and abort if any validation fails
+   - Delete each validated directory using ConnectionManager
+   - Uses retry logic for network resilience
+
+4. **Remove from Database**
+   - Delete job record from local SQLite database
+   - Verify deletion succeeded (returns error if job not found)
+   - Atomic operation - database transaction ensures consistency
 
 **Safety Features**:
-- Multiple path validation layers prevent directory traversal attacks
-- Connection verification prevents orphaned database records
-- Atomic operation - either fully succeeds or cleanly fails
-- Detailed error messages for troubleshooting
+- **SLURM job cancellation**: Prevents orphaned cluster processes
+- **Multi-layer path validation**: Prevents directory traversal attacks and accidental system directory deletion
+- **Connection verification**: Ensures cluster access before remote operations to prevent partial deletions
+- **Atomic database operation**: Either fully succeeds or cleanly fails
+- **Progress reporting**: Real-time status updates at each step for user transparency
+- **Opt-in remote deletion**: User must explicitly request remote file deletion
 
-**Result**: Job completely removed from both cluster storage and local database, with full safety validation
+**Result**: Active SLURM job cancelled (if running), job directories removed from cluster storage (if requested), and job record deleted from local database. Operation is safe, transparent, and atomic.
 
 ## Implementation Architecture
 
@@ -424,15 +450,16 @@ src-tauri/src/automations/
 ├── job_submission.rs       # ✅ Simplified submission (validation in job_creation)
 ├── job_sync.rs             # ✅ Status sync, job discovery, connection detection
 ├── job_completion.rs       # ✅ Automatic completion on terminal state
-└── progress.rs             # ✅ Progress tracking utilities
+├── job_deletion.rs         # ✅ Job deletion with SLURM cancellation
+├── errors.rs               # Automation error types
+├── progress.rs             # Progress tracking utilities
+└── common.rs               # Shared helpers for automations
 
 src-tauri/src/templates/
 ├── mod.rs                   # Template system module exports
 ├── types.rs                # Template, VariableDefinition, VariableType
 ├── renderer.rs             # Template rendering with variable substitution
 └── validation.rs           # Template value validation (all variables required)
-
-# Job cleanup implemented in commands/jobs.rs (delete_job function)
 ```
 
 ### Command Integration
@@ -442,27 +469,23 @@ Current implementation in `src-tauri/src/commands/jobs.rs`:
 ```rust
 use crate::automations;
 
-async fn create_job_real(app_handle: tauri::AppHandle, params: CreateJobParams) -> CreateJobResult {
+#[tauri::command(rename_all = "snake_case")]
+pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -> ApiResult<JobInfo> {
+    // Validate inputs
+    let clean_job_name = input::sanitize_job_id(&params.job_name)?;
+    let validated_params = CreateJobParams { job_name: clean_job_name, ..params };
+
+    // Call automation with progress tracking
     let handle_clone = app_handle.clone();
     match automations::execute_job_creation_with_progress(
         app_handle,
-        params,
+        validated_params,
         move |msg| {
             let _ = handle_clone.emit("job-creation-progress", msg);
         }
     ).await {
-        Ok((job_id, job_info)) => CreateJobResult {
-            success: true,
-            job_id: Some(job_id),
-            job: Some(job_info),
-            error: None,
-        },
-        Err(e) => CreateJobResult {
-            success: false,
-            job_id: None,
-            job: None,
-            error: Some(e.to_string()),
-        },
+        Ok((_job_id, job_info)) => ApiResult::success(job_info),
+        Err(e) => ApiResult::error(e.to_string()),
     }
 }
 ```
@@ -622,13 +645,13 @@ pub struct AutomationTemplate {
 
 ## Current Implementation Status
 
-### ✅ Implemented (Phase 7.1 Complete)
-- **Job Creation Automation**: Template-based workflow with dynamic file uploads and progress tracking
+### ✅ Implemented (Phase 7 Complete)
+- **Job Creation Automation**: Template-based workflow with dynamic file uploads, input_files tracking, and progress reporting
 - **Template System Integration**: Template loading, rendering, and validation integrated into job creation
 - **Job Submission Automation**: Simplified workflow with pre-validated templates
-- **Status Synchronization**: Real-time SLURM queue monitoring with automatic job discovery
+- **Status Synchronization**: Real-time SLURM queue monitoring with automatic job discovery and detailed DiscoveryReport
 - **Job Completion Automation**: Automatic rsync of results from scratch to project directories
-- **Job Cleanup Automation**: Safe deletion with comprehensive path validation
+- **Job Deletion Automation**: SLURM cancellation, safe directory removal, and database cleanup with progress tracking
 - **Connection Failure Detection**: Automatic state transition to Expired on connection errors
 - **Security Improvements**: Input sanitization, path validation, command injection prevention
 - **Performance Optimization**: Batched SLURM queries, reduced SSH round-trips

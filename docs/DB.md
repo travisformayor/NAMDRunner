@@ -236,6 +236,12 @@ This file is created in each job directory on the cluster and contains all job m
     "partition": "amilan",
     "qos": "normal"
   },
+  "input_files": [
+    "hextube.psf",
+    "hextube.pdb",
+    "par_all36_na.prm",
+    "hextube.exb"
+  ],
   "output_files": [
     {
       "name": "output.dcd",
@@ -355,6 +361,19 @@ interface OutputFile {
 - Created during automatic job completion (when job reaches terminal state)
 - Backend does single batch SFTP readdir in project directory's outputs/
 - All output files queried at once (no per-file round trips)
+
+### InputFiles Field
+
+The `input_files` field stores the list of uploaded input file names for the job.
+
+**Type:** `Option<Vec<String>>`
+**TypeScript:** `input_files?: string[]`
+
+**When populated:**
+- Set during job creation when files are uploaded
+- Contains just filenames (e.g., `["structure.pdb", "parameters.prm"]`)
+- Used by InputFilesTab for display and download operations
+- Files stored in `{job_directory}/input_files/` on cluster
 
 ## File Organization
 

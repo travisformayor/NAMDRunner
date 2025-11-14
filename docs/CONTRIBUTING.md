@@ -765,13 +765,17 @@ Example:
 ```rust
 // Instead of testing this directly (requires AppHandle):
 #[tauri::command]
-pub async fn create_job(app: AppHandle, params: CreateJobParams) -> CreateJobResult {
-    // ... uses app for database, events, etc.
+pub async fn create_job(app: AppHandle, params: CreateJobParams) -> ApiResult<JobInfo> {
+    // ... uses app for events, progress tracking
 }
 
-// Test the business logic separately:
-pub fn validate_job_params(params: &CreateJobParams) -> Result<()> {
-    // Business logic that can be tested without AppHandle
+// Test the business logic in automation layer:
+pub async fn execute_job_creation_with_progress(
+    app: AppHandle,
+    params: CreateJobParams,
+    progress: impl Fn(&str),
+) -> Result<(String, JobInfo)> {
+    // Business logic tested here without Tauri infrastructure
 }
 ```
 
@@ -852,27 +856,34 @@ Scientists need reliability over performance. A desktop app that safely handles 
 
 **Testing Approach**:
 - **Backend**: Unit tests for business logic (validation, rendering, parsing, error handling)
-- **Frontend**: Unit tests for stores and utilities use Vitest `vi.mock()` to mock CoreClientFactory
+- **Frontend**: Unit tests for stores and utilities use Vitest `vi.mock()` to mock Tauri's invoke function
 - **Integration**: Manual testing and E2E tests for full workflows
 
 **Frontend Testing Pattern**:
 ```typescript
-// Mock the CoreClientFactory at module level
-vi.mock('../ports/clientFactory', () => ({
-  CoreClientFactory: {
-    getClient: vi.fn(),
-    reset: vi.fn()
-  }
+// Mock Tauri invoke at module level
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn()
 }));
 
-// In test setup, create mock client with vi.fn() for each method
+// Import after mock to get mocked version
+import { invoke } from '@tauri-apps/api/core';
+
+// In tests, mock specific command responses
 beforeEach(() => {
-  mockClient = {
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    // ... other methods
-  };
-  vi.mocked(CoreClientFactory.getClient).mockReturnValue(mockClient);
+  // Clear all mocks between tests
+  vi.clearAllMocks();
+});
+
+// Example: Mock a successful connection
+it('should connect successfully', async () => {
+  vi.mocked(invoke).mockResolvedValue({
+    success: true,
+    data: { host: 'cluster.edu', username: 'user', connected_at: '2025-11-14T00:00:00Z' }
+  });
+
+  const result = await sessionActions.connect('cluster.edu', 'user', 'pass');
+  expect(result).toBe(true);
 });
 ```
 
