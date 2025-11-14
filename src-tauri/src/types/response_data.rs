@@ -40,3 +40,26 @@ pub struct ConnectionStatus {
     pub state: ConnectionState,
     pub session_info: Option<SessionInfo>,
 }
+
+/// Job discovery response data
+/// Used when scanning cluster for existing jobs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveryReport {
+    pub imported_jobs: Vec<JobSummary>,
+    pub failed_imports: Vec<FailedImport>,
+}
+
+/// Summary of an imported job
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobSummary {
+    pub job_id: String,
+    pub job_name: String,
+    pub status: JobStatus,
+}
+
+/// Information about a failed import during discovery
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailedImport {
+    pub directory: String,
+    pub reason: String,
+}

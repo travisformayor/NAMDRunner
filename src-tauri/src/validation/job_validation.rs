@@ -1,5 +1,8 @@
 use anyhow::anyhow;
 use crate::cluster::{get_partition_limits, get_qos_for_partition};
+use crate::types::commands::ValidateJobConfigParams;
+use crate::validation::input;
+use crate::commands::helpers;
 
 /// Business logic validation for job operations
 /// Extracted from Tauri commands for independent testing
@@ -152,6 +155,71 @@ pub fn validate_resource_allocation(
             recommended_memory
         ));
     }
+
+    ValidationResult {
+        is_valid: issues.is_empty(),
+        issues,
+        warnings,
+        suggestions,
+    }
+}
+
+/// Validate complete job configuration
+/// Orchestrates job name, template, and resource validation
+pub async fn validate_complete_job_config(params: ValidateJobConfigParams) -> ValidationResult {
+    let mut issues = Vec::new();
+    let mut warnings = Vec::new();
+    let mut suggestions = Vec::new();
+
+    // Validate job name
+    if params.job_name.trim().is_empty() {
+        issues.push("Job name is required".to_string());
+    } else if let Err(e) = input::sanitize_job_id(&params.job_name) {
+        issues.push(format!("Job name invalid: {}", e));
+    }
+
+    // Validate template selection
+    if params.template_id.is_empty() {
+        issues.push("Template selection is required".to_string());
+    }
+
+    // Validate template values (if template selected)
+    if !params.template_id.is_empty() {
+        // Load template and validate values
+        match helpers::load_template_or_fail(&params.template_id, "Validation") {
+            Ok(template) => {
+                // Call template validation module directly (not command wrapper)
+                let template_validation = crate::templates::validate_values(&template, &params.template_values);
+
+                // Merge results
+                issues.extend(template_validation.issues);
+                warnings.extend(template_validation.warnings);
+                suggestions.extend(template_validation.suggestions);
+            }
+            Err(e) => {
+                issues.push(format!("Template error: {}", e));
+            }
+        }
+    }
+
+    // Validate resource configuration
+    let partition_id = params.partition.as_deref().unwrap_or("amilan");
+    let qos_id = params.qos.as_deref().unwrap_or("normal");
+
+    let slurm_config = crate::types::SlurmConfig {
+        cores: params.cores,
+        memory: params.memory,
+        walltime: params.walltime,
+        partition: Some(partition_id.to_string()),
+        qos: Some(qos_id.to_string()),
+    };
+
+    let resource_validation = validate_resource_allocation(&slurm_config, partition_id, qos_id);
+
+    // Merge resource validation results
+    issues.extend(resource_validation.issues);
+    warnings.extend(resource_validation.warnings);
+    suggestions.extend(resource_validation.suggestions);
 
     ValidationResult {
         is_valid: issues.is_empty(),

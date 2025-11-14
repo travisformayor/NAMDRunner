@@ -44,8 +44,20 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
 
         // Attempt discovery (don't fail sync if discovery fails)
         match discover_jobs_from_server_internal(&username).await {
-            Ok((jobs_found, jobs_imported)) => {
-                info_log!("[Job Sync] Discovered {} jobs, imported {}", jobs_found, jobs_imported);
+            Ok(report) => {
+                info_log!(
+                    "[Job Sync] Discovery complete - imported {} jobs, {} failures",
+                    report.imported_jobs.len(),
+                    report.failed_imports.len()
+                );
+
+                // Log detailed results
+                for job in &report.imported_jobs {
+                    info_log!("[Job Sync] Imported: {} ({})", job.job_id, job.job_name);
+                }
+                for failure in &report.failed_imports {
+                    error_log!("[Job Sync] Failed to import {}: {}", failure.directory, failure.reason);
+                }
 
                 // Reload jobs after discovery
                 let all_jobs_after_discovery = with_database(|db| db.load_all_jobs())
@@ -365,13 +377,15 @@ pub async fn refetch_slurm_logs(job: &mut JobInfo) -> Result<()> {
 }
 
 /// Internal helper to discover jobs from server
-/// Returns (jobs_found, jobs_imported)
-async fn discover_jobs_from_server_internal(username: &str) -> Result<(u32, u32)> {
+/// Returns detailed report of imported jobs and failures
+async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::types::response_data::DiscoveryReport> {
+    use crate::types::response_data::{DiscoveryReport, JobSummary, FailedImport};
+
     info_log!("[Job Discovery] Starting automatic discovery for user: {}", username);
 
     let connection_manager = get_connection_manager();
 
-    // Construct remote jobs directory path using centralized function
+    // Construct remote jobs directory path
     use crate::ssh::directory_structure::JobDirectoryStructure;
     let remote_jobs_dir = JobDirectoryStructure::project_base(username);
     debug_log!("[Job Discovery] Scanning directory: {}", remote_jobs_dir);
@@ -389,8 +403,8 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<(u32, u32)
 
     info_log!("[Job Discovery] Found {} directories", job_dirs.len());
 
-    let mut jobs_found = 0;
-    let mut jobs_imported = 0;
+    let mut imported_jobs = Vec::new();
+    let mut failed_imports = Vec::new();
 
     // Read job_info.json from each directory
     for job_dir in job_dirs {
@@ -400,7 +414,12 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<(u32, u32)
         let job_json = match connection_manager.read_remote_file(&job_info_path).await {
             Ok(content) => content,
             Err(e) => {
-                debug_log!("[Job Discovery] Could not read {}: {}", job_info_path, e);
+                let error_msg = format!("Could not read job_info.json: {}", e);
+                debug_log!("[Job Discovery] {}: {}", job_dir, error_msg);
+                failed_imports.push(FailedImport {
+                    directory: job_dir,
+                    reason: error_msg,
+                });
                 continue;
             }
         };
@@ -409,39 +428,69 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<(u32, u32)
         let job_info: JobInfo = match serde_json::from_str(&job_json) {
             Ok(info) => info,
             Err(e) => {
-                debug_log!("[Job Discovery] Invalid JSON in {}: {}", job_info_path, e);
+                let error_msg = format!("Invalid JSON: {}", e);
+                debug_log!("[Job Discovery] {}: {}", job_dir, error_msg);
+                failed_imports.push(FailedImport {
+                    directory: job_dir,
+                    reason: error_msg,
+                });
                 continue;
             }
         };
 
-        jobs_found += 1;
-
         // Check if job already exists in database
         let job_id = job_info.job_id.clone();
+        let job_name = job_info.job_name.clone();
+        let job_status = job_info.status.clone();
         let job_info_clone = job_info.clone();
 
+        // Clone for closure to avoid move issues
+        let job_id_for_log = job_id.clone();
+        let job_name_for_log = job_name.clone();
+
         let imported = with_database(move |db| {
-            match db.load_job(&job_id) {
+            match db.load_job(&job_id_for_log) {
                 Ok(Some(_)) => {
-                    debug_log!("[Job Discovery] Job {} already exists", job_id);
-                    Ok(false) // Already exists
+                    debug_log!("[Job Discovery] Job {} already exists, skipping", job_id_for_log);
+                    Ok(false)
                 }
                 Ok(None) => {
-                    // Import new job
                     db.save_job(&job_info_clone)?;
-                    info_log!("[Job Discovery] Imported job: {}", job_id);
-                    Ok(true) // Imported
+                    info_log!("[Job Discovery] Imported: {} ({})", job_id_for_log, job_name_for_log);
+                    Ok(true)
                 }
                 Err(e) => Err(e),
             }
         })?;
 
         if imported {
-            jobs_imported += 1;
+            imported_jobs.push(JobSummary {
+                job_id,
+                job_name,
+                status: job_status,
+            });
         }
     }
 
-    info_log!("[Job Discovery] Discovery complete - found {} jobs, imported {}", jobs_found, jobs_imported);
-    Ok((jobs_found, jobs_imported))
+    info_log!(
+        "[Job Discovery] Complete - imported {} jobs, {} failures",
+        imported_jobs.len(),
+        failed_imports.len()
+    );
+
+    // Log imported jobs
+    for job in &imported_jobs {
+        debug_log!("[Job Discovery] ✓ {} ({}) - status: {:?}", job.job_id, job.job_name, job.status);
+    }
+
+    // Log failures
+    for failure in &failed_imports {
+        debug_log!("[Job Discovery] ✗ {} - {}", failure.directory, failure.reason);
+    }
+
+    Ok(DiscoveryReport {
+        imported_jobs,
+        failed_imports,
+    })
 }
 

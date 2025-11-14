@@ -66,11 +66,6 @@ pub async fn select_input_file(_app: AppHandle) -> Result<Option<SelectedFile>, 
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn upload_job_files(app_handle: AppHandle, job_id: String, files: Vec<FileUpload>) -> UploadResult {
-    upload_job_files_real(app_handle, job_id, files).await
-}
-
-
-async fn upload_job_files_real(app_handle: AppHandle, job_id: String, files: Vec<FileUpload>) -> UploadResult {
     // Validate and sanitize job ID
     let clean_job_id = match sanitize_job_id(&job_id) {
         Ok(id) => id,
@@ -213,11 +208,6 @@ fn validate_upload_file(file: &FileUpload) -> Result<()> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn download_job_output(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
-    download_job_output_real(job_id, file_path).await
-}
-
-
-async fn download_job_output_real(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
     use rfd::FileDialog;
 
     // Validate and sanitize inputs
@@ -292,10 +282,6 @@ async fn download_job_output_real(job_id: String, file_path: String) -> ApiResul
 /// Download all output files as a zip archive
 #[tauri::command(rename_all = "snake_case")]
 pub async fn download_all_outputs(job_id: String) -> ApiResult<DownloadInfo> {
-    download_all_outputs_real(job_id).await
-}
-
-async fn download_all_outputs_real(job_id: String) -> ApiResult<DownloadInfo> {
     use rfd::FileDialog;
 
     // Validate and sanitize job_id
@@ -385,10 +371,6 @@ async fn cleanup_temp_file(connection_manager: &crate::ssh::ConnectionManager, f
 /// Download a single input file from a job
 #[tauri::command(rename_all = "snake_case")]
 pub async fn download_job_input(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
-    download_job_input_real(job_id, file_path).await
-}
-
-async fn download_job_input_real(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
     use rfd::FileDialog;
 
     // Validate and sanitize inputs
@@ -463,10 +445,6 @@ async fn download_job_input_real(job_id: String, file_path: String) -> ApiResult
 /// Download all input files as a zip archive
 #[tauri::command(rename_all = "snake_case")]
 pub async fn download_all_inputs(job_id: String) -> ApiResult<DownloadInfo> {
-    download_all_inputs_real(job_id).await
-}
-
-async fn download_all_inputs_real(job_id: String) -> ApiResult<DownloadInfo> {
     use rfd::FileDialog;
 
     // Validate and sanitize job_id
@@ -539,11 +517,6 @@ async fn download_all_inputs_real(job_id: String) -> ApiResult<DownloadInfo> {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn list_job_files(job_id: String) -> ApiResult<Vec<RemoteFile>> {
-    list_job_files_real(job_id).await
-}
-
-
-async fn list_job_files_real(job_id: String) -> ApiResult<Vec<RemoteFile>> {
     // Validate and sanitize job ID
     let clean_job_id = match sanitize_job_id(&job_id) {
         Ok(id) => id,

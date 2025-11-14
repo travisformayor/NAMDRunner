@@ -118,13 +118,6 @@ export interface SyncJobsResult {
   errors: string[];
 }
 
-export interface DiscoverJobsResult {
-  success: boolean;
-  jobs_found: number;
-  jobs_imported: number;
-  error?: string;
-}
-
 export interface UploadResult {
   success: boolean;
   uploaded_files?: string[];

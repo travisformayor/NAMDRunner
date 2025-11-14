@@ -63,7 +63,6 @@ pub fn run() {
             commands::jobs::sync_jobs,
             commands::jobs::delete_job,
             commands::jobs::refetch_slurm_logs,
-            commands::jobs::discover_jobs_from_server,
             // File management
             commands::files::detect_file_type,
             commands::files::select_input_file,
