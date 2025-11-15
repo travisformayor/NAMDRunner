@@ -16,7 +16,7 @@ impl SlurmStatusSync {
         let squeue_cmd = job_status_command(slurm_job_id)?;
 
         // Use retry with quick backoff for SLURM operations
-        let result = crate::retry::patterns::retry_quick_operation(|| {
+        let result = crate::retry::retry_quick(|| {
             let cmd = squeue_cmd.clone();
             async move {
                 let connection_manager = get_connection_manager();
@@ -52,7 +52,7 @@ impl SlurmStatusSync {
         let sacct_cmd = completed_job_status_command(slurm_job_id)?;
 
         // Use retry with quick backoff for SLURM operations
-        let result = crate::retry::patterns::retry_quick_operation(|| {
+        let result = crate::retry::retry_quick(|| {
             let cmd = sacct_cmd.clone();
             async move {
                 let connection_manager = get_connection_manager();
@@ -156,7 +156,7 @@ impl SlurmStatusSync {
         let mut results = Vec::new();
 
         // Query active jobs with rate limiting
-        let squeue_result = crate::retry::patterns::retry_quick_operation(|| {
+        let squeue_result = crate::retry::retry_quick(|| {
             let cmd = squeue_cmd.clone();
             async move {
                 let connection_manager = get_connection_manager();
@@ -183,7 +183,7 @@ impl SlurmStatusSync {
             let missing_job_strings: Vec<String> = missing_jobs.iter().map(|s| s.to_string()).collect();
             let sacct_cmd = batch_completed_job_status_command(&missing_job_strings)?;
 
-            let sacct_result = crate::retry::patterns::retry_quick_operation(|| {
+            let sacct_result = crate::retry::retry_quick(|| {
                 let cmd = sacct_cmd.clone();
                 async move {
                     let connection_manager = get_connection_manager();
@@ -210,7 +210,7 @@ impl SlurmStatusSync {
         let scancel_cmd = cancel_job_command(slurm_job_id)?;
 
         // Use retry with quick backoff for SLURM operations
-        let result = crate::retry::patterns::retry_quick_operation(|| {
+        let result = crate::retry::retry_quick(|| {
             let cmd = scancel_cmd.clone();
             async move {
                 let connection_manager = get_connection_manager();

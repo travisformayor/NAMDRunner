@@ -6,7 +6,7 @@ use super::{SSHConnection, ConnectionConfig, ConnectionInfo};
 use super::commands::CommandResult;
 use super::sftp::{FileTransferProgress, RemoteFileInfo};
 use crate::security::SecurePassword;
-use crate::retry::patterns;
+use crate::retry;
 use crate::{log_debug, log_info, log_error};
 
 /// Connection lifecycle management with proper cleanup and error handling
@@ -73,7 +73,7 @@ impl ConnectionManager {
     /// Execute a command using the current connection
     pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Result<CommandResult> {
         // Use retry logic for command execution
-        patterns::retry_quick_operation(|| self.execute_command_once(command, timeout)).await
+        retry::retry_quick(|| self.execute_command_once(command, timeout)).await
     }
 
     async fn execute_command_once(&self, command: &str, timeout: Option<u64>) -> Result<CommandResult> {
@@ -107,7 +107,7 @@ impl ConnectionManager {
     /// Upload bytes directly to remote server with retry logic
     pub async fn upload_bytes(&self, remote_path: &str, content: &[u8]) -> Result<FileTransferProgress> {
         // Use retry logic for file uploads
-        patterns::retry_file_operation(|| self.upload_bytes_once(remote_path, content)).await
+        retry::retry_files(|| self.upload_bytes_once(remote_path, content)).await
     }
 
     async fn upload_bytes_once(&self, remote_path: &str, content: &[u8]) -> Result<FileTransferProgress> {
@@ -147,7 +147,7 @@ impl ConnectionManager {
         app_handle: Option<tauri::AppHandle>,
     ) -> Result<FileTransferProgress> {
         // Use retry logic for file uploads
-        patterns::retry_file_operation(|| self.upload_file_once(local_path, remote_path, app_handle.clone())).await
+        retry::retry_files(|| self.upload_file_once(local_path, remote_path, app_handle.clone())).await
     }
 
     async fn upload_file_once(
@@ -238,7 +238,7 @@ impl ConnectionManager {
     /// Download a file using the current connection
     pub async fn download_file(&self, remote_path: &str, local_path: &str) -> Result<FileTransferProgress> {
         // Use retry logic for file downloads
-        patterns::retry_file_operation(|| self.download_file_once(remote_path, local_path)).await
+        retry::retry_files(|| self.download_file_once(remote_path, local_path)).await
     }
 
     async fn download_file_once(&self, remote_path: &str, local_path: &str) -> Result<FileTransferProgress> {
@@ -275,7 +275,7 @@ impl ConnectionManager {
     /// List files in a directory using the current connection
     pub async fn list_files(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
         // Use retry logic for directory listing
-        patterns::retry_quick_operation(|| self.list_files_once(remote_path)).await
+        retry::retry_quick(|| self.list_files_once(remote_path)).await
     }
 
     async fn list_files_once(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
@@ -305,7 +305,7 @@ impl ConnectionManager {
     /// List files in a directory with metadata for OutputFile
     /// Only returns regular files (not directories)
     pub async fn list_files_with_metadata(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
-        patterns::retry_quick_operation(|| self.list_files_with_metadata_once(remote_path)).await
+        retry::retry_quick(|| self.list_files_with_metadata_once(remote_path)).await
     }
 
     async fn list_files_with_metadata_once(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
@@ -334,7 +334,7 @@ impl ConnectionManager {
 
     /// Get file metadata (stat) for a remote file
     pub async fn stat_file(&self, remote_path: &str) -> Result<RemoteFileInfo> {
-        patterns::retry_quick_operation(|| self.stat_file_once(remote_path)).await
+        retry::retry_quick(|| self.stat_file_once(remote_path)).await
     }
 
     async fn stat_file_once(&self, remote_path: &str) -> Result<RemoteFileInfo> {
@@ -364,7 +364,7 @@ impl ConnectionManager {
     /// Create a directory using SSH mkdir -p command
     pub async fn create_directory(&self, remote_path: &str) -> Result<()> {
         // Use retry logic for directory creation
-        patterns::retry_quick_operation(|| self.create_directory_once(remote_path)).await
+        retry::retry_quick(|| self.create_directory_once(remote_path)).await
     }
 
     async fn create_directory_once(&self, remote_path: &str) -> Result<()> {
@@ -425,7 +425,7 @@ impl ConnectionManager {
     /// Get file information using native SFTP
     pub async fn get_file_info(&self, remote_path: &str) -> Result<RemoteFileInfo> {
         // Use retry logic for file info retrieval
-        patterns::retry_quick_operation(|| self.get_file_info_once(remote_path)).await
+        retry::retry_quick(|| self.get_file_info_once(remote_path)).await
     }
 
     async fn get_file_info_once(&self, remote_path: &str) -> Result<RemoteFileInfo> {
@@ -455,7 +455,7 @@ impl ConnectionManager {
     /// Check if a file or directory exists
     pub async fn file_exists(&self, remote_path: &str) -> Result<bool> {
         // Use retry logic for existence checking
-        patterns::retry_quick_operation(|| self.file_exists_once(remote_path)).await
+        retry::retry_quick(|| self.file_exists_once(remote_path)).await
     }
 
     async fn file_exists_once(&self, remote_path: &str) -> Result<bool> {
