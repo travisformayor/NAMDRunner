@@ -410,7 +410,6 @@ src/
 │   ├── styles/                  # Global styles and themes
 │   ├── utils/                   # Utility functions
 │   │   ├── file-helpers.ts      # File display formatting utilities
-│   │   ├── logger.ts            # Frontend logging utilities
 │   │   └── template-utils.ts    # Template rendering and validation utilities
 │   └── test/                    # Testing infrastructure
 │       ├── fixtures/            # Test data and scenarios

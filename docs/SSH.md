@@ -147,11 +147,11 @@ Bridges Rust backend logs to frontend logs panel for real-time operation visibil
 #### Logging Macros
 ```rust
 // In Rust backend
-info_log!("[CONNECT] Starting connection to {}", host);
-debug_log!("[SYNC] Job sync completed");
-error_log!("[SSH] Connection failed: {}", error);
+log_info!(category: "Connection", message: "Starting connection", details: "Host: {}", host);
+log_debug!(category: "Job Sync", message: "Job sync completed");
+log_error!(category: "SSH", message: "Connection failed", details: "{}", error);
 
-// Emits 'rust-log' event → Frontend logs panel
+// Emits 'app-log' event → Frontend logs panel
 ```
 
 #### What Gets Logged
@@ -165,40 +165,30 @@ error_log!("[SSH] Connection failed: {}", error);
 
 **Implementation**: `src/lib/components/layout/LogsPanel.svelte`
 
-The Logs panel displays both backend Rust logs and frontend TypeScript logs in real-time. It exposes a global `window.appLogger` interface for frontend logging.
+The Logs panel displays all backend logs in real-time. Frontend has no logging system - all logging happens in the backend.
 
 **Backend Log Subscription:**
 ```typescript
-// Frontend subscribes to 'rust-log' events from Rust backend
-listen('rust-log', (event) => {
+// Frontend subscribes to 'app-log' events from Rust backend
+listen('app-log', (event) => {
     const logData = event.payload;
-    // Display with appropriate styling based on log level
+    // logData contains: level, category, message, details, show_toast, timestamp
+    // Display formatted as: [LEVEL] [category] {details or message}
+    // If show_toast is true, also display a toast notification
 });
 ```
 
-**Frontend Logging Utility:**
+**Backend logging examples:**
+```rust
+log_info!(category: "SSH", message: "Executing command", details: "{}", command);
+log_error!(category: "SSH", message: "Connection failed", details: "{}", error);
 
-Frontend code logs to the panel using `src/lib/utils/logger.ts`:
-```typescript
-import { logger } from '$lib/utils/logger';
-
-// Log debug/info messages
-logger.debug('SYNC', 'Job sync started');
-
-// Log errors
-logger.error('API', 'Failed to fetch jobs', error);
-
-// Log SSH commands (for tracking)
-logger.command('sbatch job.slurm');
-
-// Log command output
-logger.output('Submitted batch job 12345');
+// User-facing events also show toast notifications
+toast_log!(category: "Connection", message: "Connected to cluster", details: "{}@{}", username, host);
 ```
 
-The logger utility internally checks for `window.appLogger` and safely handles cases where the panel isn't available.
-
 **Panel Features:**
-- Real-time backend and frontend log streaming
+- Real-time backend log streaming
 - Scrollable history with timestamps
 - Color-coded log levels (ERROR, WARN, INFO, DEBUG)
 - Copy all logs and clear functionality

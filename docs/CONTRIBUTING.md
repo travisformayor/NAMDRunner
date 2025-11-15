@@ -41,12 +41,12 @@
       - [Command Reliability](#command-reliability)
       - [Interaction Optimization](#interaction-optimization)
       - [Error Recovery](#error-recovery)
-    - [Retry Logic Implementation](#retry-logic-implementation)
     - [Error Mapping for User Experience](#error-mapping-for-user-experience)
     - [Async Operations with Blocking Libraries](#async-operations-with-blocking-libraries)
   - [Build Configuration](#build-configuration)
     - [TypeScript Configuration](#typescript-configuration)
     - [Rust Quality Tools](#rust-quality-tools)
+    - [Version Management](#version-management)
 - [Testing Strategy](#testing-strategy)
   - [NAMDRunner Testing Philosophy](#namdrunner-testing-philosophy)
   - [3-Tier Testing Architecture](#3-tier-testing-architecture)
@@ -546,7 +546,7 @@ When implementing server operations, follow these guidelines for good cluster ci
 - **Validate all inputs** - Use `crate::validation::input::sanitize_job_id()` and path validation before server operations
 - **Don't spam the cluster** - Batch operations when possible, respect rate limits in retry logic
 - **Handle connection failures gracefully** - Always check `connection_manager.is_connected()` before operations
-- **Clean up resources** - Use existing retry patterns from `crate::retry::patterns`
+- **Clean up resources** - Use retry functions: `crate::retry::retry_quick()` for quick operations, `crate::retry::retry_files()` for file transfers
 - **Provide actionable errors** - Use user-friendly error messages that guide users to solutions
 
 > **For complete security requirements, implementation patterns, and examples**, see [`docs/SSH.md#security-patterns`](SSH.md#security-patterns)
@@ -574,25 +574,22 @@ let cmd = format!("mkdir {}", user_input); // VULNERABLE TO INJECTION
 
 #### Logs Panel Debugging
 
-**For SSH/SLURM operations**, log important events to the logs panel for user debugging:
-
-```typescript
-// Frontend: Use centralized logger utility
-import { logger } from '$lib/utils/logger';
-
-logger.debug('[JOBS] Job creation failed: ${error}');
-logger.command('sbatch job.sbatch'); // Show commands being run
-```
+**All logging happens in backend** via the unified logging macros:
 
 ```rust
-// Backend: Use tagged console logs (captured by logs panel)
-println!("[SLURM] Submitting job: {}", job_name);
+// Backend: Use logging macros with named parameters
+log_info!(category: "Jobs", message: "Job creation started", details: "Job ID: {}", job_id);
+log_error!(category: "SLURM", message: "Job submission failed", details: "Error: {}", error);
+
+// For user-facing events that should show toast notifications
+toast_log!(category: "Jobs", message: "Job created successfully", details: "Job ID: {}", job_id);
 ```
 
-**Logs Panel captures**:
-- Tagged console logs: `[SSH]`, `[SLURM]`, `[CONNECTION]`, `[JOBS]`
-- Backend Rust logs via Tauri events
-- User-visible debugging without production noise
+**Logs Panel** displays all backend logs via "app-log" events:
+- Format: `[LEVEL] [Category] details`
+- Categories: "Jobs", "SSH", "SLURM", "Templates", "Database", etc.
+- Logs with `show_toast: true` also trigger user-facing toast notifications
+- Frontend has no logging system - backend is single source of truth
 
 **Essential Security Principles**:
 - Never log or persist credentials - memory only during sessions
@@ -673,6 +670,12 @@ Use state machines for complex state management with validated transitions.
 - `clippy` with `-D warnings` (deny all warnings)
 - `rustfmt` for consistent formatting
 - `cargo-audit` for security scanning
+
+### Version Management
+
+**When Releasing:**
+1. Update version in `src-tauri/Cargo.toml` (used by `getVersion()` API)
+2. Update version in `package.json` to match
 
 ### CI/CD and Cross-Platform Builds
 
