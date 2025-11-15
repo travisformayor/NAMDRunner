@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getName, getVersion } from '@tauri-apps/api/app';
   import { settingsStore } from '$lib/stores/settings';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import AlertDialog from '../ui/AlertDialog.svelte';
@@ -9,6 +10,10 @@
   // Store subscriptions
   $: databaseInfo = $settingsStore.databaseInfo;
   $: isLoading = $settingsStore.loading;
+
+  // App information state for about section
+  let appName = '';
+  let appVersion = '';
 
   // Dialog states
   let showRestoreWarning = false;
@@ -27,9 +32,13 @@
     showAlert = true;
   }
 
-  // Load database info on mount
-  onMount(() => {
+  // Load database info and app metadata on mount
+  onMount(async () => {
     settingsStore.loadDatabaseInfo();
+
+    // Fetch app metadata from Tauri APIs
+    appName = await getName();
+    appVersion = await getVersion();
   });
 
   // Format file size
@@ -122,6 +131,21 @@
     {:else}
       <p class="error">Failed to load database information</p>
     {/if}
+  </div>
+
+  <div class="settings-section">
+    <h2>About</h2>
+
+    <div class="db-info">
+      <div class="info-row">
+        <span class="label">Name:</span>
+        <span class="value">{appName}</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Version:</span>
+        <span class="value">{appVersion}</span>
+      </div>
+    </div>
   </div>
 </div>
 
