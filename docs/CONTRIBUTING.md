@@ -581,8 +581,8 @@ let cmd = format!("mkdir {}", user_input); // VULNERABLE TO INJECTION
 log_info!(category: "Jobs", message: "Job creation started", details: "Job ID: {}", job_id);
 log_error!(category: "SLURM", message: "Job submission failed", details: "Error: {}", error);
 
-// For user-facing events that should show toast notifications
-toast_log!(category: "Jobs", message: "Job created successfully", details: "Job ID: {}", job_id);
+// For user-facing events that should show toast notifications, use show_toast parameter
+log_info!(category: "Jobs", message: "Job created successfully", details: "Job ID: {}", job_id, show_toast: true);
 ```
 
 **Logs Panel** displays all backend logs via "app-log" events:
@@ -838,7 +838,7 @@ Scientists need reliability over performance. A desktop app that safely handles 
 
 **Testing approach:**
 - Unit tests for all business logic (backend Rust, minimal frontend TypeScript)
-- Frontend tests use Vitest `vi.mock()` to mock the CoreClientFactory (predictable, deterministic behavior)
+- Frontend tests use Vitest `vi.mock()` to mock Tauri's `invoke` function (predictable, deterministic behavior)
 - Only the user can run integration tests with real cluster connection for full workflow validation
 - Focus on business logic, not external library internals
 

@@ -150,6 +150,8 @@ Bridges Rust backend logs to frontend logs panel for real-time operation visibil
 log_info!(category: "Connection", message: "Starting connection", details: "Host: {}", host);
 log_debug!(category: "Job Sync", message: "Job sync completed");
 log_error!(category: "SSH", message: "Connection failed", details: "{}", error);
+// For user-facing events that should show toast notifications, add `show_toast: true`
+log_info!(category: "Connection", message: "Connected", details: "{}@{}", username, host, show_toast: true);
 
 // Emits 'app-log' event → Frontend logs panel
 ```
@@ -176,15 +178,6 @@ listen('app-log', (event) => {
     // Display formatted as: [LEVEL] [category] {details or message}
     // If show_toast is true, also display a toast notification
 });
-```
-
-**Backend logging examples:**
-```rust
-log_info!(category: "SSH", message: "Executing command", details: "{}", command);
-log_error!(category: "SSH", message: "Connection failed", details: "{}", error);
-
-// User-facing events also show toast notifications
-toast_log!(category: "Connection", message: "Connected to cluster", details: "{}@{}", username, host);
 ```
 
 **Panel Features:**
@@ -413,16 +406,16 @@ function handleConnectionFailure(error: string) {
 #### Offline Mode Support
 Jobs store maintains cached data for offline viewing:
 
-**Implementation**: `src/lib/stores/jobs.ts` and `src/lib/stores/session.ts:97-98`
+**Implementation**: `src/lib/stores/jobs.ts`
 
 ```typescript
 // Load jobs from database (for offline/startup)
 loadFromDatabase: async () => {
-  const result = await CoreClientFactory.getClient().getAllJobs();
-  if (result.success && result.jobs) {
+  const result = await invoke<ApiResult<JobInfo[]>>('get_all_jobs');
+  if (result.success && result.data) {
     update(state => ({
       ...state,
-      jobs: result.jobs || []
+      jobs: result.data || []
     }));
   }
 }

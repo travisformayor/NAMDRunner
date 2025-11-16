@@ -363,8 +363,7 @@ src/
 │   ├── types/                   # TypeScript type definitions
 │   │   ├── api.ts               # Core API types matching Rust types
 │   │   ├── template.ts          # Template types matching Rust types
-│   │   ├── connection.ts        # Connection state and session types
-│   │   └── errors.ts            # Error handling types
+│   │   └── cluster.ts           # Cluster capability types (matches backend)
 │   ├── stores/                  # Reactive state management (caches backend data)
 │   │   ├── session.ts           # Session state with reactive updates
 │   │   ├── jobs.ts              # Job state management with real-time updates
@@ -384,7 +383,8 @@ src/
 │   │   │   ├── ResourcesTab.svelte      # Resource allocation configuration
 │   │   │   ├── ConfigureTab.svelte      # Template selection and configuration
 │   │   │   ├── DynamicJobForm.svelte    # Dynamic form from template variables
-│   │   │   └── ReviewTab.svelte         # Final review before submission
+│   │   │   ├── ReviewTab.svelte         # Final review before submission
+│   │   │   └── ValidationDisplay.svelte # Real-time validation feedback UI
 │   │   ├── templates/           # Template management components
 │   │   │   ├── TemplateEditor.svelte    # Template creation/editing
 │   │   │   └── VariableEditor.svelte    # Variable definition editor
@@ -405,8 +405,9 @@ src/
 │   │   │   ├── ConfirmDialog.svelte      # Confirmation dialog
 │   │   │   └── PreviewModal.svelte       # Template preview modal
 │   │   └── AppShell.svelte      # Main application shell
-│   ├── types/                   # Additional TypeScript types
-│   │   └── cluster.ts           # Cluster capability types (matches backend)
+│   ├── types/                   # TypeScript types
+│   │   ├── api.ts     
+│   │   └── template.ts
 │   ├── styles/                  # Global styles and themes
 │   ├── utils/                   # Utility functions
 │   │   ├── file-helpers.ts      # File display formatting utilities

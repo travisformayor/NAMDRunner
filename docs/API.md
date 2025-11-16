@@ -264,8 +264,8 @@ interface JobInfo {
   template_id: string;                     // Template used for this job
   template_values: Record<string, any>;    // Variable values for template
   slurm_config: SlurmConfig;
-  input_files?: string[];                  // List of uploaded input files
-  output_files?: OutputFile[];
+  input_files: string[];                   // List of uploaded input files
+  output_files: OutputFile[];
   remote_directory: string;
 }
 
@@ -585,8 +585,8 @@ pub struct JobInfo {
     pub template_values: HashMap<String, serde_json::Value>,
 
     pub slurm_config: SlurmConfig,
-    pub input_files: Option<Vec<String>>,   // List of uploaded input files
-    pub output_files: Option<Vec<OutputFile>>,
+    pub input_files: Vec<String>,           // List of uploaded input files
+    pub output_files: Vec<OutputFile>,
     pub remote_directory: String,
 }
 

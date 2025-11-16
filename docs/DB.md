@@ -366,11 +366,11 @@ interface OutputFile {
 
 The `input_files` field stores the list of uploaded input file names for the job.
 
-**Type:** `Option<Vec<String>>`
-**TypeScript:** `input_files?: string[]`
+**Type:** `Vec<String>`
+**TypeScript:** `input_files: string[]`
 
-**When populated:**
-- Set during job creation when files are uploaded
+**Always populated:**
+- Set during job creation (empty array if no files uploaded)
 - Contains just filenames (e.g., `["structure.pdb", "parameters.prm"]`)
 - Used by InputFilesTab for display and download operations
 - Files stored in `{job_directory}/input_files/` on cluster
