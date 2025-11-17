@@ -35,7 +35,7 @@ Review for:
   - **Thin Wrapper Functions**: Functions that just delegate to other functions without adding value
   - **Redundant Fallback Code**: Multiple code paths for the same operation with "backward compatibility" claims
   - **False Compatibility Layers**: Interfaces claiming "backward compatibility" when no legacy code exists
-  - **Hardcoded Fallbacks**: Console.warn() and hardcoded paths when proper error handling should be used
+  - **Hardcoded Fallbacks**: Hardcoded paths when proper error handling should be used
 
 ### 3. NAMDRunner-Specific Standards
 Ensure adherence to:
@@ -69,7 +69,7 @@ Provide structured recommendations in this format:
 - **Unused Macros and Dead Code**: Macros defined but never used, or functions marked with #[allow(dead_code)]
 - **Complex Mock State Simulation**: Random error simulation and complex state progression instead of predictable testing behavior
 - **Thin Wrapper Functions**: Functions that just call another function without adding value
-- **Redundant Fallback Logic**: Multiple code paths doing the same thing with console.warn()
+- **Redundant Fallback Logic**: Multiple code paths doing the same thing
 - **False Backward Compatibility**: Claims of compatibility when no legacy code exists
 - **Hardcoded Fallback Paths**: Using hardcoded strings as fallbacks instead of proper error handling
 - **Duplicate APIs**: Multiple interfaces for the same functionality (e.g. both class methods and static utils)
@@ -82,7 +82,6 @@ Provide structured recommendations in this format:
 - **Orphaned Service Layers**: Service files that are defined but never imported by production code (tests don't count as usage)
 - **Business Logic in Frontend**: Validation, calculations, or cluster configuration implemented in TypeScript instead of Rust
 - **Stub Implementations in Production**: Functions using setTimeout, mock data, or marked TODO instead of real backend calls
-- **Console.log Hijacking**: Global console manipulation instead of proper Tauri event listeners
 - **Interface-Only Files**: Separate files containing only TypeScript interfaces when 2-3 implementations exist (over-engineering)
 
 ### Beneficial Improvements (Should Address)

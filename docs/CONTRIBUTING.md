@@ -190,7 +190,7 @@ NAMDRunner supports building on multiple platforms with automatic CI/CD:
 ### Quick Start - Top 7 Critical Rules
 
 1. **No Thin Wrappers**: Don't create functions that just delegate to other functions
-2. **Direct Error Handling**: Use `Result<T>` patterns, never suppress errors with `console.warn()`
+2. **Direct Error Handling**: Use `Result<T>` patterns, never suppress errors
 3. **No Repository Pattern**: Use direct database calls with `with_database()`
 4. **Security First**: Always sanitize user input, never log credentials
 5. **Simple Mocks**: Predictable test behavior over complex simulation
@@ -241,57 +241,73 @@ class CompleteJobValidator {
 - Functions should add value, not just delegate
 
 ### 3. Result<T> Error Handling
-**Consistent Return Types**: All operations that can fail return `Result<T>`.
-```typescript
-// ✅ Result pattern
-async function validateConnection(config: ConnectionConfig): Promise<Result<ValidationResult>> {
-  try {
-    const result = await performValidation(config);
-    return { success: true, data: result };
-  } catch (error) {
-    return { success: false, error: toConnectionError(error, 'Validation') };
-  }
-}
-```
 
-**Error Chaining in Rust**: Use `anyhow` with context.
+**Backend Error Handling**: Backend commands return `ApiResult<T>` and use unified logging for user notifications.
 ```rust
 use anyhow::{Result, Context};
 
-impl ConnectionManager {
-    pub async fn setup_workspace(&self, username: &str, job_id: &str) -> Result<WorkspaceInfo> {
-        let project_dir = format!("/projects/{}/namdrunner_jobs/{}", username, job_id);
-
-        self.create_directory(&project_dir)
-            .await
-            .context("Failed to create project directory")?;
-
-        Ok(WorkspaceInfo { project_dir })
+#[tauri::command]
+pub async fn create_job(params: CreateJobParams) -> ApiResult<JobInfo> {
+    match execute_job_creation(params).await {
+        Ok((job_id, job_info)) => {
+            log_info!(category: "Jobs", message: "Job created successfully", details: "{}", job_id, show_toast: true);
+            ApiResult::success(job_info)
+        }
+        Err(e) => {
+            log_error!(category: "Jobs", message: "Failed to create job", details: "{}", e, show_toast: true);
+            ApiResult::error(format!("Job creation failed: {}", e))
+        }
     }
 }
 ```
 
-**Never Suppress Errors**: Don't use console.warn() or hardcoded fallbacks.
+**Error Chaining**: Use `anyhow` with context for internal errors.
+```rust
+pub async fn setup_workspace(&self, username: &str, job_id: &str) -> Result<WorkspaceInfo> {
+    let project_dir = format!("/projects/{}/namdrunner_jobs/{}", username, job_id);
+
+    self.create_directory(&project_dir)
+        .await
+        .context("Failed to create project directory")?;
+
+    log_info!(category: "Setup", message: "Workspace created", details: "{}", project_dir);
+    Ok(WorkspaceInfo { project_dir })
+}
+```
+
+**Frontend Error Handling**: Frontend calls backend and displays results, no business logic.
+```typescript
+// Frontend just calls backend and updates UI state
+async function createJob(params: CreateJobParams) {
+  const result = await invoke<ApiResult<JobInfo>>('create_job', { params });
+
+  if (result.success && result.data) {
+    jobsStore.addJob(result.data);
+    // Backend already toasted success
+  }
+  // Backend already toasted error - no frontend error handling needed
+}
+```
+
+**Never Suppress Errors** - Backend handles ALL error logging and user notifications.
 ```typescript
 // ❌ Silent failure
-async function createJob(params: CreateJobParams): Promise<string> {
+async function loadJobs() {
   try {
-    const result = await client.createJob(params);
-    return result.job_id;
+    const result = await invoke('get_all_jobs');
+    jobsStore.setJobs(result.data);
   } catch (error) {
-    console.warn('Job creation failed, using placeholder');
-    return `job_${Date.now()}`;
+    // Silently fail - user has no idea what happened
   }
 }
 
-// ✅ Proper error handling
-async function createJob(params: CreateJobParams): Promise<Result<string>> {
-  try {
-    const result = await client.createJob(params);
-    return { success: true, data: result.job_id };
-  } catch (error) {
-    return { success: false, error: toConnectionError(error, 'JobCreation') };
+// ✅ Backend handles errors with logging
+async function loadJobs() {
+  const result = await invoke<ApiResult<JobInfo[]>>('get_all_jobs');
+  if (result.success && result.data) {
+    jobsStore.setJobs(result.data);
   }
+  // Backend already logged error - frontend just updates UI state
 }
 ```
 

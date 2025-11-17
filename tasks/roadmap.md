@@ -424,7 +424,7 @@ pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Resu
 ```
 
 **Why:**
-- Prevents accidental bugs from DOS'ing cluster, but we dont want that event to silently fail so report it in the SSH Console.
+- Prevents accidental bugs from DOS'ing cluster, but we dont want that event to silently fail so report it in the Logs Panel.
 
 ### Milestone 7.4: Job Chaining (Future)
 
