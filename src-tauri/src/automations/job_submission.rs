@@ -5,7 +5,7 @@ use chrono::Utc;
 use crate::types::{JobStatus, response_data::JobSubmissionData};
 use crate::validation::paths;
 use crate::database::with_database;
-use crate::{log_info, log_debug, log_error, toast_log};
+use crate::{log_info, log_debug, log_error};
 use crate::automations::common;
 
 /// Simplified job submission automation that follows NAMDRunner's direct function patterns.
@@ -113,7 +113,7 @@ pub async fn execute_job_submission_with_progress(
     }
 
     progress_callback("Job submission completed successfully");
-    toast_log!(category: "Job Submission", message: "Job submitted successfully", details: "SLURM job ID: {}", slurm_job_id);
+    log_info!(category: "Job Submission", message: "Job submitted successfully", details: "SLURM job ID: {}", slurm_job_id, show_toast: true);
 
     Ok(JobSubmissionData {
         job_id,

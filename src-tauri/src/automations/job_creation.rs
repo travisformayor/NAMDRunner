@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::types::{CreateJobParams, JobInfo, JobStatus, SlurmConfig};
 use crate::validation::{input, paths};
-use crate::{log_info, log_debug, log_error, toast_log};
+use crate::{log_info, log_debug, log_error};
 use crate::automations::common;
 
 /// Factory function to create a new JobInfo with business logic (status, timestamps)
@@ -229,7 +229,7 @@ pub async fn execute_job_creation_with_progress(
     log_debug!(category: "Job Creation", message: "Job metadata created", details: "{}/job_info.json", project_dir);
 
     progress_callback("Job creation completed successfully");
-    toast_log!(category: "Job Creation", message: "Job created successfully", details: "{}", job_id);
+    log_info!(category: "Job Creation", message: "Job created successfully", details: "{}", job_id, show_toast: true);
 
     Ok((job_id, job_info))
 }

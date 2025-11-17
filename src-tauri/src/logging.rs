@@ -103,12 +103,8 @@ macro_rules! app_log {
         }
     }};
 
-    // With formatted details but no toast
-    (level: $level:ident, category: $category:expr, message: $message:expr, details: $($details_args:tt)+) => {
-        $crate::app_log!(level: $level, category: $category, message: $message, details: format!($($details_args)+), toast: false)
-    };
 
-    // With details and toast
+    // With pre-formatted details and toast
     (level: $level:ident, category: $category:expr, message: $message:expr, details: $details:expr, toast: $toast:expr) => {{
         let log_msg = $crate::types::core::AppLogMessage {
             level: stringify!($level).to_lowercase(),
@@ -171,55 +167,144 @@ macro_rules! app_log {
 /// Convenience macro for info logging
 #[macro_export]
 macro_rules! log_info {
-    (category: $category:expr, message: $message:expr, details: $($details_args:tt)+) => {
-        $crate::app_log!(level: info, category: $category, message: $message, details: $($details_args)+)
+    // With details, no args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: info, category: $category, message: $message, details: $fmt.to_string(), toast: $toast)
     };
+    // With details and 1 arg, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: info, category: $category, message: $message, details: format!($fmt, $arg1), toast: $toast)
+    };
+    // With details and 2 args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, $arg2:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: info, category: $category, message: $message, details: format!($fmt, $arg1, $arg2), toast: $toast)
+    };
+    // With details and 3 args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, $arg2:expr, $arg3:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: info, category: $category, message: $message, details: format!($fmt, $arg1, $arg2, $arg3), toast: $toast)
+    };
+    // With details and 4 args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: info, category: $category, message: $message, details: format!($fmt, $arg1, $arg2, $arg3, $arg4), toast: $toast)
+    };
+    // With details, no args, no show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr) => {
+        $crate::app_log!(level: info, category: $category, message: $message, details: $fmt.to_string(), toast: false)
+    };
+    // With details and 1+ args, no show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $($args:expr),+) => {
+        $crate::app_log!(level: info, category: $category, message: $message, details: format!($fmt, $($args),+), toast: false)
+    };
+    // No details, with toast
+    (category: $category:expr, message: $message:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: info, category: $category, message: $message, toast: $toast)
+    };
+    // No details, no toast
     (category: $category:expr, message: $message:expr) => {
-        $crate::app_log!(level: info, category: $category, message: $message)
+        $crate::app_log!(level: info, category: $category, message: $message, toast: false)
     };
 }
 
 /// Convenience macro for error logging
 #[macro_export]
 macro_rules! log_error {
-    (category: $category:expr, message: $message:expr, details: $($details_args:tt)+) => {
-        $crate::app_log!(level: error, category: $category, message: $message, details: $($details_args)+)
+    // With details, no args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: error, category: $category, message: $message, details: $fmt.to_string(), toast: $toast)
     };
+    // With details and 1 arg, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: error, category: $category, message: $message, details: format!($fmt, $arg1), toast: $toast)
+    };
+    // With details and 2 args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, $arg2:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: error, category: $category, message: $message, details: format!($fmt, $arg1, $arg2), toast: $toast)
+    };
+    // With details and 3 args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, $arg2:expr, $arg3:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: error, category: $category, message: $message, details: format!($fmt, $arg1, $arg2, $arg3), toast: $toast)
+    };
+    // With details and 4 args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: error, category: $category, message: $message, details: format!($fmt, $arg1, $arg2, $arg3, $arg4), toast: $toast)
+    };
+    // With details, no args, no show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr) => {
+        $crate::app_log!(level: error, category: $category, message: $message, details: $fmt.to_string(), toast: false)
+    };
+    // With details and 1+ args, no show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $($args:expr),+) => {
+        $crate::app_log!(level: error, category: $category, message: $message, details: format!($fmt, $($args),+), toast: false)
+    };
+    // No details, with toast
+    (category: $category:expr, message: $message:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: error, category: $category, message: $message, toast: $toast)
+    };
+    // No details, no toast
     (category: $category:expr, message: $message:expr) => {
-        $crate::app_log!(level: error, category: $category, message: $message)
+        $crate::app_log!(level: error, category: $category, message: $message, toast: false)
     };
 }
 
 /// Convenience macro for warning logging
 #[macro_export]
 macro_rules! log_warn {
-    (category: $category:expr, message: $message:expr, details: $($details_args:tt)+) => {
-        $crate::app_log!(level: warn, category: $category, message: $message, details: $($details_args)+)
+    // With details (direct format args), with toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr $(, $args:expr)*, show_toast: $toast:expr) => {
+        $crate::app_log!(level: warn, category: $category, message: $message, details: format!($fmt $(, $args)*), toast: $toast)
     };
+    // With details (direct format args), no toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr $(, $args:expr)*) => {
+        $crate::app_log!(level: warn, category: $category, message: $message, details: format!($fmt $(, $args)*), toast: false)
+    };
+    // No details, with toast
+    (category: $category:expr, message: $message:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: warn, category: $category, message: $message, toast: $toast)
+    };
+    // No details, no toast
     (category: $category:expr, message: $message:expr) => {
-        $crate::app_log!(level: warn, category: $category, message: $message)
+        $crate::app_log!(level: warn, category: $category, message: $message, toast: false)
     };
 }
 
 /// Convenience macro for debug logging
 #[macro_export]
 macro_rules! log_debug {
-    (category: $category:expr, message: $message:expr, details: $($details_args:tt)+) => {
-        $crate::app_log!(level: debug, category: $category, message: $message, details: $($details_args)+)
+    // With details, no args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: debug, category: $category, message: $message, details: $fmt.to_string(), toast: $toast)
     };
+    // With details and 1 arg, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: debug, category: $category, message: $message, details: format!($fmt, $arg1), toast: $toast)
+    };
+    // With details and 2 args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, $arg2:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: debug, category: $category, message: $message, details: format!($fmt, $arg1, $arg2), toast: $toast)
+    };
+    // With details and 3 args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, $arg2:expr, $arg3:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: debug, category: $category, message: $message, details: format!($fmt, $arg1, $arg2, $arg3), toast: $toast)
+    };
+    // With details and 4 args, show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: debug, category: $category, message: $message, details: format!($fmt, $arg1, $arg2, $arg3, $arg4), toast: $toast)
+    };
+    // With details, no args, no show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr) => {
+        $crate::app_log!(level: debug, category: $category, message: $message, details: $fmt.to_string(), toast: false)
+    };
+    // With details and 1+ args, no show_toast
+    (category: $category:expr, message: $message:expr, details: $fmt:expr, $($args:expr),+) => {
+        $crate::app_log!(level: debug, category: $category, message: $message, details: format!($fmt, $($args),+), toast: false)
+    };
+    // No details, with toast
+    (category: $category:expr, message: $message:expr, show_toast: $toast:expr) => {
+        $crate::app_log!(level: debug, category: $category, message: $message, toast: $toast)
+    };
+    // No details, no toast
     (category: $category:expr, message: $message:expr) => {
-        $crate::app_log!(level: debug, category: $category, message: $message)
-    };
-}
-
-/// Convenience macro for toast notifications (info level with toast enabled)
-#[macro_export]
-macro_rules! toast_log {
-    (category: $category:expr, message: $message:expr, details: $($details_args:tt)+) => {
-        $crate::app_log!(level: info, category: $category, message: $message, details: format!($($details_args)+), toast: true)
-    };
-    (category: $category:expr, message: $message:expr) => {
-        $crate::app_log!(level: info, category: $category, message: $message, toast: true)
+        $crate::app_log!(level: debug, category: $category, message: $message, toast: false)
     };
 }
 

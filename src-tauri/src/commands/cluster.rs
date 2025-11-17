@@ -12,9 +12,9 @@ pub async fn get_cluster_capabilities() -> ApiResult<crate::cluster::ClusterCapa
         category: "Cluster",
         message: "Returning cluster capabilities",
         details: "{} partitions, {} QOS options, {} presets",
-        capabilities.partitions.len(),
-        capabilities.qos_options.len(),
-        capabilities.job_presets.len()
+            capabilities.partitions.len(),
+            capabilities.qos_options.len(),
+            capabilities.job_presets.len()
     );
 
     ApiResult {

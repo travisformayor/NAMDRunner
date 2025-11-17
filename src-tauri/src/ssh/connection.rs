@@ -2,7 +2,7 @@ use ssh2::{Session, DisconnectCode};
 use std::time::Duration;
 use anyhow::Result;
 use super::errors::SSHError;
-use crate::{log_debug, log_info, log_error, toast_log};
+use crate::{log_debug, log_info, log_error};
 
 /// Configuration for SSH connections
 #[derive(Debug, Clone)]
@@ -204,7 +204,7 @@ impl SSHConnection {
 
         log_info!(category: "SSH", message: "Authentication successful");
         self.session = Some(session);
-        toast_log!(category: "SSH", message: "Connection established");
+        log_info!(category: "SSH", message: "Connection established", show_toast: true);
         Ok(())
     }
 

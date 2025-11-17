@@ -3,7 +3,7 @@ use crate::database::with_database;
 use crate::templates::Template;
 use crate::commands::helpers;
 use crate::validation::job_validation::ValidationResult;
-use crate::{log_info, log_error, toast_log};
+use crate::{log_info, log_error};
 use std::collections::HashMap;
 use serde_json::Value;
 
@@ -68,7 +68,7 @@ pub async fn create_template(template: Template) -> ApiResult<String> {
     let template_id = template.id.clone();
     match with_database(|db| db.save_template(&template)) {
         Ok(_) => {
-            toast_log!(category: "Templates", message: "Template created successfully");
+            log_info!(category: "Templates", message: "Template created successfully", show_toast: true);
             ApiResult::success(template_id)
         }
         Err(e) => {
@@ -91,7 +91,7 @@ pub async fn update_template(template_id: String, template: Template) -> ApiResu
     // Save updated template
     match with_database(|db| db.save_template(&template)) {
         Ok(_) => {
-            toast_log!(category: "Templates", message: "Template updated successfully");
+            log_info!(category: "Templates", message: "Template updated successfully", show_toast: true);
             ApiResult::success(())
         }
         Err(e) => {
@@ -122,7 +122,7 @@ pub async fn delete_template(template_id: String) -> ApiResult<()> {
 
     match with_database(|db| db.delete_template(&template_id)) {
         Ok(true) => {
-            toast_log!(category: "Templates", message: "Template deleted successfully");
+            log_info!(category: "Templates", message: "Template deleted successfully", show_toast: true);
             ApiResult::success(())
         }
         Ok(false) => {

@@ -3,7 +3,7 @@ use std::fs;
 use crate::database;
 use crate::types::ApiResult;
 use crate::types::response_data::{DatabaseInfo, DatabaseOperationData};
-use crate::{log_info, log_error, toast_log};
+use crate::{log_info, log_error};
 
 /// Get current database path and size
 #[tauri::command(rename_all = "snake_case")]
@@ -80,7 +80,7 @@ pub async fn backup_database() -> ApiResult<DatabaseOperationData> {
     // This works even while database is in use
     match perform_backup(&db_path, &dest_path) {
         Ok(_) => {
-            toast_log!(category: "Database", message: "Database backup saved successfully");
+            log_info!(category: "Database", message: "Database backup saved successfully", show_toast: true);
             ApiResult::success(DatabaseOperationData {
                 path: dest_path.to_string_lossy().to_string(),
                 message: format!("Backup saved to {}", dest_path.display()),
@@ -145,7 +145,7 @@ pub async fn restore_database() -> ApiResult<DatabaseOperationData> {
     // Close connection, replace file, reopen
     match perform_restore(&source, &db_path) {
         Ok(_) => {
-            toast_log!(category: "Database", message: "Database restored successfully");
+            log_info!(category: "Database", message: "Database restored successfully", show_toast: true);
             ApiResult::success(DatabaseOperationData {
                 path: db_path.to_string_lossy().to_string(),
                 message: format!("Database restored from {}", source.display()),
@@ -191,7 +191,7 @@ pub async fn reset_database() -> ApiResult<DatabaseOperationData> {
     // Delete and reinitialize
     match perform_reset(&db_path) {
         Ok(_) => {
-            toast_log!(category: "Database", message: "Database reset successfully");
+            log_info!(category: "Database", message: "Database reset successfully", show_toast: true);
             ApiResult::success(DatabaseOperationData {
                 path: db_path.to_string_lossy().to_string(),
                 message: "Database reset successfully".to_string(),

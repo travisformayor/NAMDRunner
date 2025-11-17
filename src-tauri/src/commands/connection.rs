@@ -1,7 +1,7 @@
 use crate::types::*;
 use crate::types::response_data::ConnectionStatus;
 use crate::ssh::get_connection_manager;
-use crate::{log_info, log_debug, log_error, toast_log};
+use crate::{log_info, log_debug, log_error};
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn connect_to_cluster(params: ConnectParams) -> ApiResult<SessionInfo> {
@@ -10,7 +10,7 @@ pub async fn connect_to_cluster(params: ConnectParams) -> ApiResult<SessionInfo>
 
     match get_connection_manager().connect(params.host.clone(), port, params.username.clone(), &params.password).await {
         Ok(connection_info) => {
-            toast_log!(category: "Connection", message: "Successfully connected to cluster");
+            log_info!(category: "Connection", message: "Successfully connected to cluster", show_toast: true);
 
             let session_info = SessionInfo {
                 host: connection_info.host,

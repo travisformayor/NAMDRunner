@@ -4,7 +4,7 @@ use crate::types::{JobInfo, JobStatus};
 use crate::ssh::get_connection_manager;
 use crate::database::with_database;
 use crate::slurm::status::SlurmStatusSync;
-use crate::{log_info, log_debug, log_error, toast_log};
+use crate::{log_info, log_debug, log_error};
 use crate::automations::common;
 
 /// Job sync result for a single job
@@ -46,11 +46,11 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         match discover_jobs_from_server_internal(&username).await {
             Ok(report) => {
                 if !report.imported_jobs.is_empty() {
-                    toast_log!(
+                    log_info!(
                         category: "Job Discovery",
                         message: "Jobs imported from cluster",
-                        details: "{} jobs imported",
-                        report.imported_jobs.len()
+                        details: "{} jobs imported", report.imported_jobs.len(),
+                        show_toast: true
                     );
                 } else {
                     log_info!(category: "Job Discovery", message: "No new jobs found on cluster");
@@ -157,8 +157,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
                                 log_info!(
                                     category: "Job Sync",
                                     message: "Job status changed",
-                                    details: "{}: {:?} -> {:?}",
-                                    result.job_id, result.old_status, result.new_status
+                                    details: "{}: {:?} -> {:?}", result.job_id, result.old_status, result.new_status
                                 );
                             } else {
                                 log_debug!(category: "Job Sync", message: "Job status unchanged", details: "{}: {:?}", result.job_id, result.old_status);
@@ -244,10 +243,7 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
         log_info!(
             category: "Job Sync",
             message: "Job finished",
-            details: "{} - status: {:?}, outputs in: {:?}",
-            job_id,
-            new_status,
-            job.scratch_dir
+            details: "{} - status: {:?}, outputs in: {:?}", job_id, new_status, job.scratch_dir
         );
     }
 
@@ -484,9 +480,7 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
     log_info!(
         category: "Job Discovery",
         message: "Complete",
-        details: "imported {} jobs, {} failures",
-        imported_jobs.len(),
-        failed_imports.len()
+        details: "imported {} jobs, {} failures", imported_jobs.len(), failed_imports.len()
     );
 
     // Log imported jobs

@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use crate::{log_info, log_debug, toast_log};
+use crate::{log_info, log_debug};
 use crate::commands::helpers;
 use crate::database::with_database;
 use crate::ssh::get_connection_manager;
@@ -90,6 +90,6 @@ pub async fn execute_job_deletion(
         }
     })?;
 
-    toast_log!(category: "Job Deletion", message: "Job deleted successfully", details: "{}", job_id);
+    log_info!(category: "Job Deletion", message: "Job deleted successfully", details: "{}", job_id, show_toast: true);
     Ok(())
 }
