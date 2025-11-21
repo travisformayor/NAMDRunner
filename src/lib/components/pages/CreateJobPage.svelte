@@ -50,8 +50,9 @@
     // Listen for file upload progress
     unlistenUpload = await listen('file-upload-progress', (event) => {
       const progress = event.payload as any;
-      uploadProgress.set(progress.file_name, { percentage: progress.percentage });
-      uploadProgress = uploadProgress; // Trigger reactivity
+      uploadProgress = new Map(
+        uploadProgress.set(progress.file_name, { percentage: progress.percentage })
+      );
     });
   });
 

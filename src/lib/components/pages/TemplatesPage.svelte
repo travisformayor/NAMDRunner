@@ -53,7 +53,7 @@
   async function handleDeleteConfirm() {
     if (!deleteTargetId) return;
 
-    const success = await templateStore.deleteTemplate(deleteTargetId);
+    await templateStore.deleteTemplate(deleteTargetId);
 
     showDeleteConfirm = false;
     deleteTargetId = null;

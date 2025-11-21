@@ -20,14 +20,6 @@
     addEntry('app-debug', content);
   }
 
-  function addSSHCommandEntry(command: string) {
-    addEntry('ssh-command', `$ ${command}`);
-  }
-
-  function addSSHOutputEntry(output: string) {
-    addEntry('ssh-output', output);
-  }
-
   // Listen for backend logs via Tauri events
   onMount(() => {
     // Listen for Rust logs from the backend (async setup)
@@ -37,8 +29,6 @@
       unlisten = await listen('app-log', (event: any) => {
         const logData = event.payload;
         const logLevel = logData.level?.toLowerCase() || 'info';
-        const timestamp = new Date(logData.timestamp).toLocaleTimeString() || new Date().toLocaleTimeString();
-        // Use details if available, fallback to message
         const messageText = logData.details || logData.message;
         const formattedMessage = `[${logLevel.toUpperCase()}] [${logData.category}] ${messageText}`;
 

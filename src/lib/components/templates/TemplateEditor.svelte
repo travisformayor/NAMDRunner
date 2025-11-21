@@ -13,14 +13,24 @@
   // Props
   export let template: Template | null = null;
   export let mode: 'create' | 'edit' = 'create';
-  export let onSaved: (template: Template) => void = () => {};
+  export let onSaved: (_template: Template) => void = () => {};
   export let onCancel: () => void = () => {};
 
+  // Initialize form fields from template prop
   let id = template?.id ?? '';
   let name = template?.name ?? '';
   let description = template?.description ?? '';
   let namdConfigTemplate = template?.namd_config_template ?? '';
   let variables = template?.variables ?? {};
+
+  // Reactive: re-initialize if template prop changes
+  $: if (template) {
+    id = template.id;
+    name = template.name;
+    description = template.description;
+    namdConfigTemplate = template.namd_config_template;
+    variables = template.variables;
+  }
   let isSaving = false;
   let error: string | null = null;
 
@@ -141,7 +151,7 @@
 
     // If editing existing variable and key changed, delete old key
     if (editingVariableKey && editingVariableKey !== varDef.key) {
-      const { [editingVariableKey]: deleted, ...rest } = variables;
+      const { [editingVariableKey]: _, ...rest } = variables;
       variables = rest;
     }
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { toasts } from '../../stores/toasts';
-  import { fade, slide } from 'svelte/transition';
+  import { slide } from 'svelte/transition';
 
   function getIcon(variant: string): string {
     switch (variant) {

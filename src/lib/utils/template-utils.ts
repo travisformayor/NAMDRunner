@@ -3,9 +3,6 @@
  * Shared logic for template variable extraction, naming, and sample value generation
  */
 
-import type { VariableDefinition } from '$lib/types/template';
-import { getVariableTypeName } from '$lib/types/template';
-
 /**
  * Extract variables from template text in order of first occurrence
  * Returns array of variable names preserving template text order
@@ -26,7 +23,7 @@ export function extractVariablesFromTemplate(templateText: string): string[] {
   // Sort by position in template (first occurrence order)
   return Array.from(firstOccurrence.entries())
     .sort((a, b) => a[1] - b[1])
-    .map(([key, _]) => key);
+    .map(entry => entry[0]);
 }
 
 /**
