@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import AppSidebar from './layout/AppSidebar.svelte';
   import AppHeader from './layout/AppHeader.svelte';
   import LogsPanel from './layout/LogsPanel.svelte';
@@ -12,30 +13,19 @@
   import SettingsPage from './pages/SettingsPage.svelte';
   import { currentView, selectedJobId, uiStore } from '../stores/ui';
   import { clusterConfig } from '../stores/clusterConfig';
-  import { initializeTemplateStore } from '../stores/templateStore';
+  import { templateStore } from '../stores/templateStore';
   import { jobsStore } from '../stores/jobs';
-  import { toasts } from '../stores/toasts';  // Imported to initialize toast event listener
+  import type { ApiResult, AppInitializationData } from '../types/api';
 
   onMount(() => {
-    // Initialize cluster configuration from backend (async, but don't block mount)
+    // Initialize app data from backend using centralized command
     (async () => {
-      try {
-        await clusterConfig.init();
-      } catch (error) {
-        // App can still run but cluster-dependent features won't work
-      }
+      const result = await invoke<ApiResult<AppInitializationData>>('initialize_app');
 
-      try {
-        await initializeTemplateStore();
-      } catch (error) {
-        // Silently handle error
-      }
-
-      // Load jobs from database for offline viewing
-      try {
-        await jobsStore.loadFromDatabase();
-      } catch (error) {
-        // Silently handle error
+      if (result.success && result.data) {
+        clusterConfig.set(result.data.capabilities);
+        templateStore.setTemplates(result.data.templates);
+        jobsStore.setJobs(result.data.jobs);
       }
     })();
 

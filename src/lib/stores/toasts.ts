@@ -48,7 +48,7 @@ function createToastStore() {
     // Only show toast if explicitly flagged
     if (log.show_toast) {
       const toast: Toast = {
-        id: crypto.randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         message: log.message,
         variant: mapLevel(log.level),
       };

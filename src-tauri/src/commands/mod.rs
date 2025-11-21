@@ -1,3 +1,4 @@
+pub mod app;
 pub mod connection;
 pub mod cluster;
 pub mod jobs;

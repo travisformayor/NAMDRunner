@@ -198,6 +198,16 @@ function createTemplateStore() {
         error: null,
       }));
     },
+
+    // Set templates directly (used by centralized app initialization)
+    setTemplates(templates: TemplateSummary[]): void {
+      update((state) => ({
+        ...state,
+        templates,
+        loading: false,
+        error: null,
+      }));
+    },
   };
 }
 
@@ -225,7 +235,7 @@ export const userTemplates = derived(templates, $templates =>
  */
 export async function validateTemplateValues(
   templateId: string,
-  values: Record<string, any>
+  values: Record<string, JsonValue>
 ): Promise<ValidationResult> {
   try {
     const result = await invoke<ValidationResult>('validate_template_values', {
@@ -242,11 +252,4 @@ export async function validateTemplateValues(
       suggestions: []
     };
   }
-}
-
-/**
- * Initialize template store (call on app startup)
- */
-export async function initializeTemplateStore(): Promise<void> {
-  await templateStore.loadTemplates();
 }

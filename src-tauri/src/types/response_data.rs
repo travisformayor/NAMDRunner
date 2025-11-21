@@ -63,3 +63,12 @@ pub struct FailedImport {
     pub directory: String,
     pub reason: String,
 }
+
+/// App initialization response data
+/// Contains all data needed to initialize the frontend on startup
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppInitializationData {
+    pub capabilities: crate::cluster::ClusterCapabilities,
+    pub templates: Vec<crate::templates::TemplateSummary>,
+    pub jobs: Vec<JobInfo>,
+}

@@ -240,11 +240,21 @@ export async function validateResourceRequest(
   }
 }
 
+/**
+ * Set cluster capabilities directly (used by centralized app initialization)
+ */
+export function setClusterCapabilities(capabilities: ClusterCapabilities): void {
+  clusterCapabilitiesStore.set(capabilities);
+  isLoadedStore.set(true);
+  loadErrorStore.set(null);
+}
+
 // Export main store and utilities
 export const clusterConfig = {
   subscribe: clusterCapabilitiesStore.subscribe,
   init: initClusterConfig,
-  refresh: refreshClusterConfig
+  refresh: refreshClusterConfig,
+  set: setClusterCapabilities,
 };
 
 export const isLoaded = {

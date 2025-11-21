@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { sessionActions, connectionState, isConnected } from './session';
-import type { SessionInfo, ConnectionStatus, ApiResult } from '../types/api';
+import type { SessionInfo, ApiResult } from '../types/api';
 
 // Mock Tauri invoke
 vi.mock('@tauri-apps/api/core', () => ({

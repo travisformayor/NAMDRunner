@@ -1,3 +1,13 @@
+import type { TemplateSummary } from './template';
+
+// JSON value type matching Rust serde_json::Value
+// Can be any valid JSON value: string, number, boolean, null, object, or array
+export type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+export type JsonArray = JsonValue[];
+
 // Generic API result type matching Rust ApiResult<T>
 export interface ApiResult<T> {
   success: boolean;
@@ -34,10 +44,10 @@ export interface JobInfo {
   slurm_stdout?: string;
   slurm_stderr?: string;
   template_id: string;
-  template_values: Record<string, any>;
+  template_values: Record<string, JsonValue>;
   slurm_config: SlurmConfig;
-  input_files?: string[];
-  output_files?: OutputFile[];
+  input_files: string[];
+  output_files: OutputFile[];
   remote_directory: string;
 }
 
@@ -106,7 +116,7 @@ export interface ConnectParams {
 export interface CreateJobParams {
   job_name: string;
   template_id: string;
-  template_values: Record<string, any>;
+  template_values: Record<string, JsonValue>;
   slurm_config: SlurmConfig;
 }
 
@@ -203,9 +213,12 @@ export interface ValidationResult {
   suggestions: string[];
 }
 
-// Type aliases for backward compatibility and semantic clarity
-export type ValidateResourceAllocationResult = ValidationResult;
-export type JobValidationResult = ValidationResult;
+// App initialization data
+export interface AppInitializationData {
+  capabilities: ClusterCapabilities;
+  templates: TemplateSummary[];
+  jobs: JobInfo[];
+}
 
 // Error handling
 export interface NAMDRunnerError {
