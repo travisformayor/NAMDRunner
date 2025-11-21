@@ -17,7 +17,7 @@ import type {
   ClusterCapabilities,
   PartitionSpec,
   QosSpec,
-  ValidateResourceAllocationResult,
+  ValidationResult,
   ApiResult
 } from '../types/api';
 
@@ -208,7 +208,7 @@ export async function validateResourceRequest(
   walltime: string,
   partitionId: string,
   qosId: string
-): Promise<ValidateResourceAllocationResult> {
+): Promise<ValidationResult> {
   // Check if config is loaded
   const config = get(clusterCapabilitiesStore);
   if (!config) {
@@ -217,12 +217,12 @@ export async function validateResourceRequest(
       issues: ['Cluster configuration not loaded'],
       warnings: [],
       suggestions: []
-};
+    };
   }
 
   // Call backend validation - pass parameters as-is, no conversion
   try {
-    const result = await invoke<ValidateResourceAllocationResult>('validate_resource_allocation', {
+    const result = await invoke<ValidationResult>('validate_resource_allocation', {
       cores,
       memory,
       walltime,

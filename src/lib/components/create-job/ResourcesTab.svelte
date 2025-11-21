@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import type { ApiResult, JobPreset } from '$lib/types/api';
+  import type { ApiResult, JobPreset, ValidationResult } from '$lib/types/api';
+  import ValidationDisplay from '../ui/ValidationDisplay.svelte';
   import { jobPresets, partitions, allQosOptions, validateResourceRequest, calculateJobCost, estimateQueueTime, walltimeToHours } from '$lib/stores/clusterConfig';
   import PreviewModal from '../ui/PreviewModal.svelte';
 
@@ -14,7 +15,7 @@
   export let errors: Record<string, string>;
 
   let selectedPresetId = '';
-  let validation: any = { is_valid: true, issues: [], warnings: [], suggestions: [] };
+  let validation: ValidationResult = { is_valid: true, issues: [], warnings: [], suggestions: [] };
   let costEstimate = { totalCost: 0, queueEstimate: 'Unknown' };
   let showScriptPreview = false;
   let scriptPreviewContent = '';
@@ -213,32 +214,8 @@
       </div>
     </div>
 
-    <!-- Expandable Issues/Warnings -->
-    {#if validation.issues.length > 0 || validation.warnings.length > 0}
-      <details class="validation-details">
-        <summary>Show Details</summary>
-        {#if validation.issues.length > 0}
-          <div class="issues-list">
-            <strong>Issues:</strong>
-            <ul>
-              {#each validation.issues as issue}
-                <li class="issue-error">{issue}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-        {#if validation.warnings.length > 0}
-          <div class="warnings-list">
-            <strong>Warnings:</strong>
-            <ul>
-              {#each validation.warnings as warning}
-                <li class="issue-warning">{warning}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-      </details>
-    {/if}
+    <!-- Expandable Issues/Warnings/Suggestions -->
+    <ValidationDisplay {validation} collapsible={true} />
 
     <!-- Preview Script Button -->
     <div class="preview-section">
@@ -384,45 +361,6 @@
     font-size: var(--namd-font-size-sm);
     color: var(--namd-text-secondary);
     font-family: var(--namd-font-mono);
-  }
-
-  .validation-details {
-    margin-top: var(--namd-spacing-md);
-  }
-
-  .validation-details summary {
-    cursor: pointer;
-    color: var(--namd-text-secondary);
-    font-size: var(--namd-font-size-sm);
-  }
-
-  .issues-list, .warnings-list {
-    margin-top: var(--namd-spacing-sm);
-    padding: var(--namd-spacing-md);
-    border-radius: var(--namd-border-radius-sm);
-  }
-
-  .issues-list {
-    background: var(--namd-error-bg);
-    border: 1px solid var(--namd-error);
-  }
-
-  .warnings-list {
-    background: var(--namd-warning-bg);
-    border: 1px solid var(--namd-warning-border);
-  }
-
-  .issues-list ul, .warnings-list ul {
-    margin: var(--namd-spacing-sm) 0 0 0;
-    padding-left: 1.5rem;
-  }
-
-  .issue-error {
-    color: var(--namd-error);
-  }
-
-  .issue-warning {
-    color: var(--namd-warning-fg);
   }
 
   .preview-section {

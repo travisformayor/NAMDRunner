@@ -188,9 +188,6 @@ pub mod input {
 
 /// Shell command construction utilities
 pub mod shell {
-    #[allow(unused_imports)]
-    use super::*;
-
     /// Safely escape a parameter for shell commands
     ///
     /// This uses proper shell escaping to prevent command injection
@@ -203,12 +200,6 @@ pub mod shell {
             // Simple case - just wrap in single quotes
             format!("'{}'", param)
         }
-    }
-
-    /// Safely build a cp (copy) command with proper escaping
-    #[allow(dead_code)] // Used in production (job_submission.rs) but appears unused due to conditional compilation
-    pub fn safe_cp(source: &str, destination: &str) -> String {
-        format!("cp {} {}", escape_parameter(source), escape_parameter(destination))
     }
 
     /// Safely build a cd command followed by another command
@@ -466,14 +457,6 @@ mod tests {
 
         #[test]
         fn test_safe_command_builders() {
-            // Test safe_cp
-            let cp_cmd = shell::safe_cp("/path/to/source", "/path/to/dest");
-            assert_eq!(cp_cmd, "cp '/path/to/source' '/path/to/dest'");
-
-            // Test with malicious paths
-            let malicious_cp = shell::safe_cp("../../../etc/passwd", "; rm -rf /");
-            assert_eq!(malicious_cp, "cp '../../../etc/passwd' '; rm -rf /'");
-
             // Test safe_cd_and_run
             let cd_cmd = shell::safe_cd_and_run("/working/dir", "sbatch job.sbatch");
             assert_eq!(cd_cmd, "cd '/working/dir' && sbatch job.sbatch");
@@ -501,11 +484,6 @@ mod tests {
                 // Should be wrapped in single quotes, making it a literal string
                 assert!(escaped.starts_with('\'') && escaped.ends_with('\''),
                         "Injection attempt should be wrapped: {}", attempt);
-
-                let cp_cmd = shell::safe_cp(attempt, "/safe/dest");
-                // Should contain the escaped version
-                assert!(cp_cmd.contains(&escaped),
-                        "Copy command should use escaped version: {}", cp_cmd);
             }
         }
     }
@@ -577,18 +555,14 @@ mod tests {
                 assert!(escaped.starts_with('\'') && escaped.ends_with('\''),
                         "Path should be wrapped in single quotes: {}", path);
 
-                // Test command builders use proper escaping
-                let cp_cmd = shell::safe_cp(path, "/safe/dest");
+                // Test command builder uses proper escaping
                 let cd_cmd = shell::safe_cd_and_run(path, "ls");
 
-                // All commands should contain the escaped version
-                assert!(cp_cmd.contains('\''), "cp command should use escaping");
+                // Command should contain the escaped version
                 assert!(cd_cmd.contains('\''), "cd command should use escaping");
 
                 // Commands should properly escape dangerous characters
                 // The && is within quotes, which is properly escaped
-                assert!(cp_cmd.contains("'"),
-                        "cp command should use quotes for escaping: {}", cp_cmd);
                 assert!(cd_cmd.contains("'"),
                         "cd command should use quotes for escaping: {}", cd_cmd);
             }

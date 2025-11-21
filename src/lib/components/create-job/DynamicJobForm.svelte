@@ -5,13 +5,15 @@
   import { templates, templateStore, validateTemplateValues } from '$lib/stores/templateStore';
   import type { Template, VariableDefinition } from '$lib/types/template';
   import { getVariableTypeName } from '$lib/types/template';
+  import type { ValidationResult } from '$lib/types/api';
+  import ValidationDisplay from '../ui/ValidationDisplay.svelte';
 
   // Props
   export let templateId: string = '';
   export let templateValues: Record<string, any> = {};
 
   let selectedTemplate: Template | null = null;
-  let validationErrors: string[] = [];
+  let validation: ValidationResult = { is_valid: true, issues: [], warnings: [], suggestions: [] };
   let fieldErrors: Record<string, string> = {};
   let isValidating = false;
   let lastLoadedTemplateId = '';
@@ -103,12 +105,11 @@
     if (!selectedTemplate) return;
 
     isValidating = true;
-    const result = await validateTemplateValues(selectedTemplate.id, templateValues);
-    validationErrors = result.issues;
+    validation = await validateTemplateValues(selectedTemplate.id, templateValues);
 
     // Parse issues to extract field-specific errors
     fieldErrors = {};
-    for (const error of result.issues) {
+    for (const error of validation.issues) {
       // Try to extract field name from error message (format: "FieldLabel: error message")
       const colonIndex = error.indexOf(':');
       if (colonIndex > 0) {
@@ -279,17 +280,8 @@
       </div>
     {/if}
 
-    <!-- Validation Errors -->
-    {#if validationErrors.length > 0}
-      <div class="validation-errors">
-        <h4>Validation Errors:</h4>
-        <ul>
-          {#each validationErrors as error}
-            <li>{error}</li>
-          {/each}
-        </ul>
-      </div>
-    {/if}
+    <!-- Validation Results -->
+    <ValidationDisplay {validation} />
 
     <!-- Validate Button -->
     <div class="form-actions">
@@ -394,28 +386,6 @@
     text-align: center;
     padding: 3rem;
     color: var(--text-secondary, #666);
-  }
-
-  .validation-errors {
-    background: var(--error-light, #ffebee);
-    border: 1px solid var(--error, #d32f2f);
-    border-radius: 4px;
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .validation-errors h4 {
-    margin: 0 0 0.5rem 0;
-    color: var(--error, #d32f2f);
-  }
-
-  .validation-errors ul {
-    margin: 0;
-    padding-left: 1.5rem;
-  }
-
-  .validation-errors li {
-    color: var(--error-dark, #c62828);
   }
 
   .form-actions {

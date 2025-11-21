@@ -1,9 +1,10 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import type { JobValidationResult } from '$lib/types/api';
+  import type { ValidationResult } from '$lib/types/api';
   import ResourcesTab from './ResourcesTab.svelte';
   import ConfigureTab from './ConfigureTab.svelte';
   import ReviewTab from './ReviewTab.svelte';
+  import ValidationDisplay from '../ui/ValidationDisplay.svelte';
 
   // Props from parent
   export let jobName: string;
@@ -33,6 +34,12 @@
 
   let activeTab: TabId = 'resources';
   let validationTimer: number;
+  let validationResult: ValidationResult = {
+    is_valid: true,
+    issues: [],
+    warnings: [],
+    suggestions: [],
+  };
 
   // Debounced backend validation - triggers on any input change
   $: if (jobName || templateId || templateValues || resourceConfig) {
@@ -124,8 +131,7 @@
       />
     {/if}
   </div>
-</div>
 
-<style>
-  /* All styling handled by global namd-tabs CSS */
-</style>
+  <!-- General validation feedback -->
+  <ValidationDisplay validation={validationResult} />
+</div>
