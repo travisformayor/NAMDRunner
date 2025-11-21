@@ -330,12 +330,21 @@ function createJobsStore() {
     reset: () => set(initialJobsState),
 
     // Clear all jobs
-    clearJobs: () => update(state => ({
-      ...state,
-      jobs: [],
-      lastSyncTime: new Date(0),
-      hasEverSynced: false,
-    }))
+    clearJobs: () =>
+      update((state) => ({
+        ...state,
+        jobs: [],
+        lastSyncTime: new Date(0),
+        hasEverSynced: false,
+      })),
+
+    // Set jobs directly (used by centralized app initialization)
+    setJobs: (jobs: JobInfo[]) =>
+      update((state) => ({
+        ...state,
+        jobs,
+        hasEverSynced: jobs.length > 0,
+      })),
   };
 }
 
