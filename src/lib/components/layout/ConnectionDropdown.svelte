@@ -59,33 +59,23 @@
       isConnecting = true;
       connectionError = '';
 
-      try {
-        const success = await sessionActions.connect(host, username, password);
-        if (success) {
-          closeDropdown();
-          password = ''; // Clear password on successful connection
-        } else {
-          // Connection failed, checking for error message
-          // Get detailed error from session store instead of generic message
-          const errorMsg = $lastError || 'Connection failed - no error details available';
-          connectionError = errorMsg;
-        }
-      } catch (error) {
-        // Connection threw exception
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      const success = await sessionActions.connect(host, username, password);
+      if (success) {
+        closeDropdown();
+        password = ''; // Clear password on successful connection
+      } else {
+        // Connection failed, checking for error message
+        // Get detailed error from session store instead of generic message
+        const errorMsg = $lastError || 'Connection failed - no error details available';
         connectionError = errorMsg;
-      } finally {
-        isConnecting = false;
       }
+
+      isConnecting = false;
     }
   }
 
   async function handleDisconnect() {
-    try {
-      await sessionActions.disconnect();
-    } catch (error) {
-      // Disconnect failed - error handled by UI state
-    }
+    await sessionActions.disconnect();
     password = '';
     closeDropdown();
   }

@@ -6,11 +6,7 @@
   import SyncControls from '../jobs/SyncControls.svelte';
 
   async function handleSync() {
-    try {
-      await jobsStore.sync();
-    } catch (error) {
-      // Sync failed - error handled by store state
-    }
+    await jobsStore.sync();
   }
 
   function handleCreateJob() {

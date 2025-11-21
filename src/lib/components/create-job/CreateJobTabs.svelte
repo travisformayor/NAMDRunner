@@ -47,54 +47,44 @@
   }
 
   async function runBackendValidation() {
-    try {
-      const result = await invoke<JobValidationResult>('validate_job_config', {
-        params: {
-          job_name: jobName,
-          template_id: templateId,
-          template_values: templateValues,
-          cores: resourceConfig.cores,
-          memory: resourceConfig.memory,
-          walltime: resourceConfig.walltime,
-          partition: resourceConfig.partition || null,
-          qos: resourceConfig.qos || null
-        }
-      });
+    const result = await invoke<ValidationResult>('validate_job_config', {
+      params: {
+        job_name: jobName,
+        template_id: templateId,
+        template_values: templateValues,
+        cores: resourceConfig.cores,
+        memory: resourceConfig.memory,
+        walltime: resourceConfig.walltime,
+        partition: resourceConfig.partition || null,
+        qos: resourceConfig.qos || null,
+      },
+    });
 
-      if (result.is_valid) {
-        errors = {};
-      } else {
-        // Parse issues to extract field-specific errors
-        const newErrors: Record<string, string> = {};
-        for (const error of result.issues) {
-          if (error.toLowerCase().includes('job name')) {
-            newErrors.job_name = error;
-          } else if (error.toLowerCase().includes('template')) {
-            newErrors.template = error;
-          } else if (error.toLowerCase().includes('cores')) {
-            newErrors.cores = error;
-          } else if (error.toLowerCase().includes('memory')) {
-            newErrors.memory = error;
-          } else if (error.toLowerCase().includes('wall time')) {
-            newErrors.walltime = error;
-          } else {
-            // Template variable errors - extract field name from "FieldLabel: error" format
-            const colonIndex = error.indexOf(':');
-            if (colonIndex > 0) {
-              const fieldLabel = error.substring(0, colonIndex).trim();
-              // Field errors will be handled by DynamicJobForm's validation display
-              if (!newErrors.general) {
-                newErrors.general = error;
-              }
-            } else {
-              newErrors.general = error;
-            }
+    validationResult = result;
+
+    if (result.is_valid) {
+      errors = {};
+    } else {
+      // Parse issues to extract field-specific errors
+      const newErrors: Record<string, string> = {};
+      for (const error of result.issues) {
+        if (error.toLowerCase().includes('job name')) {
+          newErrors.job_name = error;
+        } else if (error.toLowerCase().includes('template')) {
+          newErrors.template = error;
+        } else if (error.toLowerCase().includes('cores')) {
+          newErrors.cores = error;
+        } else if (error.toLowerCase().includes('memory')) {
+          newErrors.memory = error;
+        } else if (error.toLowerCase().includes('wall time')) {
+          newErrors.walltime = error;
+        } else {
+          if (!newErrors.general) {
+            newErrors.general = error;
           }
         }
-        errors = newErrors;
       }
-    } catch (error) {
-      // Silently handle error
+      errors = newErrors;
     }
   }
 </script>

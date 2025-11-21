@@ -71,31 +71,27 @@
   async function handleSubmit() {
     isSubmitting = true;
 
-    try {
-      const params: CreateJobParams = {
-        job_name: jobName,
-        template_id: templateId,
-        template_values: templateValues,
-        slurm_config: {
-          cores: resourceConfig.cores,
-          memory: resourceConfig.memory,
-          walltime: resourceConfig.walltime,
-          ...(resourceConfig.partition && { partition: resourceConfig.partition }),
-          ...(resourceConfig.qos && { qos: resourceConfig.qos })
-        }
-      };
+    const params: CreateJobParams = {
+      job_name: jobName,
+      template_id: templateId,
+      template_values: templateValues,
+      slurm_config: {
+        cores: resourceConfig.cores,
+        memory: resourceConfig.memory,
+        walltime: resourceConfig.walltime,
+        ...(resourceConfig.partition && { partition: resourceConfig.partition }),
+        ...(resourceConfig.qos && { qos: resourceConfig.qos }),
+      },
+    };
 
-      const result = await jobsStore.createJob(params);
+    const result = await jobsStore.createJob(params);
 
-      if (result.success) {
-        uiStore.setView('jobs');
-      }
-      // Errors handled by jobsStore and displayed in UI
-    } catch (error) {
-      // Silently handle error
-    } finally {
-      isSubmitting = false;
+    if (result.success) {
+      uiStore.setView('jobs');
     }
+    // Errors handled by jobsStore and displayed in UI
+
+    isSubmitting = false;
   }
 </script>
 

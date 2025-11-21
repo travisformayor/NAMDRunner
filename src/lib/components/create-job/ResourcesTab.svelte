@@ -60,25 +60,21 @@
   async function handleScriptPreview() {
     isGeneratingScript = true;
 
-    try {
-      const result = await invoke<ApiResult<string>>('preview_slurm_script', {
-        job_name: 'preview_job',
-        cores: resourceConfig.cores,
-        memory: resourceConfig.memory,
-        walltime: resourceConfig.walltime,
-        partition: resourceConfig.partition || null,
-        qos: resourceConfig.qos || null
-      });
+    const result = await invoke<ApiResult<string>>('preview_slurm_script', {
+      job_name: 'preview_job',
+      cores: resourceConfig.cores,
+      memory: resourceConfig.memory,
+      walltime: resourceConfig.walltime,
+      partition: resourceConfig.partition || null,
+      qos: resourceConfig.qos || null,
+    });
 
-      if (result.success && result.data) {
-        scriptPreviewContent = result.data;
-        showScriptPreview = true;
-      }
-    } catch (error) {
-      // Silently handle error
-    } finally {
-      isGeneratingScript = false;
+    if (result.success && result.data) {
+      scriptPreviewContent = result.data;
+      showScriptPreview = true;
     }
+
+    isGeneratingScript = false;
   }
 </script>
 

@@ -26,19 +26,15 @@
     isConnecting = true;
     errorMessage = '';
 
-    try {
-      const success = await sessionActions.connect(host, username, password);
-      if (success) {
-        onClose();
-        password = ''; // Clear password
-      } else {
-        errorMessage = 'Connection failed. Please check your credentials.';
-      }
-    } catch (error) {
-      errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-    } finally {
-      isConnecting = false;
+    const success = await sessionActions.connect(host, username, password);
+    if (success) {
+      onClose();
+      password = ''; // Clear password
+    } else {
+      errorMessage = 'Connection failed. Please check your credentials.';
     }
+
+    isConnecting = false;
   }
 
   function handleCancel() {

@@ -32,20 +32,18 @@
     downloadingFiles.add(file_name);
     downloadingFiles = new Set(downloadingFiles);
 
-    try {
-      const result = await invoke<ApiResult<DownloadInfo>>('download_job_output', { job_id: job.job_id, file_path });
+    const result = await invoke<ApiResult<DownloadInfo>>('download_job_output', {
+      job_id: job.job_id,
+      file_path,
+    });
 
-      if (!result.success) {
-        downloadErrors.set(file_name, result.error || 'Failed to download file');
-        downloadErrors = new Map(downloadErrors);
-      }
-    } catch (error) {
-      downloadErrors.set(file_name, error instanceof Error ? error.message : 'Download failed');
+    if (!result.success) {
+      downloadErrors.set(file_name, result.error || 'Failed to download file');
       downloadErrors = new Map(downloadErrors);
-    } finally {
-      downloadingFiles.delete(file_name);
-      downloadingFiles = new Set(downloadingFiles);
     }
+
+    downloadingFiles.delete(file_name);
+    downloadingFiles = new Set(downloadingFiles);
   }
 
   let isDownloadingAll = false;
@@ -61,17 +59,15 @@
 
     isDownloadingAll = true;
 
-    try {
-      const result = await invoke<ApiResult<DownloadInfo>>('download_all_outputs', { job_id: job.job_id });
+    const result = await invoke<ApiResult<DownloadInfo>>('download_all_outputs', {
+      job_id: job.job_id,
+    });
 
-      if (!result.success) {
-        downloadAllError = result.error || 'Failed to download output files';
-      }
-    } catch (error) {
-      downloadAllError = error instanceof Error ? error.message : 'Download failed';
-    } finally {
-      isDownloadingAll = false;
+    if (!result.success) {
+      downloadAllError = result.error || 'Failed to download output files';
     }
+
+    isDownloadingAll = false;
   }
 </script>
 

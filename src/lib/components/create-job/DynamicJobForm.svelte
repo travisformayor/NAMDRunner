@@ -82,19 +82,20 @@
   }
 
   async function handleFileSelect(key: string) {
-    try {
-      const varDef = selectedTemplate?.variables[key];
-      if (!varDef || getVariableTypeName(varDef.var_type) !== 'FileUpload') return;
+    const varDef = selectedTemplate?.variables[key];
+    if (!varDef || getVariableTypeName(varDef.var_type) !== 'FileUpload') return;
 
-      // Use existing backend command for file selection
-      const selected = await invoke('select_input_file') as { name: string; path: string; size: number; file_type: string } | null;
+    // Use existing backend command for file selection
+    const selected = (await invoke('select_input_file')) as {
+      name: string;
+      path: string;
+      size: number;
+      file_type: string;
+    } | null;
 
-      if (selected) {
-        // Store the full path for now - during job creation, we'll extract filename
-        templateValues[key] = selected.path;
-      }
-    } catch (error) {
-      // Silently handle error
+    if (selected) {
+      // Store the full path for now - during job creation, we'll extract filename
+      templateValues[key] = selected.path;
     }
   }
 

@@ -20,21 +20,17 @@
 
     isGeneratingPreview = true;
 
-    try {
-      const result = await invoke<ApiResult<string>>('preview_namd_config', {
-        template_id: templateId,
-        values: templateValues
-      });
+    const result = await invoke<ApiResult<string>>('preview_namd_config', {
+      template_id: templateId,
+      values: templateValues,
+    });
 
-      if (result.success && result.data) {
-        previewContent = result.data;
-        showPreview = true;
-      }
-    } catch (error) {
-      // Silently handle error
-    } finally {
-      isGeneratingPreview = false;
+    if (result.success && result.data) {
+      previewContent = result.data;
+      showPreview = true;
     }
+
+    isGeneratingPreview = false;
   }
 </script>
 

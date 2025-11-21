@@ -167,20 +167,18 @@
 
     isGeneratingPreview = true;
 
-    try {
-      const result = await invoke<ApiResult<string>>('preview_template_with_defaults', { template_id: id });
+    const result = await invoke<ApiResult<string>>('preview_template_with_defaults', {
+      template_id: id,
+    });
 
-      if (result.success && result.data) {
-        testPreviewContent = result.data;
-        showTestPreview = true;
-      } else {
-        error = result.error || 'Failed to generate preview';
-      }
-    } catch (err) {
-      error = 'Failed to generate preview';
-    } finally {
-      isGeneratingPreview = false;
+    if (result.success && result.data) {
+      testPreviewContent = result.data;
+      showTestPreview = true;
+    } else {
+      error = result.error || 'Failed to generate preview';
     }
+
+    isGeneratingPreview = false;
   }
 </script>
 
