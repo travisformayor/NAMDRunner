@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { logger } from '$lib/utils/logger';
   import { invoke } from '@tauri-apps/api/core';
-  import type { PreviewResult } from '$lib/types/api';
+  import type { ApiResult, JobPreset, ValidationResult } from '$lib/types/api';
+  import ValidationDisplay from '../ui/ValidationDisplay.svelte';
   import { jobPresets, partitions, allQosOptions, validateResourceRequest, calculateJobCost, estimateQueueTime, walltimeToHours } from '$lib/stores/clusterConfig';
-  import type { JobPreset } from '$lib/types/cluster';
   import PreviewModal from '../ui/PreviewModal.svelte';
 
   export let resourceConfig: {
@@ -16,7 +15,7 @@
   export let errors: Record<string, string>;
 
   let selectedPresetId = '';
-  let validation: any = { is_valid: true, issues: [], warnings: [], suggestions: [] };
+  let validation: ValidationResult = { is_valid: true, issues: [], warnings: [], suggestions: [] };
   let costEstimate = { totalCost: 0, queueEstimate: 'Unknown' };
   let showScriptPreview = false;
   let scriptPreviewContent = '';
@@ -62,27 +61,21 @@
   async function handleScriptPreview() {
     isGeneratingScript = true;
 
-    try {
-      const result = await invoke<PreviewResult>('preview_slurm_script', {
-        job_name: 'preview_job',
-        cores: resourceConfig.cores,
-        memory: resourceConfig.memory,
-        walltime: resourceConfig.walltime,
-        partition: resourceConfig.partition || null,
-        qos: resourceConfig.qos || null
-      });
+    const result = await invoke<ApiResult<string>>('preview_slurm_script', {
+      job_name: 'preview_job',
+      cores: resourceConfig.cores,
+      memory: resourceConfig.memory,
+      walltime: resourceConfig.walltime,
+      partition: resourceConfig.partition || null,
+      qos: resourceConfig.qos || null,
+    });
 
-      if (result.success && result.content) {
-        scriptPreviewContent = result.content;
-        showScriptPreview = true;
-      } else {
-        logger.error('[ResourcesTab]', `Script preview failed: ${result.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      logger.error('[ResourcesTab]', 'Script preview error', error);
-    } finally {
-      isGeneratingScript = false;
+    if (result.success && result.data) {
+      scriptPreviewContent = result.data;
+      showScriptPreview = true;
     }
+
+    isGeneratingScript = false;
   }
 </script>
 
@@ -122,7 +115,7 @@
             type="number"
             bind:value={resourceConfig.cores}
             min="1"
-            max="1024"
+            max={parseInt($partitions.find(p => p.id === resourceConfig.partition)?.cores_per_node ?? '64')}
             class:error={errors.cores}
           />
           {#if errors.cores}
@@ -221,32 +214,8 @@
       </div>
     </div>
 
-    <!-- Expandable Issues/Warnings -->
-    {#if validation.issues.length > 0 || validation.warnings.length > 0}
-      <details class="validation-details">
-        <summary>Show Details</summary>
-        {#if validation.issues.length > 0}
-          <div class="issues-list">
-            <strong>Issues:</strong>
-            <ul>
-              {#each validation.issues as issue}
-                <li class="issue-error">{issue}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-        {#if validation.warnings.length > 0}
-          <div class="warnings-list">
-            <strong>Warnings:</strong>
-            <ul>
-              {#each validation.warnings as warning}
-                <li class="issue-warning">{warning}</li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-      </details>
-    {/if}
+    <!-- Expandable Issues/Warnings/Suggestions -->
+    <ValidationDisplay {validation} collapsible={true} />
 
     <!-- Preview Script Button -->
     <div class="preview-section">
@@ -392,45 +361,6 @@
     font-size: var(--namd-font-size-sm);
     color: var(--namd-text-secondary);
     font-family: var(--namd-font-mono);
-  }
-
-  .validation-details {
-    margin-top: var(--namd-spacing-md);
-  }
-
-  .validation-details summary {
-    cursor: pointer;
-    color: var(--namd-text-secondary);
-    font-size: var(--namd-font-size-sm);
-  }
-
-  .issues-list, .warnings-list {
-    margin-top: var(--namd-spacing-sm);
-    padding: var(--namd-spacing-md);
-    border-radius: var(--namd-border-radius-sm);
-  }
-
-  .issues-list {
-    background: var(--namd-error-bg);
-    border: 1px solid var(--namd-error);
-  }
-
-  .warnings-list {
-    background: var(--namd-warning-bg);
-    border: 1px solid var(--namd-warning-border);
-  }
-
-  .issues-list ul, .warnings-list ul {
-    margin: var(--namd-spacing-sm) 0 0 0;
-    padding-left: 1.5rem;
-  }
-
-  .issue-error {
-    color: var(--namd-error);
-  }
-
-  .issue-warning {
-    color: var(--namd-warning-fg);
   }
 
   .preview-section {

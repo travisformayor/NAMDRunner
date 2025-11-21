@@ -1,5 +1,4 @@
 import { writable, derived } from 'svelte/store';
-import { logger } from '../utils/logger';
 
 export type View = 'jobs' | 'create' | 'templates' | 'template-edit' | 'settings';
 
@@ -36,7 +35,6 @@ function createUIStore() {
   return {
     subscribe,
     setView: (view: View) => {
-      logger.debug('UIStore', `Setting view: ${view}`);
       update(state => ({
         ...state,
         currentView: view,

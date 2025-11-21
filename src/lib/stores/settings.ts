@@ -1,83 +1,70 @@
-import { writable } from 'svelte/store';
-import type { DatabaseInfo, DatabaseInfoResult, DatabaseOperationResult } from '../types/api';
-import { CoreClientFactory } from '../ports/clientFactory';
-import { logger } from '../utils/logger';
+import { writable, derived } from 'svelte/store';
+import { invoke } from '@tauri-apps/api/core';
+import type { DatabaseInfo, DatabaseOperationData, ApiResult } from '../types/api';
 
+// Settings store state
 interface SettingsState {
   databaseInfo: DatabaseInfo | null;
-  isLoading: boolean;
+  loading: boolean;
 }
 
 const initialState: SettingsState = {
   databaseInfo: null,
-  isLoading: false,
+  loading: false,
 };
 
+// Create settings store
 function createSettingsStore() {
-  const { subscribe, set, update } = writable<SettingsState>(initialState);
+  const { subscribe, update } = writable<SettingsState>(initialState);
 
   return {
     subscribe,
 
-    async loadDatabaseInfo() {
-      logger.debug('Settings', 'Loading database info');
-      update(state => ({ ...state, isLoading: true }));
+    // Load database information
+    async loadDatabaseInfo(): Promise<void> {
+      update(state => ({ ...state, loading: true }));
 
-      const result = await CoreClientFactory.getClient().getDatabaseInfo();
+      const result = await invoke<ApiResult<DatabaseInfo>>('get_database_info');
 
-      if (result.success && result.path && result.size_bytes !== undefined) {
+      if (result.success && result.data) {
+        const { path, size_bytes, job_count } = result.data;
         update(state => ({
           ...state,
           databaseInfo: {
-            path: result.path!,
-            size_bytes: result.size_bytes!,
+            path,
+            size_bytes,
+            job_count,
           },
-          isLoading: false,
+          loading: false,
         }));
       } else {
-        logger.error('Settings', `Failed to load database info: ${result.error}`);
-        update(state => ({ ...state, isLoading: false }));
+        update(state => ({ ...state, loading: false }));
       }
     },
 
-    async backupDatabase(): Promise<DatabaseOperationResult> {
-      logger.debug('Settings', 'Starting backup');
-      const result = await CoreClientFactory.getClient().backupDatabase();
-
-      if (result.success) {
-        logger.debug('Settings', result.message || 'Backup successful');
-      } else if (result.error !== 'Backup cancelled') {
-        logger.error('Settings', result.error || 'Backup failed');
-      }
+    async backupDatabase() {
+      const result = await invoke<ApiResult<DatabaseOperationData>>('backup_database');
 
       return result;
     },
 
-    async restoreDatabase(): Promise<DatabaseOperationResult> {
-      logger.debug('Settings', 'Starting restore');
-      const result = await CoreClientFactory.getClient().restoreDatabase();
+    async restoreDatabase() {
+      const result = await invoke<ApiResult<DatabaseOperationData>>('restore_database');
 
-      if (result.success) {
-        logger.debug('Settings', result.message || 'Restore successful');
+      if (result.success && result.data) {
         // Reload database info after restore
         await settingsStore.loadDatabaseInfo();
-      } else if (result.error !== 'Restore cancelled') {
-        logger.error('Settings', result.error || 'Restore failed');
       }
 
       return result;
     },
 
-    async resetDatabase(): Promise<DatabaseOperationResult> {
-      logger.debug('Settings', 'Resetting database');
-      const result = await CoreClientFactory.getClient().resetDatabase();
+    async resetDatabase() {
+      const result = await invoke<ApiResult<DatabaseOperationData>>('reset_database');
 
-      if (result.success) {
-        logger.debug('Settings', result.message || 'Reset successful');
+      if (result.success && result.data) {
         // Reload database info after reset
         await settingsStore.loadDatabaseInfo();
-      } else {
-        logger.error('Settings', result.error || 'Reset failed');
       }
 
       return result;
@@ -85,4 +72,9 @@ function createSettingsStore() {
   };
 }
 
+// Export store instance
 export const settingsStore = createSettingsStore();
+
+// Derived stores for convenience
+export const databaseInfo = derived(settingsStore, $store => $store.databaseInfo);
+export const settingsLoading = derived(settingsStore, $store => $store.loading);

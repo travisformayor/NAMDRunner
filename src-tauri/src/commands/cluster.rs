@@ -1,17 +1,20 @@
 use crate::types::*;
+use crate::log_debug;
 
 /// Get cluster capabilities (partitions, QOS, job presets)
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_cluster_capabilities() -> ApiResult<crate::cluster::ClusterCapabilities> {
-    crate::debug_log!("get_cluster_capabilities command called");
+    log_debug!(category: "Cluster", message: "get_cluster_capabilities command called");
 
     let capabilities = crate::cluster::get_cluster_capabilities();
 
-    crate::debug_log!(
-        "Returning cluster capabilities: {} partitions, {} QOS options, {} presets",
-        capabilities.partitions.len(),
-        capabilities.qos_options.len(),
-        capabilities.job_presets.len()
+    log_debug!(
+        category: "Cluster",
+        message: "Returning cluster capabilities",
+        details: "{} partitions, {} QOS options, {} presets",
+            capabilities.partitions.len(),
+            capabilities.qos_options.len(),
+            capabilities.job_presets.len()
     );
 
     ApiResult {

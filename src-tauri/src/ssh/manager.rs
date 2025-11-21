@@ -6,8 +6,8 @@ use super::{SSHConnection, ConnectionConfig, ConnectionInfo};
 use super::commands::CommandResult;
 use super::sftp::{FileTransferProgress, RemoteFileInfo};
 use crate::security::SecurePassword;
-use crate::retry::patterns;
-use crate::{debug_log, info_log, error_log};
+use crate::retry;
+use crate::{log_debug, log_info, log_error};
 
 /// Connection lifecycle management with proper cleanup and error handling
 #[derive(Debug)]
@@ -73,7 +73,7 @@ impl ConnectionManager {
     /// Execute a command using the current connection
     pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Result<CommandResult> {
         // Use retry logic for command execution
-        patterns::retry_quick_operation(|| self.execute_command_once(command, timeout)).await
+        retry::retry_quick(|| self.execute_command_once(command, timeout)).await
     }
 
     async fn execute_command_once(&self, command: &str, timeout: Option<u64>) -> Result<CommandResult> {
@@ -81,25 +81,24 @@ impl ConnectionManager {
         match conn.as_ref() {
             Some(connection) => {
                 if !connection.is_connected() {
-                    error_log!("[SSH] ERROR: SSH connection is no longer active");
+                    log_error!(category: "SSH", message: "SSH connection is no longer active");
                     return Err(anyhow::anyhow!("SSH connection is no longer active"));
                 }
-                info_log!("[SSH] Executing command: {}", command);
+                log_info!(category: "SSH", message: "Executing command", details: "{}", command);
                 let session = connection.get_session()?;
                 let executor = super::commands::CommandExecutor::new(session, timeout.unwrap_or(crate::cluster::timeouts::DEFAULT_COMMAND));
                 let result = executor.execute(command).await?;
-                debug_log!("[SSH] Command output: {} bytes stdout, {} bytes stderr",
-                    result.stdout.len(), result.stderr.len());
+                log_debug!(category: "SSH", message: "Command output", details: "{} bytes stdout, {} bytes stderr", result.stdout.len(), result.stderr.len());
 
                 // Show stderr content if present (useful for debugging unexpected output)
                 if !result.stderr.is_empty() {
-                    debug_log!("[SSH] Command stderr: {}", result.stderr);
+                    log_debug!(category: "SSH", message: "Command stderr", details: "{}", result.stderr);
                 }
 
                 Ok(result)
             }
             None => {
-                error_log!("[SSH] ERROR: Not connected to cluster");
+                log_error!(category: "SSH", message: "Not connected to cluster");
                 Err(anyhow::anyhow!("Please connect to the cluster first"))
             }
         }
@@ -108,7 +107,7 @@ impl ConnectionManager {
     /// Upload bytes directly to remote server with retry logic
     pub async fn upload_bytes(&self, remote_path: &str, content: &[u8]) -> Result<FileTransferProgress> {
         // Use retry logic for file uploads
-        patterns::retry_file_operation(|| self.upload_bytes_once(remote_path, content)).await
+        retry::retry_files(|| self.upload_bytes_once(remote_path, content)).await
     }
 
     async fn upload_bytes_once(&self, remote_path: &str, content: &[u8]) -> Result<FileTransferProgress> {
@@ -148,7 +147,7 @@ impl ConnectionManager {
         app_handle: Option<tauri::AppHandle>,
     ) -> Result<FileTransferProgress> {
         // Use retry logic for file uploads
-        patterns::retry_file_operation(|| self.upload_file_once(local_path, remote_path, app_handle.clone())).await
+        retry::retry_files(|| self.upload_file_once(local_path, remote_path, app_handle.clone())).await
     }
 
     async fn upload_file_once(
@@ -161,10 +160,10 @@ impl ConnectionManager {
         match conn.as_mut() {
             Some(connection) => {
                 if !connection.is_connected() {
-                    error_log!("[SFTP] ERROR: SSH connection is no longer active");
+                    log_error!(category: "SFTP", message: "SSH connection is no longer active");
                     return Err(anyhow::anyhow!("SSH connection is no longer active"));
                 }
-                info_log!("[SFTP] Uploading file: {} -> {}", local_path, remote_path);
+                log_info!(category: "SFTP", message: "Uploading file", details: "{} -> {}", local_path, remote_path);
 
                 // Get file name for progress reporting
                 let file_name = std::path::Path::new(local_path)
@@ -226,11 +225,11 @@ impl ConnectionManager {
                 connection.reset_command_timeout()?;
 
                 let final_result = result?;
-                info_log!("[SFTP] Upload complete: {} bytes transferred", final_result.bytes_transferred);
+                log_info!(category: "SFTP", message: "Upload complete", details: "{} bytes transferred", final_result.bytes_transferred);
                 Ok(final_result)
             }
             None => {
-                error_log!("[SFTP] ERROR: Not connected to cluster");
+                log_error!(category: "SFTP", message: "Not connected to cluster");
                 Err(anyhow::anyhow!("Please connect to the cluster first"))
             }
         }
@@ -239,7 +238,7 @@ impl ConnectionManager {
     /// Download a file using the current connection
     pub async fn download_file(&self, remote_path: &str, local_path: &str) -> Result<FileTransferProgress> {
         // Use retry logic for file downloads
-        patterns::retry_file_operation(|| self.download_file_once(remote_path, local_path)).await
+        retry::retry_files(|| self.download_file_once(remote_path, local_path)).await
     }
 
     async fn download_file_once(&self, remote_path: &str, local_path: &str) -> Result<FileTransferProgress> {
@@ -247,10 +246,10 @@ impl ConnectionManager {
         match conn.as_mut() {
             Some(connection) => {
                 if !connection.is_connected() {
-                    error_log!("[SFTP] ERROR: SSH connection is no longer active");
+                    log_error!(category: "SFTP", message: "SSH connection is no longer active");
                     return Err(anyhow::anyhow!("SSH connection is no longer active"));
                 }
-                info_log!("[SFTP] Downloading file: {} -> {}", remote_path, local_path);
+                log_info!(category: "SFTP", message: "Downloading file", details: "{} -> {}", remote_path, local_path);
 
                 // Set file transfer timeout before SFTP operation
                 connection.set_file_transfer_timeout()?;
@@ -263,11 +262,11 @@ impl ConnectionManager {
                 connection.reset_command_timeout()?;
 
                 let final_result = result?;
-                info_log!("[SFTP] Download complete: {} bytes transferred", final_result.bytes_transferred);
+                log_info!(category: "SFTP", message: "Download complete", details: "{} bytes transferred", final_result.bytes_transferred);
                 Ok(final_result)
             }
             None => {
-                error_log!("[SFTP] ERROR: Not connected to cluster");
+                log_error!(category: "SFTP", message: "Not connected to cluster");
                 Err(anyhow::anyhow!("Please connect to the cluster first"))
             }
         }
@@ -276,7 +275,7 @@ impl ConnectionManager {
     /// List files in a directory using the current connection
     pub async fn list_files(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
         // Use retry logic for directory listing
-        patterns::retry_quick_operation(|| self.list_files_once(remote_path)).await
+        retry::retry_quick(|| self.list_files_once(remote_path)).await
     }
 
     async fn list_files_once(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
@@ -306,7 +305,7 @@ impl ConnectionManager {
     /// List files in a directory with metadata for OutputFile
     /// Only returns regular files (not directories)
     pub async fn list_files_with_metadata(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
-        patterns::retry_quick_operation(|| self.list_files_with_metadata_once(remote_path)).await
+        retry::retry_quick(|| self.list_files_with_metadata_once(remote_path)).await
     }
 
     async fn list_files_with_metadata_once(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
@@ -335,7 +334,7 @@ impl ConnectionManager {
 
     /// Get file metadata (stat) for a remote file
     pub async fn stat_file(&self, remote_path: &str) -> Result<RemoteFileInfo> {
-        patterns::retry_quick_operation(|| self.stat_file_once(remote_path)).await
+        retry::retry_quick(|| self.stat_file_once(remote_path)).await
     }
 
     async fn stat_file_once(&self, remote_path: &str) -> Result<RemoteFileInfo> {
@@ -365,25 +364,25 @@ impl ConnectionManager {
     /// Create a directory using SSH mkdir -p command
     pub async fn create_directory(&self, remote_path: &str) -> Result<()> {
         // Use retry logic for directory creation
-        patterns::retry_quick_operation(|| self.create_directory_once(remote_path)).await
+        retry::retry_quick(|| self.create_directory_once(remote_path)).await
     }
 
     async fn create_directory_once(&self, remote_path: &str) -> Result<()> {
         // Use mkdir -p command for directory creation (matches delete_directory pattern)
-        info_log!("[SSH] Creating directory: {}", remote_path);
+        log_info!(category: "SSH", message: "Creating directory", details: "{}", remote_path);
         let mkdir_command = format!("mkdir -p -m 0755 {}", crate::validation::shell::escape_parameter(remote_path));
         self.execute_command(&mkdir_command, Some(crate::cluster::timeouts::QUICK_OPERATION)).await?;
-        info_log!("[SSH] Directory created successfully: {}", remote_path);
+        log_info!(category: "SSH", message: "Directory created successfully", details: "{}", remote_path);
         Ok(())
     }
 
     /// Delete a directory and all its contents using SSH command
     pub async fn delete_directory(&self, remote_path: &str) -> Result<CommandResult> {
         // Use rm -rf command for directory deletion with retry logic
-        info_log!("[SSH] Deleting directory: {}", remote_path);
+        log_info!(category: "SSH", message: "Deleting directory", details: "{}", remote_path);
         let rm_command = format!("rm -rf {}", crate::validation::shell::escape_parameter(remote_path));
         let result = self.execute_command(&rm_command, Some(crate::cluster::timeouts::QUICK_OPERATION)).await?;
-        info_log!("[SSH] Directory deleted successfully: {}", remote_path);
+        log_info!(category: "SSH", message: "Directory deleted successfully", details: "{}", remote_path);
         Ok(result)
     }
 
@@ -405,7 +404,7 @@ impl ConnectionManager {
     /// manager.sync_directory_rsync(&source, &dest).await?;
     /// ```
     pub async fn sync_directory_rsync(&self, source: &str, destination: &str) -> Result<CommandResult> {
-        info_log!("[SSH] Syncing directory: {} -> {}", source, destination);
+        log_info!(category: "SSH", message: "Syncing directory", details: "{} -> {}", source, destination);
 
         // Use rsync with archive mode and compression
         // -a: archive mode (preserves permissions, timestamps, etc.)
@@ -419,14 +418,14 @@ impl ConnectionManager {
         // Use default command timeout (rsync is efficient for cluster-side operations)
         let result = self.execute_command(&rsync_command, Some(crate::cluster::timeouts::DEFAULT_COMMAND)).await?;
 
-        info_log!("[SSH] Directory sync completed: {} -> {}", source, destination);
+        log_info!(category: "SSH", message: "Directory sync completed", details: "{} -> {}", source, destination);
         Ok(result)
     }
 
     /// Get file information using native SFTP
     pub async fn get_file_info(&self, remote_path: &str) -> Result<RemoteFileInfo> {
         // Use retry logic for file info retrieval
-        patterns::retry_quick_operation(|| self.get_file_info_once(remote_path)).await
+        retry::retry_quick(|| self.get_file_info_once(remote_path)).await
     }
 
     async fn get_file_info_once(&self, remote_path: &str) -> Result<RemoteFileInfo> {
@@ -456,7 +455,7 @@ impl ConnectionManager {
     /// Check if a file or directory exists
     pub async fn file_exists(&self, remote_path: &str) -> Result<bool> {
         // Use retry logic for existence checking
-        patterns::retry_quick_operation(|| self.file_exists_once(remote_path)).await
+        retry::retry_quick(|| self.file_exists_once(remote_path)).await
     }
 
     async fn file_exists_once(&self, remote_path: &str) -> Result<bool> {

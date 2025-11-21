@@ -1,15 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getName, getVersion } from '@tauri-apps/api/app';
   import { settingsStore } from '$lib/stores/settings';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import AlertDialog from '../ui/AlertDialog.svelte';
-  import { logger } from '$lib/utils/logger';
   import { jobsStore } from '$lib/stores/jobs';
-  import { loadTemplates } from '$lib/stores/templateStore';
+  import { templateStore } from '$lib/stores/templateStore';
 
   // Store subscriptions
   $: databaseInfo = $settingsStore.databaseInfo;
-  $: isLoading = $settingsStore.isLoading;
+  $: isLoading = $settingsStore.loading;
+
+  // App information state for about section
+  let appName = '';
+  let appVersion = '';
 
   // Dialog states
   let showRestoreWarning = false;
@@ -28,9 +32,13 @@
     showAlert = true;
   }
 
-  // Load database info on mount
-  onMount(() => {
+  // Load database info and app metadata on mount
+  onMount(async () => {
     settingsStore.loadDatabaseInfo();
+
+    // Fetch app metadata from Tauri APIs
+    appName = await getName();
+    appVersion = await getVersion();
   });
 
   // Format file size
@@ -44,11 +52,10 @@
 
   // Backup handler
   async function handleBackup() {
-    logger.debug('Settings', 'Starting database backup');
     const result = await settingsStore.backupDatabase();
 
     if (result.success) {
-      // Success feedback shown via logger
+      // Success
     } else if (result.error !== 'Backup cancelled') {
       // Show error (cancelled is user action, not an error)
       showAlertDialog('Backup Failed', `Backup failed: ${result.error}`, 'error');
@@ -62,14 +69,13 @@
 
   async function handleRestoreConfirm() {
     showRestoreWarning = false;
-    logger.debug('Settings', 'Starting database restore');
 
     const result = await settingsStore.restoreDatabase();
 
     if (result.success) {
       // Reload all stores after restore
       await jobsStore.loadFromDatabase();
-      await loadTemplates();
+      await templateStore.loadTemplates();
       showAlertDialog('Database Restored', 'Database restored successfully. All data has been reloaded.', 'success');
     } else if (result.error !== 'Restore cancelled') {
       showAlertDialog('Restore Failed', `Restore failed: ${result.error}`, 'error');
@@ -83,14 +89,13 @@
 
   async function handleResetConfirm() {
     showResetWarning = false;
-    logger.debug('Settings', 'Resetting database');
 
     const result = await settingsStore.resetDatabase();
 
     if (result.success) {
       // Reload all stores after reset
       await jobsStore.loadFromDatabase();
-      await loadTemplates();
+      await templateStore.loadTemplates();
       showAlertDialog('Database Reset', 'Database reset successfully. All data has been cleared.', 'success');
     } else {
       showAlertDialog('Reset Failed', `Reset failed: ${result.error}`, 'error');
@@ -126,6 +131,21 @@
     {:else}
       <p class="error">Failed to load database information</p>
     {/if}
+  </div>
+
+  <div class="settings-section">
+    <h2>About</h2>
+
+    <div class="db-info">
+      <div class="info-row">
+        <span class="label">Name:</span>
+        <span class="value">{appName}</span>
+      </div>
+      <div class="info-row">
+        <span class="label">Version:</span>
+        <span class="value">{appVersion}</span>
+      </div>
+    </div>
   </div>
 </div>
 

@@ -70,9 +70,6 @@ cargo tarpaulin \
     --output-dir "../$COVERAGE_DIR" \
     --timeout 120 \
     --verbose \
-    --exclude-files "src/mock_state.rs" \
-    --exclude-files "src/integration_tests.rs" \
-    --exclude-files "src/security_tests.rs" \
     --skip-clean
 
 # Parse coverage results

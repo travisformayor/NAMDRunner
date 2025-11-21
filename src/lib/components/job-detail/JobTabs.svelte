@@ -1,17 +1,19 @@
 <script lang="ts">
   import type { JobInfo } from '../../types/api';
   import OverviewTab from './tabs/OverviewTab.svelte';
-  import SlurmLogsTab from './tabs/SlurmLogsTab.svelte';
+  import InputFilesTab from './tabs/InputFilesTab.svelte';
   import OutputFilesTab from './tabs/OutputFilesTab.svelte';
+  import SlurmLogsTab from './tabs/SlurmLogsTab.svelte';
 
   export let job: JobInfo;
 
-  type TabId = 'overview' | 'slurm-logs' | 'output-files';
+  type TabId = 'overview' | 'input-files' | 'output-files' | 'slurm-logs';
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
-    { id: 'slurm-logs', label: 'SLURM Logs' },
-    { id: 'output-files', label: 'Output Files' }
+    { id: 'input-files', label: 'Input Files' },
+    { id: 'output-files', label: 'Output Files' },
+    { id: 'slurm-logs', label: 'SLURM Logs' }
   ];
 
   let activeTab: TabId = 'overview';
@@ -19,7 +21,7 @@
 
 <div class="namd-tabs-container namd-card">
   <div class="namd-tabs-header">
-    <nav class="namd-tabs-nav namd-tabs-nav--grid namd-tabs-nav--grid-3">
+    <nav class="namd-tabs-nav namd-tabs-nav--grid namd-tabs-nav--grid-4">
       {#each tabs as tab}
         <button
           class="namd-tab-button"
@@ -35,10 +37,12 @@
   <div class="namd-tab-content">
     {#if activeTab === 'overview'}
       <OverviewTab {job} />
-    {:else if activeTab === 'slurm-logs'}
-      <SlurmLogsTab {job} />
+    {:else if activeTab === 'input-files'}
+      <InputFilesTab {job} />
     {:else if activeTab === 'output-files'}
       <OutputFilesTab {job} />
+    {:else if activeTab === 'slurm-logs'}
+      <SlurmLogsTab {job} />
     {/if}
   </div>
 </div>

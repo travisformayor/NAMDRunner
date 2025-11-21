@@ -1,9 +1,8 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { logger } from '$lib/utils/logger';
-  import { createTemplate, updateTemplate, deleteTemplate, templatesError } from '$lib/stores/templateStore';
+  import { templateStore, templatesError } from '$lib/stores/templateStore';
   import type { Template } from '$lib/types/template';
-  import type { PreviewResult } from '$lib/types/api';
+  import type { ApiResult } from '$lib/types/api';
   import { getVariableTypeName } from '$lib/types/template';
   import { extractVariablesFromTemplate, generateLabel } from '$lib/utils/template-utils';
   import VariableEditor from './VariableEditor.svelte';
@@ -14,14 +13,24 @@
   // Props
   export let template: Template | null = null;
   export let mode: 'create' | 'edit' = 'create';
-  export let onSaved: (template: Template) => void = () => {};
+  export let onSaved: (_template: Template) => void = () => {};
   export let onCancel: () => void = () => {};
 
+  // Initialize form fields from template prop
   let id = template?.id ?? '';
   let name = template?.name ?? '';
   let description = template?.description ?? '';
   let namdConfigTemplate = template?.namd_config_template ?? '';
   let variables = template?.variables ?? {};
+
+  // Reactive: re-initialize if template prop changes
+  $: if (template) {
+    id = template.id;
+    name = template.name;
+    description = template.description;
+    namdConfigTemplate = template.namd_config_template;
+    variables = template.variables;
+  }
   let isSaving = false;
   let error: string | null = null;
 
@@ -91,9 +100,9 @@
 
     let success = false;
     if (mode === 'create') {
-      success = await createTemplate(templateData);
+      success = await templateStore.createTemplate(templateData);
     } else {
-      success = await updateTemplate(id, templateData);
+      success = await templateStore.updateTemplate(id, templateData);
     }
 
     isSaving = false;
@@ -118,7 +127,7 @@
   async function handleDeleteConfirm() {
     if (!id) return;
 
-    const success = await deleteTemplate(id);
+    const success = await templateStore.deleteTemplate(id);
 
     showDeleteConfirm = false;
 
@@ -142,7 +151,7 @@
 
     // If editing existing variable and key changed, delete old key
     if (editingVariableKey && editingVariableKey !== varDef.key) {
-      const { [editingVariableKey]: deleted, ...rest } = variables;
+      const { [editingVariableKey]: _, ...rest } = variables;
       variables = rest;
     }
 
@@ -168,22 +177,18 @@
 
     isGeneratingPreview = true;
 
-    try {
-      const result = await invoke<PreviewResult>('preview_template_with_defaults', { template_id: id });
+    const result = await invoke<ApiResult<string>>('preview_template_with_defaults', {
+      template_id: id,
+    });
 
-      if (result.success && result.content) {
-        testPreviewContent = result.content;
-        showTestPreview = true;
-      } else {
-        error = result.error || 'Failed to generate preview';
-        logger.error('[TemplateEditor]', `Preview failed: ${result.error || 'Unknown error'}`);
-      }
-    } catch (err) {
-      error = 'Failed to generate preview';
-      logger.error('[TemplateEditor]', 'Preview error', err);
-    } finally {
-      isGeneratingPreview = false;
+    if (result.success && result.data) {
+      testPreviewContent = result.data;
+      showTestPreview = true;
+    } else {
+      error = result.error || 'Failed to generate preview';
     }
+
+    isGeneratingPreview = false;
   }
 </script>
 
@@ -206,7 +211,7 @@
         disabled={mode === 'edit'}
         placeholder="e.g., my_custom_template_v1"
         required
-        class="form-control"
+        class="namd-input"
       />
       <p class="help-text">Unique identifier (lowercase, underscores only)</p>
     </div>
@@ -221,7 +226,7 @@
         bind:value={name}
         placeholder="e.g., My Custom Simulation"
         required
-        class="form-control"
+        class="namd-input"
       />
     </div>
 
@@ -232,7 +237,7 @@
         bind:value={description}
         placeholder="Describe what this template is for..."
         rows="3"
-        class="form-control"
+        class="namd-input"
       ></textarea>
     </div>
 
@@ -246,7 +251,7 @@
         placeholder="# NAMD Configuration Template"
         rows="20"
         required
-        class="form-control code-editor"
+        class="namd-input code-editor"
       ></textarea>
       <p class="help-text">
         Variables are auto-detected from your template. Use <code>&#123;&#123;variable_name&#125;&#125;</code> syntax.
@@ -359,22 +364,6 @@
 
   .required {
     color: var(--namd-error);
-  }
-
-  .form-control {
-    width: 100%;
-    padding: var(--namd-spacing-sm);
-    border: 1px solid var(--namd-border);
-    border-radius: var(--namd-border-radius-sm);
-    font-size: var(--namd-font-size-sm);
-    font-family: inherit;
-    background-color: var(--namd-bg-primary);
-    color: var(--namd-text-primary);
-  }
-
-  .form-control:focus {
-    outline: none;
-    border-color: var(--namd-primary);
   }
 
   .code-editor {

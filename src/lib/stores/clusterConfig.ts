@@ -12,10 +12,14 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import type { ClusterCapabilities, PartitionSpec, QosSpec, ValidationResult } from '../types/cluster';
-import type { GetClusterCapabilitiesResult } from '../types/api';
-import { CoreClientFactory } from '../ports/clientFactory';
-import { logger } from '../utils/logger';
+import { invoke } from '@tauri-apps/api/core';
+import type {
+  ClusterCapabilities,
+  PartitionSpec,
+  QosSpec,
+  ValidationResult,
+  ApiResult
+} from '../types/api';
 
 // Main store - holds full cluster capabilities from backend
 const clusterCapabilitiesStore = writable<ClusterCapabilities | null>(null);
@@ -26,27 +30,20 @@ const loadErrorStore = writable<string | null>(null);
  * Initialize cluster configuration - call once on app startup
  */
 export async function initClusterConfig(): Promise<void> {
-  logger.debug('ClusterConfig', 'Init started');
   try {
     loadErrorStore.set(null);
-    logger.debug('ClusterConfig', 'Calling backend getClusterCapabilities...');
-    const result: GetClusterCapabilitiesResult = await CoreClientFactory.getClient().getClusterCapabilities();
-    logger.debug('ClusterConfig', `Backend response: success=${result.success}, hasData=${!!result.data}`);
+    const result = await invoke<ApiResult<ClusterCapabilities>>('get_cluster_capabilities');
 
     if (result.success && result.data) {
-      logger.debug('ClusterConfig', `Setting cluster capabilities: ${result.data.partitions.length} partitions, ${result.data.qos_options.length} QOS, ${result.data.job_presets.length} presets`);
       clusterCapabilitiesStore.set(result.data);
       isLoadedStore.set(true);
-      logger.debug('ClusterConfig', 'Cluster config loaded successfully');
     } else {
       const error = result.error || 'Failed to load cluster configuration';
-      logger.debug('ClusterConfig', `Backend returned error: ${error}`);
       loadErrorStore.set(error);
       throw new Error(error);
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error loading cluster config';
-    logger.debug('ClusterConfig', `Exception during init: ${errorMsg}`);
     loadErrorStore.set(errorMsg);
     throw error;
   }
@@ -138,9 +135,13 @@ export async function calculateJobCost(
   gpuCount: number = 1
 ): Promise<number> {
   try {
-    return await CoreClientFactory.getClient().calculateJobCost(cores, walltimeHours, hasGpu, gpuCount);
+    return await invoke<number>('calculate_job_cost', {
+      cores,
+      walltime_hours: walltimeHours,
+      has_gpu: hasGpu,
+      gpu_count: gpuCount
+    });
   } catch (error) {
-    logger.debug('ClusterConfig', `Cost calculation failed: ${error}`);
     return 0;
   }
 }
@@ -166,9 +167,11 @@ export function walltimeToHours(walltime: string): number {
  */
 export async function suggestQos(walltimeHours: number, partitionId: string): Promise<string> {
   try {
-    return await CoreClientFactory.getClient().suggestQosForPartition(walltimeHours, partitionId);
+    return await invoke<string>('suggest_qos_for_partition', {
+      walltime_hours: walltimeHours,
+      partition_id: partitionId
+    });
   } catch (error) {
-    logger.debug('ClusterConfig', `QoS suggestion failed: ${error}`);
     // Fallback to default QoS
     const config = get(clusterCapabilitiesStore);
     const validQos = getQosForPartition(partitionId);
@@ -183,9 +186,11 @@ export async function suggestQos(walltimeHours: number, partitionId: string): Pr
  */
 export async function estimateQueueTime(cores: number, partitionId: string): Promise<string> {
   try {
-    return await CoreClientFactory.getClient().estimateQueueTimeForJob(cores, partitionId);
+    return await invoke<string>('estimate_queue_time_for_job', {
+      cores,
+      partition_id: partitionId
+    });
   } catch (error) {
-    logger.debug('ClusterConfig', `Queue time estimation failed: ${error}`);
     return 'Unknown';
   }
 }
@@ -212,23 +217,20 @@ export async function validateResourceRequest(
       issues: ['Cluster configuration not loaded'],
       warnings: [],
       suggestions: []
-};
+    };
   }
 
   // Call backend validation - pass parameters as-is, no conversion
   try {
-    logger.debug('ClusterConfig', `Calling backend validation: cores=${cores}, memory=${memory}, walltime=${walltime}, partition=${partitionId}, qos=${qosId}`);
-    const result = await CoreClientFactory.getClient().validateResourceAllocation(
+    const result = await invoke<ValidationResult>('validate_resource_allocation', {
       cores,
       memory,
       walltime,
-      partitionId,
-      qosId
-    );
-    logger.debug('ClusterConfig', `Backend validation result: is_valid=${result.is_valid}, issues=${JSON.stringify(result.issues)}`);
+      partition_id: partitionId,
+      qos_id: qosId
+    });
     return result;
   } catch (error) {
-    logger.debug('ClusterConfig', `Backend validation ERROR: ${error instanceof Error ? error.message : JSON.stringify(error)}`);
     return {
       is_valid: false,
       issues: ['Validation failed: ' + (error instanceof Error ? error.message : 'Unknown error')],
@@ -238,11 +240,21 @@ export async function validateResourceRequest(
   }
 }
 
+/**
+ * Set cluster capabilities directly (used by centralized app initialization)
+ */
+export function setClusterCapabilities(capabilities: ClusterCapabilities): void {
+  clusterCapabilitiesStore.set(capabilities);
+  isLoadedStore.set(true);
+  loadErrorStore.set(null);
+}
+
 // Export main store and utilities
 export const clusterConfig = {
   subscribe: clusterCapabilitiesStore.subscribe,
   init: initClusterConfig,
-  refresh: refreshClusterConfig
+  refresh: refreshClusterConfig,
+  set: setClusterCapabilities,
 };
 
 export const isLoaded = {

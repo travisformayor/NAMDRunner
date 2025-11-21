@@ -1,6 +1,11 @@
 import { writable, derived } from 'svelte/store';
-import type { ConnectionState, SessionInfo } from '../types/api';
-import { CoreClientFactory } from '../ports/clientFactory';
+import type {
+  ConnectionState,
+  SessionInfo,
+  ConnectionStatus,
+  ApiResult
+} from '../types/api';
+import { invoke } from '@tauri-apps/api/core';
 import { jobsStore } from './jobs';
 
 // Session state store
@@ -32,8 +37,6 @@ export const lastError = derived(sessionStore, ($session) => $session.lastError)
 export const sessionActions = {
   // Connect to cluster
   async connect(host: string, username: string, password: string): Promise<boolean> {
-    // Starting connection attempt
-
     sessionStore.update((state) => ({
       ...state,
       isConnecting: true,
@@ -41,15 +44,15 @@ export const sessionActions = {
     }));
 
     try {
-      // Calling CoreClientFactory.getClient().connect()
-      const result = await CoreClientFactory.getClient().connect({ host, username, password });
-      // Connection attempt completed
-      
+      const result = await invoke<ApiResult<SessionInfo>>('connect_to_cluster', {
+        params: { host, username, password }
+      });
+
       if (result.success) {
         sessionStore.update((state) => ({
           ...state,
           connectionState: 'Connected',
-          session_info: result.session_info || null,
+          session_info: result.data || null,
           isConnecting: false,
           lastError: null,
         }));
@@ -59,7 +62,6 @@ export const sessionActions = {
 
         return true;
       } else {
-        // Connection failed
         sessionStore.update((state) => ({
           ...state,
           connectionState: 'Disconnected',
@@ -70,7 +72,6 @@ export const sessionActions = {
         return false;
       }
     } catch (error) {
-      // Connection threw exception
       sessionStore.update((state) => ({
         ...state,
         connectionState: 'Disconnected',
@@ -85,8 +86,8 @@ export const sessionActions = {
   // Disconnect from cluster
   async disconnect(): Promise<boolean> {
     try {
-      const result = await CoreClientFactory.getClient().disconnect();
-      
+      const result = await invoke<ApiResult<void>>('disconnect');
+
       sessionStore.update((state) => ({
         ...state,
         connectionState: 'Disconnected',
@@ -110,12 +111,12 @@ export const sessionActions = {
   // Check connection status
   async checkStatus(): Promise<void> {
     try {
-      const result = await CoreClientFactory.getClient().getConnectionStatus();
+      const result = await invoke<ApiResult<ConnectionStatus>>('get_connection_status');
 
       sessionStore.update((state) => ({
         ...state,
-        connectionState: result.state,
-        session_info: result.session_info || null,
+        connectionState: result.data?.state || 'Disconnected',
+        session_info: result.data?.session_info || null,
       }));
     } catch (error) {
       sessionStore.update((state) => ({

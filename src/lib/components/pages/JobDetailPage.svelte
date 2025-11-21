@@ -37,18 +37,14 @@
     isSubmitting = true;
     submitError = '';
 
-    try {
-      const result = await jobsStore.submitJob($selectedJob.job_id);
+    const result = await jobsStore.submitJob($selectedJob.job_id);
 
-      if (!result.success) {
-        submitError = result.error || 'Failed to submit job';
-      }
-      // Success - job info will be updated in store automatically
-    } catch (error) {
-      submitError = error instanceof Error ? error.message : 'An unexpected error occurred';
-    } finally {
-      isSubmitting = false;
+    if (!result.success) {
+      submitError = result.error || 'Failed to submit job';
     }
+    // Success - job info will be updated in store automatically
+
+    isSubmitting = false;
   }
 
   async function handleConfirmDelete() {
@@ -58,21 +54,17 @@
     isDeleting = true;
     deleteError = '';
 
-    try {
-      // Call backend to delete job with remote deletion
-      const result = await jobsStore.deleteJob($selectedJob.job_id);
+    // Call backend to delete job with remote deletion
+    const result = await jobsStore.deleteJob($selectedJob.job_id);
 
-      if (result.success) {
-        // Navigate back to jobs list after successful deletion
-        handleBack();
-      } else {
-        deleteError = result.error || 'Failed to delete job';
-      }
-    } catch (error) {
-      deleteError = error instanceof Error ? error.message : 'An unexpected error occurred';
-    } finally {
-      isDeleting = false;
+    if (result.success) {
+      // Navigate back to jobs list after successful deletion
+      handleBack();
+    } else {
+      deleteError = result.error || 'Failed to delete job';
     }
+
+    isDeleting = false;
   }
 
   function handleCancelDelete() {

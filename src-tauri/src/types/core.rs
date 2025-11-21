@@ -11,6 +11,18 @@ pub struct ApiResult<T> {
     pub error: Option<String>,
 }
 
+/// Unified log message structure for frontend consumption
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppLogMessage {
+    pub level: String,
+    pub category: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
+    pub show_toast: bool,
+    pub timestamp: String,
+}
+
 impl<T> ApiResult<T> {
     /// Create a successful result with data
     pub fn success(data: T) -> Self {
@@ -133,12 +145,13 @@ pub struct JobInfo {
     pub slurm_stdout: Option<String>,
     pub slurm_stderr: Option<String>,
 
-    // Template-based configuration (replaces NAMDConfig)
+    // Template-based configuration
     pub template_id: String,
     pub template_values: std::collections::HashMap<String, serde_json::Value>,
 
     pub slurm_config: SlurmConfig,
-    pub output_files: Option<Vec<OutputFile>>,
+    pub input_files: Vec<String>,
+    pub output_files: Vec<OutputFile>,
     pub remote_directory: String,
 }
 
@@ -320,5 +333,317 @@ mod tests {
         assert_eq!(NAMDFileType::from_filename("data.txt"), NAMDFileType::Other);
         assert_eq!(NAMDFileType::from_filename("config.conf"), NAMDFileType::Other);
         assert_eq!(NAMDFileType::from_filename("noextension"), NAMDFileType::Other);
+    }
+
+    #[test]
+    fn test_parse_memory_gb_standard_formats() {
+        // GB formats
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
+
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16G".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
+
+        // Plain number (assumes GB)
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "32".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 32.0);
+
+        // MB formats
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "2048MB".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 2.0);
+
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "512M".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 0.5);
+    }
+
+    #[test]
+    fn test_parse_memory_gb_decimal_values() {
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "1.5GB".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 1.5);
+
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "0.5G".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 0.5);
+    }
+
+    #[test]
+    fn test_parse_memory_gb_whitespace() {
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "  16GB  ".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
+
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16 GB".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
+    }
+
+    #[test]
+    fn test_parse_memory_gb_case_insensitive() {
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16gb".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
+
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "2048mb".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_memory_gb().unwrap(), 2.0);
+    }
+
+    #[test]
+    fn test_parse_memory_gb_invalid_formats() {
+        // Empty string
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert!(config.parse_memory_gb().is_err());
+
+        // Invalid format
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "invalid".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert!(config.parse_memory_gb().is_err());
+
+        // Unsupported unit
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16TB".to_string(),
+            walltime: "01:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert!(config.parse_memory_gb().is_err());
+    }
+
+    #[test]
+    fn test_parse_walltime_hours_standard_formats() {
+        // Whole hours
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "24:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_walltime_hours().unwrap(), 24.0);
+
+        // Hours with minutes
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "04:30:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_walltime_hours().unwrap(), 4.5);
+
+        // Hours with minutes and seconds
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "01:30:30".to_string(),
+            partition: None,
+            qos: None,
+        };
+        // 1 hour + 30 minutes (0.5) + 30 seconds (0.00833...)
+        let result = config.parse_walltime_hours().unwrap();
+        assert!((result - 1.508333).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_parse_walltime_hours_edge_cases() {
+        // Zero time
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "00:00:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert_eq!(config.parse_walltime_hours().unwrap(), 0.0);
+
+        // Maximum valid values
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "99:59:59".to_string(),
+            partition: None,
+            qos: None,
+        };
+        let result = config.parse_walltime_hours().unwrap();
+        assert!(result > 99.9 && result < 100.0);
+    }
+
+    #[test]
+    fn test_parse_walltime_hours_invalid_formats() {
+        // Empty string
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert!(config.parse_walltime_hours().is_err());
+
+        // Wrong format (no colons)
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "24".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert!(config.parse_walltime_hours().is_err());
+
+        // Wrong format (only one colon)
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "24:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert!(config.parse_walltime_hours().is_err());
+
+        // Invalid minutes (>= 60)
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "01:60:00".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert!(config.parse_walltime_hours().is_err());
+
+        // Invalid seconds (>= 60)
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "01:00:60".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert!(config.parse_walltime_hours().is_err());
+
+        // Non-numeric values
+        let config = SlurmConfig {
+            cores: 1,
+            memory: "16GB".to_string(),
+            walltime: "aa:bb:cc".to_string(),
+            partition: None,
+            qos: None,
+        };
+        assert!(config.parse_walltime_hours().is_err());
+    }
+
+    #[test]
+    fn test_serialize_new_job_with_input_files() {
+        use std::collections::HashMap;
+
+        let job = JobInfo {
+            job_id: "new_job_456".to_string(),
+            job_name: "new_job".to_string(),
+            status: JobStatus::Created,
+            slurm_job_id: None,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: None,
+            submitted_at: None,
+            completed_at: None,
+            project_dir: Some("/projects/user/new_job_456".to_string()),
+            scratch_dir: None,
+            error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
+            template_id: "vacuum_v1".to_string(),
+            template_values: HashMap::new(),
+            slurm_config: SlurmConfig {
+                cores: 4,
+                memory: "16GB".to_string(),
+                walltime: "24:00:00".to_string(),
+                partition: Some("amilan".to_string()),
+                qos: Some("normal".to_string()),
+            },
+            input_files: vec![
+                "structure.pdb".to_string(),
+                "structure.psf".to_string(),
+            ],
+            output_files: vec![],
+            remote_directory: "/projects/user/new_job_456".to_string(),
+        };
+
+        // Should serialize successfully
+        let json = serde_json::to_string(&job).unwrap();
+
+        // Should contain input_files
+        assert!(json.contains("input_files"));
+        assert!(json.contains("structure.pdb"));
     }
 }

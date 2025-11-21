@@ -20,46 +20,29 @@
     addEntry('app-debug', content);
   }
 
-  function addSSHCommandEntry(command: string) {
-    addEntry('ssh-command', `$ ${command}`);
-  }
-
-  function addSSHOutputEntry(output: string) {
-    addEntry('ssh-output', output);
-  }
-
-  // Export functions globally so other components can use them
-  if (typeof window !== 'undefined') {
-    window.appLogger = {
-      addCommand: addSSHCommandEntry,
-      addOutput: addSSHOutputEntry,
-      addDebug: addDebugEntry
-    };
-  }
-
   // Listen for backend logs via Tauri events
   onMount(() => {
     // Listen for Rust logs from the backend (async setup)
     let unlisten: (() => void) | undefined;
 
     (async () => {
-      unlisten = await listen('rust-log', (event: any) => {
+      unlisten = await listen('app-log', (event: any) => {
         const logData = event.payload;
         const logLevel = logData.level?.toLowerCase() || 'info';
-        const timestamp = new Date(logData.timestamp).toLocaleTimeString() || new Date().toLocaleTimeString();
-        const message = `[${logLevel.toUpperCase()}] [${logData.target}] ${logData.message}`;
+        const messageText = logData.details || logData.message;
+        const formattedMessage = `[${logLevel.toUpperCase()}] [${logData.category}] ${messageText}`;
 
         // Add to console with appropriate styling based on log level
         if (logLevel === 'error') {
-          addDebugEntry(`🔴 ${message}`);
+          addDebugEntry(`🔴 ${formattedMessage}`);
         } else if (logLevel === 'warn') {
-          addDebugEntry(`🟡 ${message}`);
+          addDebugEntry(`🟡 ${formattedMessage}`);
         } else if (logLevel === 'info') {
-          addDebugEntry(`🔵 ${message}`);
+          addDebugEntry(`🔵 ${formattedMessage}`);
         } else if (logLevel === 'debug') {
-          addDebugEntry(`⚪ ${message}`);
+          addDebugEntry(`⚪ ${formattedMessage}`);
         } else {
-          addDebugEntry(message);
+          addDebugEntry(formattedMessage);
         }
       });
     })();

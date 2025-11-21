@@ -1,18 +1,17 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import type { JobInfo, DownloadInfo, ApiResult } from '../../../types/api';
-  import { getFileIcon, getFileExtension, formatFileSize } from '../../../utils/file-helpers';
+  import { getFileIcon, getFileExtension } from '../../../utils/file-helpers';
   import { isConnected } from '../../../stores/session';
 
   export let job: JobInfo;
 
-  function getOutputFiles() {
-    return job.output_files?.map(file => ({
-      name: file.name,
-      path: `outputs/${file.name}`,
-      size: formatFileSize(file.size),
-      ext: getFileExtension(file.name)
-    })) || [];
+  function getInputFiles() {
+    return job.input_files.map(fileName => ({
+      name: fileName,
+      path: `input_files/${fileName}`,
+      ext: getFileExtension(fileName)
+    }));
   }
 
   // File download state
@@ -32,7 +31,7 @@
     downloadingFiles.add(file_name);
     downloadingFiles = new Set(downloadingFiles);
 
-    const result = await invoke<ApiResult<DownloadInfo>>('download_job_output', {
+    const result = await invoke<ApiResult<DownloadInfo>>('download_job_input', {
       job_id: job.job_id,
       file_path,
     });
@@ -49,7 +48,7 @@
   let isDownloadingAll = false;
   let downloadAllError = '';
 
-  async function downloadAllOutputs() {
+  async function downloadAllInputs() {
     downloadAllError = '';
 
     if (!$isConnected) {
@@ -59,12 +58,12 @@
 
     isDownloadingAll = true;
 
-    const result = await invoke<ApiResult<DownloadInfo>>('download_all_outputs', {
+    const result = await invoke<ApiResult<DownloadInfo>>('download_all_inputs', {
       job_id: job.job_id,
     });
 
     if (!result.success) {
-      downloadAllError = result.error || 'Failed to download output files';
+      downloadAllError = result.error || 'Failed to download input files';
     }
 
     isDownloadingAll = false;
@@ -73,19 +72,15 @@
 
 <div class="namd-tab-panel">
   <div class="files-section">
-    {#if job.status === 'CREATED' || job.status === 'PENDING'}
-      <div class="namd-file-list-empty">
-        Output files will be available once the job starts running.
-      </div>
-    {:else if getOutputFiles().length > 0}
-      <!-- Bulk download header -->
+    <!-- Bulk download header -->
+    {#if getInputFiles().length > 0}
       <div class="namd-file-list-header">
-        <h3>Output Files</h3>
+        <h3>Input Files</h3>
         <button
           class="namd-button namd-button--secondary namd-button--sm"
-          on:click={downloadAllOutputs}
+          on:click={downloadAllInputs}
           disabled={!$isConnected || isDownloadingAll}
-          title={!$isConnected ? "Connect to server to download files" : "Download all output files as ZIP"}
+          title={!$isConnected ? "Connect to server to download files" : "Download all input files as ZIP"}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -95,20 +90,21 @@
           {isDownloadingAll ? 'Downloading...' : 'Download All'}
         </button>
       </div>
+    {/if}
 
-      <!-- Bulk download error -->
-      {#if downloadAllError}
-        <div class="namd-file-list-error">{downloadAllError}</div>
-      {/if}
+    <!-- Bulk download error -->
+    {#if downloadAllError}
+      <div class="namd-file-list-error">{downloadAllError}</div>
+    {/if}
 
-      <!-- File list -->
+    <!-- File list -->
+    {#if getInputFiles().length > 0}
       <div class="namd-file-list">
-        {#each getOutputFiles() as file}
+        {#each getInputFiles() as file}
           <div class="namd-file-item">
             <div class="namd-file-content">
               <span class="namd-file-icon">{getFileIcon(file.ext)}</span>
               <span class="namd-file-name">{file.name}</span>
-              <span class="namd-file-metadata">{file.size}</span>
               <div class="namd-file-action">
                 <button
                   class="namd-button namd-button--secondary namd-button--sm"
@@ -133,7 +129,7 @@
       </div>
     {:else}
       <div class="namd-file-list-empty">
-        No output files available yet. Files will appear here once the simulation produces them.
+        No input files available for this job.
       </div>
     {/if}
   </div>

@@ -693,6 +693,212 @@ html, body {
   color: var(--namd-text-primary);
 }
 
+/* ===== File List Components ===== */
+
+/* Container for file lists (upload or download) */
+.namd-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--namd-spacing-sm);
+}
+
+/* Individual file item in list */
+.namd-file-item {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: var(--namd-spacing-sm) var(--namd-spacing-md);
+  background-color: var(--namd-bg-primary);
+  border: 1px solid var(--namd-border);
+  border-radius: var(--namd-border-radius-sm);
+}
+
+/* Animated progress background for uploads */
+.namd-file-progress-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.4) 100%);
+  transition: width 0.3s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Content wrapper (sits above progress background) */
+.namd-file-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--namd-spacing-sm);
+  width: 100%;
+}
+
+/* File icon */
+.namd-file-icon {
+  font-size: var(--namd-font-size-lg);
+  flex-shrink: 0;
+}
+
+/* File name */
+.namd-file-name {
+  font-weight: var(--namd-font-weight-medium);
+  color: var(--namd-text-primary);
+  flex: 1;
+}
+
+/* File metadata (size, date, etc.) */
+.namd-file-metadata {
+  font-size: var(--namd-font-size-sm);
+  color: var(--namd-text-secondary);
+  margin-left: var(--namd-spacing-md);
+}
+
+/* File action button wrapper */
+.namd-file-action {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Progress indicator text */
+.namd-file-progress-text {
+  margin-left: auto;
+  font-weight: var(--namd-font-weight-semibold);
+  color: var(--namd-primary);
+  font-size: var(--namd-font-size-sm);
+}
+
+/* Error message below file item */
+.namd-file-error {
+  margin-top: var(--namd-spacing-xs);
+  font-size: var(--namd-font-size-sm);
+  color: var(--namd-error);
+  padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
+  background-color: var(--namd-error-bg);
+  border-radius: var(--namd-border-radius-sm);
+}
+
+/* Empty state when no files */
+.namd-file-list-empty {
+  color: var(--namd-text-secondary);
+  font-style: italic;
+  padding: var(--namd-spacing-lg);
+  text-align: center;
+  background-color: var(--namd-bg-muted);
+  border-radius: var(--namd-border-radius-sm);
+  border: 1px dashed var(--namd-border);
+}
+
+/* Bulk action header */
+.namd-file-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--namd-spacing-md);
+}
+
+/* Bulk action error */
+.namd-file-list-error {
+  padding: var(--namd-spacing-sm) var(--namd-spacing-md);
+  background-color: var(--namd-error-bg);
+  color: var(--namd-error);
+  border-radius: var(--namd-border-radius-sm);
+  border: 1px solid var(--namd-error);
+  margin-bottom: var(--namd-spacing-md);
+  font-size: var(--namd-font-size-sm);
+}
+
+/* Toast Notification System */
+.namd-toast-container {
+  position: fixed;
+  top: var(--namd-spacing-lg);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--namd-z-tooltip);
+  display: flex;
+  flex-direction: column;
+  gap: var(--namd-spacing-sm);
+  pointer-events: none;
+  max-width: 500px;
+  width: 90%;
+}
+
+.namd-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--namd-spacing-md);
+  padding: var(--namd-spacing-md);
+  border-radius: var(--namd-border-radius);
+  box-shadow: var(--namd-shadow-md);
+  pointer-events: auto;
+  min-width: 300px;
+}
+
+.namd-toast-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: var(--namd-font-weight-bold);
+}
+
+.namd-toast-message {
+  flex: 1;
+  font-size: var(--namd-font-size-sm);
+  font-weight: var(--namd-font-weight-medium);
+  line-height: 1.4;
+}
+
+.namd-toast-close {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+  padding: 0;
+}
+
+.namd-toast-close:hover {
+  opacity: 1;
+}
+
+/* Toast Variants */
+.namd-toast--success {
+  background-color: var(--namd-success-bg);
+  color: var(--namd-success-fg);
+  border: 1px solid var(--namd-success);
+}
+
+.namd-toast--error {
+  background-color: var(--namd-error-bg);
+  color: var(--namd-error-fg);
+  border: 1px solid var(--namd-error-border);
+}
+
+.namd-toast--warning {
+  background-color: var(--namd-warning-bg);
+  color: var(--namd-warning-fg);
+  border: 1px solid var(--namd-warning-border);
+}
+
+.namd-toast--info {
+  background-color: var(--namd-info-bg);
+  color: var(--namd-info-fg);
+  border: 1px solid var(--namd-info);
+}
+
 /* Scrollbar Styles */
 ::-webkit-scrollbar {
   width: 8px;

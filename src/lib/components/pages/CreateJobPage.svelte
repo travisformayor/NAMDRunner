@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { logger } from '../../utils/logger';
   import { uiStore } from '../../stores/ui';
   import { jobsStore } from '../../stores/jobs';
   import { isConnected } from '../../stores/session';
@@ -46,14 +45,14 @@
     unlistenFileList = await listen('file-upload-list', (event) => {
       const fileList = event.payload as string[];
       uploadFileList = fileList;
-      logger.debug('[CreateJob]', `Received file upload list: ${fileList.join(', ')}`);
     });
 
     // Listen for file upload progress
     unlistenUpload = await listen('file-upload-progress', (event) => {
       const progress = event.payload as any;
-      uploadProgress.set(progress.file_name, { percentage: progress.percentage });
-      uploadProgress = uploadProgress; // Trigger reactivity
+      uploadProgress = new Map(
+        uploadProgress.set(progress.file_name, { percentage: progress.percentage })
+      );
     });
   });
 
@@ -73,31 +72,27 @@
   async function handleSubmit() {
     isSubmitting = true;
 
-    try {
-      const params: CreateJobParams = {
-        job_name: jobName,
-        template_id: templateId,
-        template_values: templateValues,
-        slurm_config: {
-          cores: resourceConfig.cores,
-          memory: resourceConfig.memory,
-          walltime: resourceConfig.walltime,
-          ...(resourceConfig.partition && { partition: resourceConfig.partition }),
-          ...(resourceConfig.qos && { qos: resourceConfig.qos })
-        }
-      };
+    const params: CreateJobParams = {
+      job_name: jobName,
+      template_id: templateId,
+      template_values: templateValues,
+      slurm_config: {
+        cores: resourceConfig.cores,
+        memory: resourceConfig.memory,
+        walltime: resourceConfig.walltime,
+        ...(resourceConfig.partition && { partition: resourceConfig.partition }),
+        ...(resourceConfig.qos && { qos: resourceConfig.qos }),
+      },
+    };
 
-      const result = await jobsStore.createJob(params);
+    const result = await jobsStore.createJob(params);
 
-      if (result.success) {
-        uiStore.setView('jobs');
-      }
-      // Errors handled by jobsStore and displayed in UI
-    } catch (error) {
-      logger.error('CreateJob', 'Job creation error', error);
-    } finally {
-      isSubmitting = false;
+    if (result.success) {
+      uiStore.setView('jobs');
     }
+    // Errors handled by jobsStore and displayed in UI
+
+    isSubmitting = false;
   }
 </script>
 

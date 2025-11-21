@@ -1,26 +1,28 @@
-import { logger } from '$lib/utils/logger';
 import { writable, derived } from 'svelte/store';
-import type { JobInfo, JobStatus, CreateJobParams } from '../types/api';
-import { CoreClientFactory } from '../ports/clientFactory';
+import type {
+  JobInfo,
+  JobStatus,
+  CreateJobParams,
+  SyncJobsResult,
+  JobSubmissionData,
+  ApiResult
+} from '../types/api';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { sessionActions } from './session';
 
 // Helper: Detect if error indicates connection failure
-function isConnectionError(errorMessage: string): boolean {
+// Exported for testing
+export function isConnectionError(errorMessage: string): boolean {
   const msg = errorMessage.toLowerCase();
   return msg.includes('timeout') ||
+         msg.includes('timed out') ||
          msg.includes('not connected') ||
          msg.includes('connection') ||
+         msg.includes('disconnect') ||
          msg.includes('broken pipe') ||
          msg.includes('network') ||
          msg.includes('ssh');
-}
-
-// Helper: Handle connection failure by updating session state
-function handleConnectionFailure(error: string) {
-  if (isConnectionError(error)) {
-    sessionActions.markExpired(error);
-  }
 }
 
 // Progress tracking interface
@@ -59,17 +61,17 @@ function createJobsStore() {
     // Load jobs from database (for offline/startup)
     loadFromDatabase: async () => {
       try {
-        const result = await CoreClientFactory.getClient().getAllJobs();
+        const result = await invoke<ApiResult<JobInfo[]>>('get_all_jobs');
 
-        if (result.success && result.jobs) {
+        if (result.success && result.data) {
           update(state => ({
             ...state,
-            jobs: result.jobs || [],
-            hasEverSynced: !!(result.jobs && result.jobs.length > 0)
+            jobs: result.data || [],
+            hasEverSynced: !!(result.data && result.data.length > 0)
           }));
         }
       } catch (error) {
-        logger.error('[Jobs]', 'Failed to load from database', error);
+        // Silently handle error
       }
     },
 
@@ -83,7 +85,7 @@ function createJobsStore() {
       try {
         // Call syncJobs to update job statuses from SLURM, then fetch updated jobs
 
-        const syncResult = await CoreClientFactory.getClient().syncJobs();
+        const syncResult = await invoke<SyncJobsResult>('sync_jobs');
 
         if (syncResult.success) {
           // Pure caching - backend returns complete job list (discovery happens automatically if DB empty)
@@ -97,7 +99,9 @@ function createJobsStore() {
         } else {
           // Sync failed - check if it's a connection error
           const errorMsg = syncResult.errors.join(', ');
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
 
           update(state => ({
             ...state,
@@ -109,7 +113,9 @@ function createJobsStore() {
       } catch (error) {
         // Check if exception indicates connection failure
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
 
         update(state => ({
           ...state,
@@ -137,9 +143,9 @@ function createJobsStore() {
       });
 
       try {
-        const result = await CoreClientFactory.getClient().createJob(params);
+        const result = await invoke<ApiResult<JobInfo>>('create_job', { params });
 
-        if (result.success && result.job_id && result.job) {
+        if (result.success && result.data) {
           // Update progress to completion
           update(state => ({
             ...state,
@@ -147,10 +153,10 @@ function createJobsStore() {
           }));
 
           // Add the returned job directly to the store (no second backend call)
-          if (result.job) {
+          if (result.data) {
             update(state => ({
               ...state,
-              jobs: [...state.jobs, result.job as JobInfo]
+              jobs: [...state.jobs, result.data as JobInfo]
             }));
           }
 
@@ -158,18 +164,22 @@ function createJobsStore() {
         } else {
           // Job creation failed - check for connection error
           const errorMsg = result.error || 'Job creation failed';
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
 
           update(state => ({
             ...state,
             creationProgress: { message: `Job creation failed: ${errorMsg}`, isActive: false }
           }));
-          return result;
+          return { success: false, error: errorMsg };
         }
       } catch (error) {
         // Job creation error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
 
         update(state => ({
           ...state,
@@ -200,9 +210,9 @@ function createJobsStore() {
       });
 
       try {
-        const result = await CoreClientFactory.getClient().submitJob(job_id);
+        const result = await invoke<ApiResult<JobSubmissionData>>('submit_job', { job_id });
 
-        if (result.success) {
+        if (result.success && result.data) {
           // Update progress to completion
           update(state => ({
             ...state,
@@ -212,33 +222,37 @@ function createJobsStore() {
                 const updatedJob: JobInfo = {
                   ...job,
                   status: 'PENDING' as JobStatus,
-                  submitted_at: result.submitted_at || new Date().toISOString(),
+                  submitted_at: result.data?.submitted_at || new Date().toISOString(),
                   updated_at: new Date().toISOString()
                 };
-                if (result.slurm_job_id) {
-                  updatedJob.slurm_job_id = result.slurm_job_id;
+                if (result.data?.slurm_job_id) {
+                  updatedJob.slurm_job_id = result.data.slurm_job_id;
                 }
                 return updatedJob;
               }
               return job;
             })
           }));
+          return result;
         } else {
           // Submission failed - check for connection error
           const errorMsg = result.error || 'Job submission failed';
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
 
           update(state => ({
             ...state,
             submissionProgress: { message: `Job submission failed: ${errorMsg}`, isActive: false }
           }));
+          return { success: false, error: errorMsg };
         }
-
-        return result;
       } catch (error) {
         // Job submission error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
 
         update(state => ({
           ...state,
@@ -254,7 +268,7 @@ function createJobsStore() {
     // Delete a job via backend
     deleteJob: async (job_id: string) => {
       try {
-        const result = await CoreClientFactory.getClient().deleteJob(job_id, true);
+        const result = await invoke<ApiResult<void>>('delete_job', { job_id, delete_remote: true });
 
         if (result.success) {
           // Remove job from local state
@@ -262,17 +276,21 @@ function createJobsStore() {
             ...state,
             jobs: state.jobs.filter(job => job.job_id !== job_id)
           }));
+          return result;
         } else {
           // Deletion failed - check for connection error
           const errorMsg = result.error || 'Job deletion failed';
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
+          return { success: false, error: errorMsg };
         }
-
-        return result;
       } catch (error) {
         // Job deletion error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
 
         return { success: false, error: errorMsg };
       }
@@ -281,25 +299,29 @@ function createJobsStore() {
     // Get detailed job status via backend
     getJobStatus: async (job_id: string) => {
       try {
-        const result = await CoreClientFactory.getClient().getJobStatus(job_id);
+        const result = await invoke<ApiResult<JobInfo>>('get_job_status', { job_id });
 
-        if (result.success && result.job_info) {
+        if (result.success && result.data) {
           // Update the specific job in local state
           update(state => ({
             ...state,
-            jobs: state.jobs.map(job => job.job_id === job_id ? result.job_info as JobInfo : job)
+            jobs: state.jobs.map(job => job.job_id === job_id ? result.data as JobInfo : job)
           }));
+          return result;
         } else {
           // Status check failed - check for connection error
           const errorMsg = result.error || 'Job status check failed';
-          handleConnectionFailure(errorMsg);
+          if (isConnectionError(errorMsg)) {
+            sessionActions.markExpired(errorMsg);
+          }
+          return { success: false, error: errorMsg };
         }
-
-        return result;
       } catch (error) {
         // Job status check error - check for connection error
         const errorMsg = error instanceof Error ? error.message : String(error);
-        handleConnectionFailure(errorMsg);
+        if (isConnectionError(errorMsg)) {
+          sessionActions.markExpired(errorMsg);
+        }
         return { success: false, error: errorMsg };
       }
     },
@@ -308,12 +330,21 @@ function createJobsStore() {
     reset: () => set(initialJobsState),
 
     // Clear all jobs
-    clearJobs: () => update(state => ({
-      ...state,
-      jobs: [],
-      lastSyncTime: new Date(0),
-      hasEverSynced: false,
-    }))
+    clearJobs: () =>
+      update((state) => ({
+        ...state,
+        jobs: [],
+        lastSyncTime: new Date(0),
+        hasEverSynced: false,
+      })),
+
+    // Set jobs directly (used by centralized app initialization)
+    setJobs: (jobs: JobInfo[]) =>
+      update((state) => ({
+        ...state,
+        jobs,
+        hasEverSynced: jobs.length > 0,
+      })),
   };
 }
 
@@ -328,11 +359,6 @@ export const isSyncing = derived(jobsStore, $store => $store.isSyncing);
 // Progress tracking stores
 export const creationProgress = derived(jobsStore, $store => $store.creationProgress);
 export const submissionProgress = derived(jobsStore, $store => $store.submissionProgress);
-
-export const selectedJob = derived(
-  [jobs, writable<string | null>(null)],
-  ([$jobs, $selectedId]) => $selectedId ? $jobs.find(job => job.job_id === $selectedId) : null
-);
 
 export const jobsByStatus = derived(jobs, $jobs => {
   const grouped = {

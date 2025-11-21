@@ -10,9 +10,8 @@ mod logging;
 pub mod automations;
 pub mod cluster;
 pub mod templates;
+
 #[cfg(test)]
-// DISABLED: security_tests - needs rewrite for template system (uses demo mode)
-// mod security_tests;
 pub use types::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -45,6 +44,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // App initialization
+            commands::app::initialize_app,
             // Connection lifecycle
             commands::connection::connect_to_cluster,
             commands::connection::disconnect,
@@ -63,13 +64,14 @@ pub fn run() {
             commands::jobs::sync_jobs,
             commands::jobs::delete_job,
             commands::jobs::refetch_slurm_logs,
-            commands::jobs::discover_jobs_from_server,
             // File management
             commands::files::detect_file_type,
             commands::files::select_input_file,
             commands::files::upload_job_files,
             commands::files::download_job_output,
             commands::files::download_all_outputs,
+            commands::files::download_job_input,
+            commands::files::download_all_inputs,
             commands::files::list_job_files,
             // Template management
             commands::templates::list_templates,

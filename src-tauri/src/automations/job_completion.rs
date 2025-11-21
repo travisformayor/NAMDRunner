@@ -1,10 +1,7 @@
 use anyhow::{Result, anyhow};
-use chrono::Utc;
-
 use crate::types::{JobStatus, JobInfo};
-use crate::ssh::get_connection_manager;
-use crate::database::with_database;
-use crate::{info_log, error_log};
+use crate::{log_info, log_error};
+use crate::automations::common;
 
 /// Execute job completion automation (called automatically when job reaches terminal state)
 ///
@@ -16,7 +13,7 @@ use crate::{info_log, error_log};
 /// Called automatically by job_sync when a job reaches terminal state (Completed, Failed, etc.)
 pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     let job_id = job.job_id.clone();
-    info_log!("[Job Completion] Starting automatic completion for: {}", job_id);
+    log_info!(category: "Job Completion", message: "Starting automatic completion", details: "{}", job_id);
 
     // Validate job is in terminal state
     if !matches!(job.status, JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled) {
@@ -24,79 +21,54 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     }
 
     // Verify SSH connection is active
-    let connection_manager = get_connection_manager();
-    if !connection_manager.is_connected().await {
-        error_log!("[Job Completion] SSH connection not active");
-        return Err(anyhow!("Not connected to cluster"));
-    }
+    let (connection_manager, _username) = common::require_connection_with_username("Job Completion").await?;
 
     // Ensure we have both project and scratch directories
-    let project_dir = job.project_dir.as_ref()
-        .ok_or_else(|| {
-            error_log!("[Job Completion] Job {} has no project directory", job_id);
-            anyhow!("Job has no project directory")
-        })?.clone();
-    let scratch_dir = job.scratch_dir.as_ref()
-        .ok_or_else(|| {
-            error_log!("[Job Completion] Job {} has no scratch directory", job_id);
-            anyhow!("Job has no scratch directory")
-        })?.clone();
+    let project_dir = common::require_project_dir(job, "Job Completion")?.to_string();
+    let scratch_dir = common::require_scratch_dir(job, "Job Completion")?.to_string();
 
     // CRITICAL: Rsync scratch→project FIRST (DATA BOUNDARY CROSSED)
     // This preserves all results including SLURM logs before they're cleaned up
-    let source_with_slash = if scratch_dir.ends_with('/') {
-        scratch_dir.to_string()
-    } else {
-        format!("{}/", scratch_dir)
-    };
+    let source_with_slash = common::ensure_trailing_slash(&scratch_dir);
 
-    info_log!("[Job Completion] Rsyncing scratch→project: {} -> {}", scratch_dir, project_dir);
+    log_info!(category: "Job Completion", message: "Rsyncing scratch to project", details: "{} -> {}", scratch_dir, project_dir);
     connection_manager.sync_directory_rsync(&source_with_slash, &project_dir).await
         .map_err(|e| {
-            error_log!("[Job Completion] Rsync failed: {}", e);
+            log_error!(category: "Job Completion", message: "Rsync failed", details: "{}", e);
             anyhow!("Failed to rsync: {}", e)
         })?;
 
-    info_log!("[Job Completion] Rsync complete - all files now in project directory");
+    log_info!(category: "Job Completion", message: "Rsync complete - all files now in project directory");
 
-    // NOW fetch logs from project directory (after rsync)
+    // Fetch logs from project directory (after rsync)
     if let Err(e) = crate::automations::fetch_slurm_logs_if_needed(job).await {
-        error_log!("[Job Completion] Failed to fetch logs: {}", e);
+        log_error!(category: "Job Completion", message: "Failed to fetch logs", details: "{}", e);
         // Don't fail completion if log fetch fails - logs are nice-to-have
     }
 
     // Fetch output file metadata from project directory (after rsync)
     let output_dir = format!("{}/outputs", project_dir);
-    info_log!("[Job Completion] Fetching output file metadata from: {}", output_dir);
+    log_info!(category: "Job Completion", message: "Fetching output file metadata", details: "{}", output_dir);
 
     match connection_manager.list_files_with_metadata(&output_dir).await {
         Ok(output_files) => {
-            info_log!("[Job Completion] Found {} output files", output_files.len());
-            job.output_files = Some(output_files);
+            log_info!(category: "Job Completion", message: "Found output files", details: "{} files", output_files.len());
+            job.output_files = output_files;
         }
         Err(e) => {
-            error_log!("[Job Completion] Failed to fetch output file metadata: {}", e);
+            log_error!(category: "Job Completion", message: "Failed to fetch output file metadata", details: "{}", e);
             // Don't fail completion if metadata fetch fails - it's nice-to-have
-            job.output_files = None;
+            job.output_files = vec![];
         }
     }
 
-    // Update database
-    job.updated_at = Some(Utc::now().to_rfc3339());
-    let job_clone = job.clone();
-    with_database(move |db| db.save_job(&job_clone))
-        .map_err(|e| {
-            error_log!("[Job Completion] Failed to update database: {}", e);
-            anyhow!("Failed to update database: {}", e)
-        })?;
+    // Update database with timestamp
+    common::touch_job_timestamp(job);
+    common::save_job_to_database(job, "Job Completion")?;
 
-    info_log!("[Job Completion] Job completion successful: {}", job_id);
+    log_info!(category: "Job Completion", message: "Job completion successful", details: "{}", job_id);
     Ok(())
 }
-
-// DELETED: Tests using NAMDConfig - will be rewritten for template system
-// Job completion automation logic doesn't depend on NAMD config structure
-// TODO: Add tests for template-based job completion in future phase
 
 #[cfg(test)]
 mod tests {

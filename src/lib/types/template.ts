@@ -40,36 +40,3 @@ export function getVariableTypeName(varType: VariableType): 'Number' | 'Text' | 
   throw new Error('Unknown variable type');
 }
 
-// Result types for IPC commands
-export interface ListTemplatesResult {
-  success: boolean;
-  templates: TemplateSummary[] | null;
-  error: string | null;
-}
-
-export interface GetTemplateResult {
-  success: boolean;
-  template: Template | null;
-  error: string | null;
-}
-
-export interface CreateTemplateResult {
-  success: boolean;
-  template_id: string | null;
-  error: string | null;
-}
-
-export interface UpdateTemplateResult {
-  success: boolean;
-  error: string | null;
-}
-
-export interface DeleteTemplateResult {
-  success: boolean;
-  error: string | null;
-}
-
-export interface ValidateTemplateValuesResult {
-  valid: boolean;
-  errors: string[];
-}

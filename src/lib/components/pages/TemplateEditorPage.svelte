@@ -1,6 +1,6 @@
 <script lang="ts">
   import { selectedTemplateId, templateEditorMode, uiStore } from '$lib/stores/ui';
-  import { loadTemplate } from '$lib/stores/templateStore';
+  import { templateStore } from '$lib/stores/templateStore';
   import TemplateEditor from '../templates/TemplateEditor.svelte';
   import type { Template } from '$lib/types/template';
   import { onMount } from 'svelte';
@@ -12,7 +12,7 @@
   onMount(async () => {
     if ($selectedTemplateId && $templateEditorMode === 'edit') {
       try {
-        template = await loadTemplate($selectedTemplateId);
+        template = await templateStore.loadTemplate($selectedTemplateId);
         if (!template) {
           error = `Template not found: ${$selectedTemplateId}`;
         }

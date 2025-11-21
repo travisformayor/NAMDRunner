@@ -5,9 +5,8 @@ use serde_json::Value;
 
 use crate::types::{CreateJobParams, JobInfo, JobStatus, SlurmConfig};
 use crate::validation::{input, paths};
-use crate::ssh::get_connection_manager;
-use crate::database::with_database;
-use crate::{info_log, debug_log, error_log};
+use crate::{log_info, log_debug, log_error};
+use crate::automations::common;
 
 /// Factory function to create a new JobInfo with business logic (status, timestamps)
 ///
@@ -19,6 +18,7 @@ pub fn create_job_info(
     template_values: HashMap<String, Value>,
     slurm_config: SlurmConfig,
     remote_directory: String,
+    input_files: Vec<String>,
 ) -> JobInfo {
     JobInfo {
         job_id,
@@ -37,14 +37,14 @@ pub fn create_job_info(
         template_id,
         template_values,
         slurm_config,
-        output_files: None,
+        input_files,
+        output_files: vec![],
         remote_directory,
     }
 }
 
-/// Simplified job creation automation that follows NAMDRunner's direct function patterns
-/// This replaces the complex AutomationStep trait system with a simple async function
-/// that provides progress reporting through callbacks.
+/// Simplified job creation automation that follows NAMDRunner's direct function patterns.
+/// Provides progress reporting through callbacks.
 ///
 /// Key improvement: Job creation ONLY creates project directories, NOT scratch directories.
 /// Scratch directories are created during job submission, maintaining proper workflow separation.
@@ -54,54 +54,43 @@ pub async fn execute_job_creation_with_progress(
     progress_callback: impl Fn(&str),
 ) -> Result<(String, JobInfo)> {
     progress_callback("Starting job creation...");
-    info_log!("[Job Creation] Starting job creation for: {}", params.job_name);
+    log_info!(category: "Job Creation", message: "Starting job creation", details: "Job name: {}", params.job_name);
 
     // Validate and sanitize job name
     let clean_job_name = input::sanitize_job_id(&params.job_name)
         .map_err(|e| anyhow!("Invalid job name: {}", e))?;
-    debug_log!("[Job Creation] Sanitized job name: {}", clean_job_name);
+    log_debug!(category: "Job Creation", message: "Sanitized job name", details: "{}", clean_job_name);
 
     progress_callback("Validating connection...");
 
-    // Validate SSH connection is active
-    let connection_manager = get_connection_manager();
-    if !connection_manager.is_connected().await {
-        error_log!("[Job Creation] SSH connection not active");
-        return Err(anyhow!("Please connect to the cluster to create jobs"));
-    }
-
-    // Get cluster username using existing logic
-    let username = connection_manager.get_username().await
-        .map_err(|e| {
-            error_log!("[Job Creation] Failed to get username: {}", e);
-            anyhow!("Failed to get cluster username: {}", e)
-        })?;
-    info_log!("[Job Creation] Creating job for user: {}", username);
+    // Validate SSH connection and get username
+    let (connection_manager, username) = common::require_connection_with_username("Job Creation").await?;
+    log_info!(category: "Job Creation", message: "Creating job for user", details: "{}", username);
 
     progress_callback("Generating job paths...");
 
     // Generate unique job ID using timestamp
     let job_id = format!("{}_{}", clean_job_name, chrono::Utc::now().timestamp_micros());
     let project_dir = paths::project_directory(&username, &job_id)?;
-    info_log!("[Job Creation] Generated job ID: {} at path: {}", job_id, project_dir);
+    log_info!(category: "Job Creation", message: "Generated job ID", details: "{} at path: {}", job_id, project_dir);
 
     progress_callback("Creating project directories...");
 
     // Create project directory structure
-    info_log!("[Job Creation] Creating project directory: {}", project_dir);
+    log_info!(category: "Job Creation", message: "Creating project directory", details: "{}", project_dir);
     connection_manager.create_directory(&project_dir).await
         .map_err(|e| {
-            error_log!("[Job Creation] Failed to create directory {}: {}", project_dir, e);
+            log_error!(category: "Job Creation", message: "Failed to create directory", details: "{}: {}", project_dir, e);
             anyhow!("Could not create job directory on cluster: {}", e)
         })?;
 
     // Create standard job subdirectories
     for subdir in crate::ssh::JobDirectoryStructure::subdirectories() {
         let subdir_path = format!("{}/{}", project_dir, subdir);
-        debug_log!("[Job Creation] Creating subdirectory: {}", subdir_path);
+        log_debug!(category: "Job Creation", message: "Creating subdirectory", details: "{}", subdir_path);
         connection_manager.create_directory(&subdir_path).await
             .map_err(|e| {
-                error_log!("[Job Creation] Failed to create subdirectory {}: {}", subdir_path, e);
+                log_error!(category: "Job Creation", message: "Failed to create subdirectory", details: "{}: {}", subdir_path, e);
                 anyhow!("Failed to create subdirectory '{}': {}", subdir, e)
             })?;
     }
@@ -115,7 +104,7 @@ pub async fn execute_job_creation_with_progress(
     })?
         .ok_or_else(|| anyhow!("Template not found: {}", params.template_id))?;
 
-    info_log!("[Job Creation] Loaded template: {}", template.name);
+    log_info!(category: "Job Creation", message: "Loaded template", details: "{}", template.name);
 
     progress_callback("Uploading input files...");
 
@@ -145,13 +134,13 @@ pub async fn execute_job_creation_with_progress(
 
     // Emit the file list to frontend for progress tracking
     let file_names: Vec<String> = files_to_upload.iter().map(|(_, _, name)| name.clone()).collect();
-    let _ = app_handle.emit("file-upload-list", file_names);
-    info_log!("[Job Creation] Emitted file upload list: {} files", files_to_upload.len());
+    let _ = app_handle.emit("file-upload-list", file_names.clone());
+    log_info!(category: "Job Creation", message: "Emitted file upload list", details: "{} files", files_to_upload.len());
 
     // Second pass: upload each file
     for (var_key, local_file_path, filename) in files_to_upload {
         progress_callback(&format!("Uploading file: {}", filename));
-        info_log!("[Job Creation] Uploading file for {}: {} -> {}", var_key, local_file_path, filename);
+        log_info!(category: "Job Creation", message: "Uploading file", details: "{}: {} -> {}", var_key, local_file_path, filename);
 
         // Construct remote path
         let remote_path = crate::ssh::JobDirectoryStructure::full_input_path(&project_dir, &filename);
@@ -159,11 +148,11 @@ pub async fn execute_job_creation_with_progress(
         // Upload file
         connection_manager.upload_file_with_progress(&local_file_path, &remote_path, Some(app_handle.clone())).await
             .map_err(|e| {
-                error_log!("[Job Creation] Failed to upload file {}: {}", filename, e);
+                log_error!(category: "Job Creation", message: "Failed to upload file", details: "{}: {}", filename, e);
                 anyhow!("Could not upload file '{}': {}", filename, e)
             })?;
 
-        info_log!("[Job Creation] Successfully uploaded: {} -> {}", local_file_path, remote_path);
+        log_info!(category: "Job Creation", message: "Successfully uploaded", details: "{} -> {}", local_file_path, remote_path);
 
         // Update template_values with just the filename (not full path)
         // The renderer will prepend "input_files/" when rendering the template
@@ -174,13 +163,12 @@ pub async fn execute_job_creation_with_progress(
 
     // Render NAMD config from template with uploaded filenames
     let namd_config_content = crate::templates::render_template(&template, &template_values_for_rendering)?;
-    info_log!("[Job Creation] Rendered NAMD config ({} bytes)", namd_config_content.len());
+    log_info!(category: "Job Creation", message: "Rendered NAMD config", details: "{} bytes", namd_config_content.len());
 
     progress_callback("Creating job metadata...");
 
     // Create JobInfo using factory function (sets Created status and timestamp)
-    // scratch_dir remains None until job submission
-    // Use template_values_for_rendering (filenames only) instead of original params (full paths)
+    // Pass uploaded file list for explicit tracking
     let mut job_info = create_job_info(
         job_id.clone(),
         clean_job_name,
@@ -188,12 +176,13 @@ pub async fn execute_job_creation_with_progress(
         template_values_for_rendering.clone(),
         params.slurm_config,
         project_dir.clone(),
+        file_names,
     );
 
     // Set only project directory (this fixes the workflow separation issue)
     job_info.project_dir = Some(project_dir.clone());
     // job_info.scratch_dir remains None - set during submission only
-    info_log!("[Job Creation] Rendered NAMD config ({} bytes)", namd_config_content.len());
+    log_debug!(category: "Job Creation", message: "Set project directory", details: "{}", project_dir);
 
     progress_callback("Generating SLURM batch script...");
 
@@ -201,16 +190,16 @@ pub async fn execute_job_creation_with_progress(
     // Pass scratch directory directly (job_info.scratch_dir remains None until submission)
     let scratch_dir = paths::scratch_directory(&username, &job_id)?;
     let slurm_script = crate::slurm::script_generator::SlurmScriptGenerator::generate_namd_script(&job_info, &scratch_dir)?;
-    info_log!("[Job Creation] Generated SLURM script ({} bytes)", slurm_script.len());
+    log_info!(category: "Job Creation", message: "Generated SLURM script", details: "{} bytes", slurm_script.len());
 
     // Upload script to job root directory
     let script_path = format!("{}/job.sbatch", project_dir);
     crate::ssh::metadata::upload_content(connection_manager, &slurm_script, &script_path).await
         .map_err(|e| {
-            error_log!("[Job Creation] Failed to upload SLURM script: {}", e);
+            log_error!(category: "Job Creation", message: "Failed to upload SLURM script", details: "{}", e);
             anyhow!("Failed to upload SLURM script: {}", e)
         })?;
-    debug_log!("[Job Creation] SLURM script uploaded to: {}", script_path);
+    log_debug!(category: "Job Creation", message: "SLURM script uploaded", details: "{}", script_path);
 
     progress_callback("Uploading NAMD configuration...");
 
@@ -218,37 +207,29 @@ pub async fn execute_job_creation_with_progress(
     let config_path = format!("{}/config.namd", project_dir);
     crate::ssh::metadata::upload_content(connection_manager, &namd_config_content, &config_path).await
         .map_err(|e| {
-            error_log!("[Job Creation] Failed to upload NAMD config: {}", e);
+            log_error!(category: "Job Creation", message: "Failed to upload NAMD config", details: "{}", e);
             anyhow!("Failed to upload NAMD config: {}", e)
         })?;
-    debug_log!("[Job Creation] NAMD config uploaded to: {}", config_path);
+    log_debug!(category: "Job Creation", message: "NAMD config uploaded", details: "{}", config_path);
 
     progress_callback("Saving job to database...");
-    debug_log!("[Job Creation] Saving job {} to database", job_id);
+    log_debug!(category: "Job Creation", message: "Saving job to database", details: "{}", job_id);
 
-    // Save to database using existing database utilities
-    let job_info_clone = job_info.clone();
-    with_database(move |db| db.save_job(&job_info_clone))
-        .map_err(|e| {
-            error_log!("[Job Creation] Failed to save job to database: {}", e);
-            anyhow!("Failed to save job to database: {}", e)
-        })?;
+    // Save to database using common helper
+    common::save_job_to_database(&job_info, "Job Creation")?;
 
     progress_callback("Creating job metadata...");
 
-    info_log!("[Job Creation] Creating job metadata at: {}/job_info.json", project_dir);
+    log_info!(category: "Job Creation", message: "Creating job metadata", details: "{}/job_info.json", project_dir);
     crate::ssh::metadata::upload_job_metadata(connection_manager, &job_info, &project_dir, "Job Creation").await
         .map_err(|e| {
-            error_log!("[Job Creation] Failed to upload job metadata: {}", e);
+            log_error!(category: "Job Creation", message: "Failed to upload job metadata", details: "{}", e);
             anyhow!("Failed to create job metadata: {}", e)
         })?;
-    debug_log!("[Job Creation] Job metadata created: {}/job_info.json", project_dir);
+    log_debug!(category: "Job Creation", message: "Job metadata created", details: "{}/job_info.json", project_dir);
 
     progress_callback("Job creation completed successfully");
-    info_log!("[Job Creation] Job creation completed successfully: {}", job_id);
+    log_info!(category: "Job Creation", message: "Job created successfully", details: "{}", job_id, show_toast: true);
 
     Ok((job_id, job_info))
 }
-
-// File validation will be handled by template validation
-// TODO: Implement template-based file validation in Step 7

@@ -1,3 +1,20 @@
+import type { TemplateSummary } from './template';
+
+// JSON value type matching Rust serde_json::Value
+// Can be any valid JSON value: string, number, boolean, null, object, or array
+export type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+export type JsonArray = JsonValue[];
+
+// Generic API result type matching Rust ApiResult<T>
+export interface ApiResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
 // Core type definitions matching Rust types
 export type ConnectionState = 'Disconnected' | 'Connecting' | 'Connected' | 'Expired';
 export type JobStatus = 'CREATED' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
@@ -27,15 +44,12 @@ export interface JobInfo {
   slurm_stdout?: string;
   slurm_stderr?: string;
   template_id: string;
-  template_values: Record<string, any>;
+  template_values: Record<string, JsonValue>;
   slurm_config: SlurmConfig;
-  output_files?: OutputFile[];
+  input_files: string[];
+  output_files: OutputFile[];
   remote_directory: string;
 }
-
-// DELETED: NAMDConfig - replaced by template system
-// DELETED: CellBasisVector - part of NAMDConfig
-// DELETED: InputFile - files now stored in template_values
 
 export interface SlurmConfig {
   cores: number;
@@ -64,85 +78,54 @@ export interface RemoteFile {
   file_type: 'input' | 'output' | 'config' | 'log';
 }
 
-// Command parameters and results
+// Response DTOs for multi-field command responses
+export interface JobSubmissionData {
+  job_id: string;
+  slurm_job_id: string;
+  submitted_at: string;
+}
+
+export interface DownloadInfo {
+  saved_to: string;
+  file_size: number;
+}
+
+export interface DatabaseInfo {
+  path: string;
+  size_bytes: number;
+  job_count: number;
+}
+
+export interface DatabaseOperationData {
+  path: string;
+  message: string;
+}
+
+export interface ConnectionStatus {
+  state: ConnectionState;
+  session_info?: SessionInfo;
+}
+
+// Command parameters
 export interface ConnectParams {
   host: string;
   username: string;
   password: string;
 }
 
-export interface ConnectResult {
-  success: boolean;
-  session_info?: SessionInfo;
-  error?: string;
-}
-
-export interface DisconnectResult {
-  success: boolean;
-  error?: string;
-}
-
-export interface ConnectionStatusResult {
-  state: ConnectionState;
-  session_info: SessionInfo | undefined;
-}
-
 export interface CreateJobParams {
   job_name: string;
   template_id: string;
-  template_values: Record<string, any>;
+  template_values: Record<string, JsonValue>;
   slurm_config: SlurmConfig;
 }
 
-export interface CreateJobResult {
-  success: boolean;
-  job_id?: JobId;
-  job?: JobInfo;
-  error?: string;
-}
-
-export interface SubmitJobResult {
-  success: boolean;
-  slurm_job_id?: SlurmJobId;
-  submitted_at?: Timestamp;
-  error?: string;
-}
-
-export interface JobStatusResult {
-  success: boolean;
-  job_info?: JobInfo;
-  error?: string;
-}
-
-export interface GetAllJobsResult {
-  success: boolean;
-  jobs?: JobInfo[];
-  error?: string;
-}
-
+// Complex batch operation results (domain-specific)
 export interface SyncJobsResult {
   success: boolean;
   jobs: JobInfo[];           // Complete job list after sync
   jobs_updated: number;       // Number of jobs updated during sync
   errors: string[];
-}
-
-export interface DeleteJobResult {
-  success: boolean;
-  error?: string;
-}
-
-export interface DiscoverJobsResult {
-  success: boolean;
-  jobs_found: number;
-  jobs_imported: number;
-  error?: string;
-}
-
-export interface RefetchLogsResult {
-  success: boolean;
-  job_info?: JobInfo;
-  error?: string;
 }
 
 export interface UploadResult {
@@ -152,19 +135,6 @@ export interface UploadResult {
     file_name: string;
     error: string;
   }>;
-}
-
-export interface DownloadResult {
-  success: boolean;
-  saved_to?: string;  // Local path where file was saved
-  file_size?: number;
-  error?: string;
-}
-
-export interface ListFilesResult {
-  success: boolean;
-  files?: RemoteFile[];
-  error?: string;
 }
 
 // Cluster Capabilities (from backend)
@@ -235,28 +205,19 @@ export interface ClusterCapabilities {
   billing_rates: BillingRates;
 }
 
-export interface GetClusterCapabilitiesResult {
-  success: boolean;
-  data?: ClusterCapabilities;
-  error?: string;
-}
-
-export interface ValidateResourceAllocationResult {
+// Unified validation result type matching Rust ValidationResult
+export interface ValidationResult {
   is_valid: boolean;
   issues: string[];
   warnings: string[];
   suggestions: string[];
 }
 
-export interface PreviewResult {
-  success: boolean;
-  content?: string;
-  error?: string;
-}
-
-export interface JobValidationResult {
-  is_valid: boolean;
-  errors: string[];
+// App initialization data
+export interface AppInitializationData {
+  capabilities: ClusterCapabilities;
+  templates: TemplateSummary[];
+  jobs: JobInfo[];
 }
 
 // Error handling
@@ -265,23 +226,4 @@ export interface NAMDRunnerError {
   message: string;
   details?: string;
   retryable: boolean;
-}
-
-// Database management
-export interface DatabaseInfo {
-  path: string;
-  size_bytes: number;
-}
-
-export interface DatabaseInfoResult {
-  success: boolean;
-  path?: string;
-  size_bytes?: number;
-  error?: string;
-}
-
-export interface DatabaseOperationResult {
-  success: boolean;
-  message?: string;
-  error?: string;
 }

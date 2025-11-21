@@ -1,206 +1,255 @@
-import { logger } from '$lib/utils/logger';
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
 import type {
   Template,
-  TemplateSummary,
-  ListTemplatesResult,
-  GetTemplateResult,
-  CreateTemplateResult,
-  UpdateTemplateResult,
-  DeleteTemplateResult,
-  ValidateTemplateValuesResult
+  TemplateSummary
 } from '$lib/types/template';
+import type { ValidationResult, ApiResult } from '$lib/types/api';
 
-// Store for all template summaries
-export const templates = writable<TemplateSummary[]>([]);
+// Template store state
+interface TemplateState {
+  templates: TemplateSummary[];
+  currentTemplate: Template | null;
+  loading: boolean;
+  error: string | null;
+}
 
-// Store for currently selected/editing template
-export const currentTemplate = writable<Template | null>(null);
+const initialState: TemplateState = {
+  templates: [],
+  currentTemplate: null,
+  loading: false,
+  error: null,
+};
 
-// Loading state
-export const templatesLoading = writable(false);
+// Create template store
+function createTemplateStore() {
+  const { subscribe, update } = writable<TemplateState>(initialState);
 
-// Error state
-export const templatesError = writable<string | null>(null);
+  return {
+    subscribe,
 
-// Derived store: Built-in templates (read-only)
+    // Load all templates from database
+    async loadTemplates(): Promise<void> {
+      update(state => ({ ...state, loading: true, error: null }));
+
+      try {
+        const result = await invoke<ApiResult<TemplateSummary[]>>('list_templates');
+
+        if (result.success && result.data) {
+          update(state => ({
+            ...state,
+            templates: result.data!,
+            loading: false,
+          }));
+        } else {
+          update(state => ({
+            ...state,
+            error: result.error || 'Failed to load templates',
+            loading: false,
+          }));
+        }
+      } catch (error) {
+        update(state => ({
+          ...state,
+          error: `Error loading templates: ${error}`,
+          loading: false,
+        }));
+      }
+    },
+
+    // Load specific template by ID
+    async loadTemplate(templateId: string): Promise<Template | null> {
+      update(state => ({ ...state, loading: true, error: null }));
+
+      try {
+        const result = await invoke<ApiResult<Template>>('get_template', { template_id: templateId });
+
+        if (result.success && result.data) {
+          update(state => ({
+            ...state,
+            currentTemplate: result.data!,
+            loading: false,
+          }));
+          return result.data;
+        } else {
+          update(state => ({
+            ...state,
+            error: result.error || 'Template not found',
+            loading: false,
+          }));
+          return null;
+        }
+      } catch (error) {
+        update(state => ({
+          ...state,
+          error: `Error loading template: ${error}`,
+          loading: false,
+        }));
+        return null;
+      }
+    },
+
+    // Create new template
+    async createTemplate(template: Template): Promise<boolean> {
+      update(state => ({ ...state, loading: true, error: null }));
+
+      try {
+        const result = await invoke<ApiResult<string>>('create_template', { template });
+
+        if (result.success) {
+          // Reload templates after creation
+          await this.loadTemplates();
+          return true;
+        } else {
+          update(state => ({
+            ...state,
+            error: result.error || 'Failed to create template',
+            loading: false,
+          }));
+          return false;
+        }
+      } catch (error) {
+        update(state => ({
+          ...state,
+          error: `Error creating template: ${error}`,
+          loading: false,
+        }));
+        return false;
+      }
+    },
+
+    // Update existing template
+    async updateTemplate(templateId: string, template: Template): Promise<boolean> {
+      update(state => ({ ...state, loading: true, error: null }));
+
+      try {
+        const result = await invoke<ApiResult<void>>('update_template', { template_id: templateId, template });
+
+        if (result.success) {
+          // Reload templates after update
+          await this.loadTemplates();
+          return true;
+        } else {
+          update(state => ({
+            ...state,
+            error: result.error || 'Failed to update template',
+            loading: false,
+          }));
+          return false;
+        }
+      } catch (error) {
+        update(state => ({
+          ...state,
+          error: `Error updating template: ${error}`,
+          loading: false,
+        }));
+        return false;
+      }
+    },
+
+    // Delete template
+    async deleteTemplate(templateId: string): Promise<boolean> {
+      update(state => ({ ...state, loading: true, error: null }));
+
+      try {
+        const result = await invoke<ApiResult<void>>('delete_template', { template_id: templateId });
+
+        if (result.success) {
+          // Clear current template if it was deleted
+          update(state => ({
+            ...state,
+            currentTemplate: state.currentTemplate?.id === templateId ? null : state.currentTemplate,
+            loading: false,
+          }));
+
+          // Reload templates after deletion
+          await this.loadTemplates();
+          return true;
+        } else {
+          update(state => ({
+            ...state,
+            error: result.error || 'Failed to delete template',
+            loading: false,
+          }));
+          return false;
+        }
+      } catch (error) {
+        update(state => ({
+          ...state,
+          error: `Error deleting template: ${error}`,
+          loading: false,
+        }));
+        return false;
+      }
+    },
+
+    // Clear current template selection
+    clearCurrentTemplate(): void {
+      update(state => ({
+        ...state,
+        currentTemplate: null,
+      }));
+    },
+
+    // Clear error state
+    clearError(): void {
+      update(state => ({
+        ...state,
+        error: null,
+      }));
+    },
+
+    // Set templates directly (used by centralized app initialization)
+    setTemplates(templates: TemplateSummary[]): void {
+      update((state) => ({
+        ...state,
+        templates,
+        loading: false,
+        error: null,
+      }));
+    },
+  };
+}
+
+// Export store instance
+export const templateStore = createTemplateStore();
+
+// Derived stores for convenience
+export const templates = derived(templateStore, $store => $store.templates);
+export const currentTemplate = derived(templateStore, $store => $store.currentTemplate);
+export const templatesLoading = derived(templateStore, $store => $store.loading);
+export const templatesError = derived(templateStore, $store => $store.error);
+
+// Derived: Built-in templates
 export const builtInTemplates = derived(templates, $templates =>
-  $templates.filter(t => t.is_builtin) // Convention: built-in templates end with _v1, _v2, etc.
+  $templates.filter(t => t.is_builtin)
 );
 
-// Derived store: User-created templates
+// Derived: User-created templates
 export const userTemplates = derived(templates, $templates =>
-  $templates.filter(t => !t.is_builtin) // User templates don't follow _v1 convention
+  $templates.filter(t => !t.is_builtin)
 );
-
-/**
- * Load all templates from backend
- */
-export async function loadTemplates(): Promise<void> {
-  templatesLoading.set(true);
-  templatesError.set(null);
-
-  try {
-    const result = await invoke<ListTemplatesResult>('list_templates');
-
-    if (result.success && result.templates) {
-      templates.set(result.templates);
-    } else {
-      templatesError.set(result.error || 'Failed to load templates');
-    }
-  } catch (error) {
-    templatesError.set(`Error loading templates: ${error}`);
-    logger.error('[TemplateStore]', 'Failed to load templates', error);
-  } finally {
-    templatesLoading.set(false);
-  }
-}
-
-/**
- * Load a specific template by ID
- */
-export async function loadTemplate(templateId: string): Promise<Template | null> {
-  templatesLoading.set(true);
-  templatesError.set(null);
-
-  try {
-    const result = await invoke<GetTemplateResult>('get_template', { template_id: templateId });
-
-    if (result.success && result.template) {
-      currentTemplate.set(result.template);
-      return result.template;
-    } else {
-      templatesError.set(result.error || 'Template not found');
-      return null;
-    }
-  } catch (error) {
-    templatesError.set(`Error loading template: ${error}`);
-    logger.error('[TemplateStore]', 'Failed to load template', error);
-    return null;
-  } finally {
-    templatesLoading.set(false);
-  }
-}
-
-/**
- * Create a new template
- */
-export async function createTemplate(template: Template): Promise<boolean> {
-  templatesLoading.set(true);
-  templatesError.set(null);
-
-  try {
-    const result = await invoke<CreateTemplateResult>('create_template', { template });
-
-    if (result.success) {
-      // Reload templates to get updated list
-      await loadTemplates();
-      return true;
-    } else {
-      templatesError.set(result.error || 'Failed to create template');
-      return false;
-    }
-  } catch (error) {
-    templatesError.set(`Error creating template: ${error}`);
-    logger.error('[TemplateStore]', 'Failed to create template', error);
-    return false;
-  } finally {
-    templatesLoading.set(false);
-  }
-}
-
-/**
- * Update an existing template
- */
-export async function updateTemplate(templateId: string, template: Template): Promise<boolean> {
-  templatesLoading.set(true);
-  templatesError.set(null);
-
-  try {
-    const result = await invoke<UpdateTemplateResult>('update_template', { template_id: templateId, template });
-
-    if (result.success) {
-      // Reload templates to get updated list
-      await loadTemplates();
-      // Update current template if it's the one being edited
-      if (get(currentTemplate)?.id === templateId) {
-        currentTemplate.set(template);
-      }
-      return true;
-    } else {
-      templatesError.set(result.error || 'Failed to update template');
-      return false;
-    }
-  } catch (error) {
-    templatesError.set(`Error updating template: ${error}`);
-    logger.error('[TemplateStore]', 'Failed to update template', error);
-    return false;
-  } finally {
-    templatesLoading.set(false);
-  }
-}
-
-/**
- * Delete a template
- */
-export async function deleteTemplate(templateId: string): Promise<boolean> {
-  templatesLoading.set(true);
-  templatesError.set(null);
-
-  try {
-    const result = await invoke<DeleteTemplateResult>('delete_template', { template_id: templateId });
-
-    if (result.success) {
-      // Reload templates to get updated list
-      await loadTemplates();
-      // Clear current template if it was deleted
-      if (get(currentTemplate)?.id === templateId) {
-        currentTemplate.set(null);
-      }
-      return true;
-    } else {
-      templatesError.set(result.error || 'Failed to delete template');
-      return false;
-    }
-  } catch (error) {
-    templatesError.set(`Error deleting template: ${error}`);
-    logger.error('[TemplateStore]', 'Failed to delete template', error);
-    return false;
-  } finally {
-    templatesLoading.set(false);
-  }
-}
 
 /**
  * Validate template values
  */
 export async function validateTemplateValues(
   templateId: string,
-  values: Record<string, any>
-): Promise<{ valid: boolean; errors: string[] }> {
+  values: Record<string, JsonValue>
+): Promise<ValidationResult> {
   try {
-    const result = await invoke<ValidateTemplateValuesResult>('validate_template_values', {
+    const result = await invoke<ValidationResult>('validate_template_values', {
       template_id: templateId,
       values
     });
 
-    return {
-      valid: result.valid,
-      errors: result.errors
-    };
+    return result;
   } catch (error) {
-    logger.error('[TemplateStore]', 'Failed to validate values', error);
     return {
-      valid: false,
-      errors: [`Validation error: ${error}`]
+      is_valid: false,
+      issues: [`Validation error: ${error}`],
+      warnings: [],
+      suggestions: []
     };
   }
-}
-
-/**
- * Initialize template store (call on app startup)
- */
-export async function initializeTemplateStore(): Promise<void> {
-  await loadTemplates();
 }

@@ -1,16 +1,12 @@
 <script lang="ts">
   import { isConnected } from '../../stores/session';
-  import { jobsStore, jobCounts, jobs } from '../../stores/jobs';
+  import { jobsStore, jobCounts } from '../../stores/jobs';
   import { uiStore } from '../../stores/ui';
   import JobsTable from '../jobs/JobsTable.svelte';
   import SyncControls from '../jobs/SyncControls.svelte';
 
   async function handleSync() {
-    try {
-      await jobsStore.sync();
-    } catch (error) {
-      // Sync failed - error handled by store state
-    }
+    await jobsStore.sync();
   }
 
   function handleCreateJob() {

@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { logger } from '$lib/utils/logger';
   import { invoke } from '@tauri-apps/api/core';
-  import type { JobValidationResult } from '$lib/types/api';
+  import type { ValidationResult } from '$lib/types/api';
   import ResourcesTab from './ResourcesTab.svelte';
   import ConfigureTab from './ConfigureTab.svelte';
   import ReviewTab from './ReviewTab.svelte';
+  import ValidationDisplay from '../ui/ValidationDisplay.svelte';
 
   // Props from parent
   export let jobName: string;
@@ -34,6 +34,12 @@
 
   let activeTab: TabId = 'resources';
   let validationTimer: number;
+  let validationResult: ValidationResult = {
+    is_valid: true,
+    issues: [],
+    warnings: [],
+    suggestions: [],
+  };
 
   // Debounced backend validation - triggers on any input change
   $: if (jobName || templateId || templateValues || resourceConfig) {
@@ -48,8 +54,8 @@
   }
 
   async function runBackendValidation() {
-    try {
-      const result = await invoke<JobValidationResult>('validate_job_config', {
+    const result = await invoke<ValidationResult>('validate_job_config', {
+      params: {
         job_name: jobName,
         template_id: templateId,
         template_values: templateValues,
@@ -57,43 +63,35 @@
         memory: resourceConfig.memory,
         walltime: resourceConfig.walltime,
         partition: resourceConfig.partition || null,
-        qos: resourceConfig.qos || null
-      });
+        qos: resourceConfig.qos || null,
+      },
+    });
 
-      if (result.is_valid) {
-        errors = {};
-      } else {
-        // Parse errors to extract field-specific errors
-        const newErrors: Record<string, string> = {};
-        for (const error of result.errors) {
-          if (error.toLowerCase().includes('job name')) {
-            newErrors.job_name = error;
-          } else if (error.toLowerCase().includes('template')) {
-            newErrors.template = error;
-          } else if (error.toLowerCase().includes('cores')) {
-            newErrors.cores = error;
-          } else if (error.toLowerCase().includes('memory')) {
-            newErrors.memory = error;
-          } else if (error.toLowerCase().includes('wall time')) {
-            newErrors.walltime = error;
-          } else {
-            // Template variable errors - extract field name from "FieldLabel: error" format
-            const colonIndex = error.indexOf(':');
-            if (colonIndex > 0) {
-              const fieldLabel = error.substring(0, colonIndex).trim();
-              // Field errors will be handled by DynamicJobForm's validation display
-              if (!newErrors.general) {
-                newErrors.general = error;
-              }
-            } else {
-              newErrors.general = error;
-            }
+    validationResult = result;
+
+    if (result.is_valid) {
+      errors = {};
+    } else {
+      // Parse issues to extract field-specific errors
+      const newErrors: Record<string, string> = {};
+      for (const error of result.issues) {
+        if (error.toLowerCase().includes('job name')) {
+          newErrors.job_name = error;
+        } else if (error.toLowerCase().includes('template')) {
+          newErrors.template = error;
+        } else if (error.toLowerCase().includes('cores')) {
+          newErrors.cores = error;
+        } else if (error.toLowerCase().includes('memory')) {
+          newErrors.memory = error;
+        } else if (error.toLowerCase().includes('wall time')) {
+          newErrors.walltime = error;
+        } else {
+          if (!newErrors.general) {
+            newErrors.general = error;
           }
         }
-        errors = newErrors;
       }
-    } catch (error) {
-      logger.error('[CreateJobTabs]', 'Validation error', error);
+      errors = newErrors;
     }
   }
 </script>
@@ -133,8 +131,7 @@
       />
     {/if}
   </div>
-</div>
 
-<style>
-  /* All styling handled by global namd-tabs CSS */
-</style>
+  <!-- General validation feedback -->
+  <ValidationDisplay validation={validationResult} />
+</div>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { templates, templatesLoading, templatesError, loadTemplates, deleteTemplate, loadTemplate, createTemplate } from '$lib/stores/templateStore';
+  import { templates, templatesLoading, templatesError, templateStore } from '$lib/stores/templateStore';
   import type { TemplateSummary } from '$lib/types/template';
   import { uiStore } from '$lib/stores/ui';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
@@ -10,7 +10,7 @@
   let deleteTargetName: string | null = null;
 
   onMount(async () => {
-    await loadTemplates();
+    await templateStore.loadTemplates();
   });
 
   function handleCreateNew() {
@@ -25,7 +25,7 @@
 
   async function handleDuplicate(template: TemplateSummary) {
     // Load full template, create copy with new ID
-    const fullTemplate = await loadTemplate(template.id);
+    const fullTemplate = await templateStore.loadTemplate(template.id);
 
     if (fullTemplate) {
       const duplicatedTemplate = {
@@ -37,9 +37,9 @@
         is_builtin: false
       };
 
-      const success = await createTemplate(duplicatedTemplate);
+      const success = await templateStore.createTemplate(duplicatedTemplate);
       if (success) {
-        await loadTemplates(); // Refresh list
+        await templateStore.loadTemplates(); // Refresh list
       }
     }
   }
@@ -53,7 +53,7 @@
   async function handleDeleteConfirm() {
     if (!deleteTargetId) return;
 
-    const success = await deleteTemplate(deleteTargetId);
+    await templateStore.deleteTemplate(deleteTargetId);
 
     showDeleteConfirm = false;
     deleteTargetId = null;

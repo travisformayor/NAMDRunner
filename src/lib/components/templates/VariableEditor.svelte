@@ -98,7 +98,7 @@
         bind:value={key}
         placeholder="e.g., temperature"
         required
-        class="form-control"
+        class="namd-input"
       />
       <p class="help-text">Used in template as &#123;&#123;{key || 'variable_key'}&#125;&#125;</p>
     </div>
@@ -111,13 +111,13 @@
         bind:value={label}
         placeholder="e.g., Temperature (K)"
         required
-        class="form-control"
+        class="namd-input"
       />
     </div>
 
     <div class="form-group">
       <label for="var-type">Variable Type <span class="required">*</span></label>
-      <select id="var-type" bind:value={varType} class="form-control">
+      <select id="var-type" bind:value={varType} class="namd-input">
         <option value="Number">Number</option>
         <option value="Text">Text</option>
         <option value="Boolean">Boolean</option>
@@ -130,26 +130,26 @@
       <div class="form-row">
         <div class="form-group">
           <label for="num-min">Minimum <span class="required">*</span></label>
-          <input id="num-min" type="number" bind:value={numMin} step="any" required class="form-control" />
+          <input id="num-min" type="number" bind:value={numMin} step="any" required class="namd-input" />
         </div>
         <div class="form-group">
           <label for="num-max">Maximum <span class="required">*</span></label>
-          <input id="num-max" type="number" bind:value={numMax} step="any" required class="form-control" />
+          <input id="num-max" type="number" bind:value={numMax} step="any" required class="namd-input" />
         </div>
         <div class="form-group">
           <label for="num-default">Default Value <span class="required">*</span></label>
-          <input id="num-default" type="number" bind:value={numDefault} step="any" required class="form-control" />
+          <input id="num-default" type="number" bind:value={numDefault} step="any" required class="namd-input" />
         </div>
       </div>
     {:else if varType === 'Text'}
       <div class="form-group">
         <label for="text-default">Default Value <span class="required">*</span></label>
-        <input id="text-default" type="text" bind:value={textDefault} required class="form-control" />
+        <input id="text-default" type="text" bind:value={textDefault} required class="namd-input" />
       </div>
     {:else if varType === 'Boolean'}
       <div class="form-group">
         <label for="bool-default">Default Value <span class="required">*</span></label>
-        <select id="bool-default" bind:value={boolDefault} required class="form-control">
+        <select id="bool-default" bind:value={boolDefault} required class="namd-input">
           <option value={true}>True</option>
           <option value={false}>False</option>
         </select>
@@ -162,7 +162,7 @@
           type="text"
           bind:value={fileExtensions}
           placeholder="e.g., .pdb, .psf, .prm"
-          class="form-control"
+          class="namd-input"
         />
         <p class="help-text">Comma-separated list</p>
       </div>
@@ -175,7 +175,7 @@
         bind:value={helpText}
         placeholder="Description shown to users..."
         rows="2"
-        class="form-control"
+        class="namd-input"
       ></textarea>
     </div>
 
@@ -211,22 +211,6 @@
 
   .required {
     color: var(--namd-error);
-  }
-
-  .form-control {
-    width: 100%;
-    padding: var(--namd-spacing-sm);
-    border: 1px solid var(--namd-border);
-    border-radius: var(--namd-border-radius-sm);
-    font-size: var(--namd-font-size-sm);
-    font-family: inherit;
-    background-color: var(--namd-bg-primary);
-    color: var(--namd-text-primary);
-  }
-
-  .form-control:focus {
-    outline: none;
-    border-color: var(--namd-primary);
   }
 
   .form-row {

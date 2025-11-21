@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { JobInfo } from '../../../types/api';
-  import { CoreClientFactory } from '../../../ports/clientFactory';
+  import { invoke } from '@tauri-apps/api/core';
+  import type { JobInfo, ApiResult } from '../../../types/api';
   import { isConnected } from '../../../stores/session';
 
   export let job: JobInfo;
@@ -46,20 +46,16 @@
     isRefetchingLogs = true;
     refetchError = '';
 
-    try {
-      const result = await CoreClientFactory.getClient().refetchSlurmLogs(job.job_id);
+    const result = await invoke<ApiResult<JobInfo>>('refetch_slurm_logs', { job_id: job.job_id });
 
-      if (!result.success) {
-        refetchError = result.error || 'Failed to refetch logs';
-      } else if (result.job_info) {
-        // Update the job with new logs (parent component should handle this via reactive update)
-        job = result.job_info;
-      }
-    } catch (error) {
-      refetchError = error instanceof Error ? error.message : 'An unexpected error occurred';
-    } finally {
-      isRefetchingLogs = false;
+    if (!result.success) {
+      refetchError = result.error || 'Failed to refetch logs';
+    } else if (result.data) {
+      // Update the job with new logs (parent component should handle this via reactive update)
+      job = result.data;
     }
+
+    isRefetchingLogs = false;
   }
 </script>
 

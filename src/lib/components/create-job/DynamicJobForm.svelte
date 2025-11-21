@@ -1,18 +1,19 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { logger } from '$lib/utils/logger';
   import { extractVariablesFromTemplate } from '$lib/utils/template-utils';
   import { onMount } from 'svelte';
-  import { templates, loadTemplates, loadTemplate, validateTemplateValues } from '$lib/stores/templateStore';
+  import { templates, templateStore, validateTemplateValues } from '$lib/stores/templateStore';
   import type { Template, VariableDefinition } from '$lib/types/template';
   import { getVariableTypeName } from '$lib/types/template';
+  import type { ValidationResult } from '$lib/types/api';
+  import ValidationDisplay from '../ui/ValidationDisplay.svelte';
 
   // Props
   export let templateId: string = '';
   export let templateValues: Record<string, any> = {};
 
   let selectedTemplate: Template | null = null;
-  let validationErrors: string[] = [];
+  let validation: ValidationResult = { is_valid: true, issues: [], warnings: [], suggestions: [] };
   let fieldErrors: Record<string, string> = {};
   let isValidating = false;
   let lastLoadedTemplateId = '';
@@ -41,7 +42,7 @@
     : [];
 
   onMount(async () => {
-    await loadTemplates();
+    await templateStore.loadTemplates();
   });
 
   // Reactively load template when templateId changes
@@ -53,7 +54,7 @@
   }
 
   async function loadTemplateAndInitialize(newTemplateId: string) {
-    const template = await loadTemplate(newTemplateId);
+    const template = await templateStore.loadTemplate(newTemplateId);
     if (template) {
       selectedTemplate = template;
       lastLoadedTemplateId = newTemplateId;
@@ -83,19 +84,20 @@
   }
 
   async function handleFileSelect(key: string) {
-    try {
-      const varDef = selectedTemplate?.variables[key];
-      if (!varDef || getVariableTypeName(varDef.var_type) !== 'FileUpload') return;
+    const varDef = selectedTemplate?.variables[key];
+    if (!varDef || getVariableTypeName(varDef.var_type) !== 'FileUpload') return;
 
-      // Use existing backend command for file selection
-      const selected = await invoke('select_input_file') as { name: string; path: string; size: number; file_type: string } | null;
+    // Use existing backend command for file selection
+    const selected = (await invoke('select_input_file')) as {
+      name: string;
+      path: string;
+      size: number;
+      file_type: string;
+    } | null;
 
-      if (selected) {
-        // Store the full path for now - during job creation, we'll extract filename
-        templateValues[key] = selected.path;
-      }
-    } catch (error) {
-      logger.error('[DynamicJobForm]', 'File selection error', error);
+    if (selected) {
+      // Store the full path for now - during job creation, we'll extract filename
+      templateValues[key] = selected.path;
     }
   }
 
@@ -103,12 +105,11 @@
     if (!selectedTemplate) return;
 
     isValidating = true;
-    const result = await validateTemplateValues(selectedTemplate.id, templateValues);
-    validationErrors = result.errors;
+    validation = await validateTemplateValues(selectedTemplate.id, templateValues);
 
-    // Parse errors to extract field-specific errors
+    // Parse issues to extract field-specific errors
     fieldErrors = {};
-    for (const error of result.errors) {
+    for (const error of validation.issues) {
       // Try to extract field name from error message (format: "FieldLabel: error message")
       const colonIndex = error.indexOf(':');
       if (colonIndex > 0) {
@@ -153,7 +154,7 @@
       <select
         id="template-select"
         bind:value={templateId}
-        class="form-control"
+        class="namd-input"
       >
         <option value="">-- Select a template --</option>
         {#each $templates as template}
@@ -189,7 +190,7 @@
                 bind:value={templateValues[key]}
                 placeholder="No file selected"
                 readonly
-                class="form-control file-display"
+                class="namd-input file-display"
                 class:error={hasError}
               />
               <button
@@ -243,7 +244,7 @@
                   min={config.min ?? undefined}
                   max={config.max ?? undefined}
                   step="any"
-                  class="form-control"
+                  class="namd-input"
                   class:error={hasError}
                   required={varDef.required}
                 />
@@ -252,7 +253,7 @@
                   type="text"
                   id={key}
                   bind:value={templateValues[key]}
-                  class="form-control"
+                  class="namd-input"
                   class:error={hasError}
                   required={varDef.required}
                 />
@@ -279,17 +280,8 @@
       </div>
     {/if}
 
-    <!-- Validation Errors -->
-    {#if validationErrors.length > 0}
-      <div class="validation-errors">
-        <h4>Validation Errors:</h4>
-        <ul>
-          {#each validationErrors as error}
-            <li>{error}</li>
-          {/each}
-        </ul>
-      </div>
-    {/if}
+    <!-- Validation Results -->
+    <ValidationDisplay {validation} />
 
     <!-- Validate Button -->
     <div class="form-actions">
@@ -356,22 +348,6 @@
     margin-left: 0.25rem;
   }
 
-  .form-control {
-    width: 100%;
-    padding: var(--namd-spacing-sm);
-    border: 1px solid var(--namd-border);
-    border-radius: var(--namd-border-radius-sm);
-    font-size: var(--namd-font-size-sm);
-    font-family: inherit;
-    background-color: var(--namd-bg-primary);
-    color: var(--namd-text-primary);
-  }
-
-  .form-control:focus {
-    outline: none;
-    border-color: var(--namd-primary);
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
-  }
 
   .file-input-group {
     display: flex;
@@ -412,28 +388,6 @@
     color: var(--text-secondary, #666);
   }
 
-  .validation-errors {
-    background: var(--error-light, #ffebee);
-    border: 1px solid var(--error, #d32f2f);
-    border-radius: 4px;
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .validation-errors h4 {
-    margin: 0 0 0.5rem 0;
-    color: var(--error, #d32f2f);
-  }
-
-  .validation-errors ul {
-    margin: 0;
-    padding-left: 1.5rem;
-  }
-
-  .validation-errors li {
-    color: var(--error-dark, #c62828);
-  }
-
   .form-actions {
     display: flex;
     gap: 1rem;
@@ -446,12 +400,12 @@
     color: var(--namd-error);
   }
 
-  .form-control.error {
+  .namd-input.error {
     border-color: var(--namd-error);
     background: var(--namd-error-bg);
   }
 
-  .form-control.error:focus {
+  .namd-input.error:focus {
     border-color: var(--namd-error);
     box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
   }
