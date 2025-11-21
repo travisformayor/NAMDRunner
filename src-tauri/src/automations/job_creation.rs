@@ -37,8 +37,8 @@ pub fn create_job_info(
         template_id,
         template_values,
         slurm_config,
-        input_files: Some(input_files),
-        output_files: None,
+        input_files,
+        output_files: vec![],
         remote_directory,
     }
 }

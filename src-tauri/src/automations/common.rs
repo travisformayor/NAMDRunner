@@ -124,8 +124,8 @@ mod tests {
                 partition: Some("amilan".to_string()),
                 qos: Some("normal".to_string()),
             },
-            input_files: None,
-            output_files: None,
+            input_files: vec![],
+            output_files: vec![],
             remote_directory: "/test/dir".to_string(),
         };
 
@@ -164,8 +164,8 @@ mod tests {
                 partition: Some("amilan".to_string()),
                 qos: Some("normal".to_string()),
             },
-            input_files: None,
-            output_files: None,
+            input_files: vec![],
+            output_files: vec![],
             remote_directory: "/test/dir".to_string(),
         };
 
@@ -207,8 +207,8 @@ mod tests {
                 partition: Some("amilan".to_string()),
                 qos: Some("normal".to_string()),
             },
-            input_files: None,
-            output_files: None,
+            input_files: vec![],
+            output_files: vec![],
             remote_directory: "/test/dir".to_string(),
         };
 

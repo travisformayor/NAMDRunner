@@ -53,12 +53,12 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     match connection_manager.list_files_with_metadata(&output_dir).await {
         Ok(output_files) => {
             log_info!(category: "Job Completion", message: "Found output files", details: "{} files", output_files.len());
-            job.output_files = Some(output_files);
+            job.output_files = output_files;
         }
         Err(e) => {
             log_error!(category: "Job Completion", message: "Failed to fetch output file metadata", details: "{}", e);
             // Don't fail completion if metadata fetch fails - it's nice-to-have
-            job.output_files = None;
+            job.output_files = vec![];
         }
     }
 

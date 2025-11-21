@@ -150,8 +150,8 @@ pub struct JobInfo {
     pub template_values: std::collections::HashMap<String, serde_json::Value>,
 
     pub slurm_config: SlurmConfig,
-    pub input_files: Option<Vec<String>>,
-    pub output_files: Option<Vec<OutputFile>>,
+    pub input_files: Vec<String>,
+    pub output_files: Vec<OutputFile>,
     pub remote_directory: String,
 }
 
@@ -602,5 +602,48 @@ mod tests {
             qos: None,
         };
         assert!(config.parse_walltime_hours().is_err());
+    }
+
+    #[test]
+    fn test_serialize_new_job_with_input_files() {
+        use std::collections::HashMap;
+
+        let job = JobInfo {
+            job_id: "new_job_456".to_string(),
+            job_name: "new_job".to_string(),
+            status: JobStatus::Created,
+            slurm_job_id: None,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: None,
+            submitted_at: None,
+            completed_at: None,
+            project_dir: Some("/projects/user/new_job_456".to_string()),
+            scratch_dir: None,
+            error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
+            template_id: "vacuum_v1".to_string(),
+            template_values: HashMap::new(),
+            slurm_config: SlurmConfig {
+                cores: 4,
+                memory: "16GB".to_string(),
+                walltime: "24:00:00".to_string(),
+                partition: Some("amilan".to_string()),
+                qos: Some("normal".to_string()),
+            },
+            input_files: vec![
+                "structure.pdb".to_string(),
+                "structure.psf".to_string(),
+            ],
+            output_files: vec![],
+            remote_directory: "/projects/user/new_job_456".to_string(),
+        };
+
+        // Should serialize successfully
+        let json = serde_json::to_string(&job).unwrap();
+
+        // Should contain input_files
+        assert!(json.contains("input_files"));
+        assert!(json.contains("structure.pdb"));
     }
 }
