@@ -77,8 +77,6 @@ function createJobsStore() {
 
     // Sync with backend
     sync: async () => {
-      // Log user action to SSH console
-
       // Set syncing state
       update(state => ({ ...state, isSyncing: true }));
 

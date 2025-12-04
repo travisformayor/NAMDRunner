@@ -3,10 +3,10 @@ use tauri::{AppHandle, Emitter};
 use std::collections::HashMap;
 use serde_json::Value;
 
-use crate::types::{CreateJobParams, JobInfo, JobStatus, SlurmConfig};
+use crate::types::{CreateJobParams, JobInfo, JobStatus, SlurmConfig, FileUpload};
 use crate::validation::{input, paths};
 use crate::{log_info, log_debug, log_error};
-use crate::automations::common;
+use crate::automations::{common, file_operations};
 
 /// Factory function to create a new JobInfo with business logic (status, timestamps)
 ///
@@ -142,6 +142,17 @@ pub async fn execute_job_creation_with_progress(
         progress_callback(&format!("Uploading file: {}", filename));
         log_info!(category: "Job Creation", message: "Uploading file", details: "{}: {} -> {}", var_key, local_file_path, filename);
 
+        // Validate file using shared validation logic
+        let file_upload = FileUpload {
+            local_path: local_file_path.clone(),
+            remote_name: filename.clone(),
+        };
+        file_operations::validate_upload_file(&file_upload)
+            .map_err(|e| {
+                log_error!(category: "Job Creation", message: "File validation failed", details: "{}: {}", filename, e);
+                anyhow!("File validation failed for '{}': {}", filename, e)
+            })?;
+
         // Construct remote path
         let remote_path = crate::ssh::JobDirectoryStructure::full_input_path(&project_dir, &filename);
 
@@ -232,4 +243,117 @@ pub async fn execute_job_creation_with_progress(
     log_info!(category: "Job Creation", message: "Job created successfully", details: "{}", job_id, show_toast: true);
 
     Ok((job_id, job_info))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_job_info_initial_state() {
+        let job_info = create_job_info(
+            "job_123".to_string(),
+            "test_job".to_string(),
+            "template_1".to_string(),
+            HashMap::new(),
+            SlurmConfig {
+                cores: 4,
+                memory: "16GB".to_string(),
+                walltime: "02:00:00".to_string(),
+                partition: Some("amilan".to_string()),
+                qos: Some("normal".to_string()),
+            },
+            "/projects/testuser/namdrunner_jobs/job_123".to_string(),
+            vec!["structure.pdb".to_string(), "topology.psf".to_string()],
+        );
+
+        // Verify initial status
+        assert_eq!(job_info.status, JobStatus::Created);
+
+        // Verify timestamps
+        assert!(!job_info.created_at.is_empty(), "created_at should be set");
+        assert!(job_info.updated_at.is_none(), "updated_at should be None initially");
+        assert!(job_info.submitted_at.is_none(), "submitted_at should be None initially");
+        assert!(job_info.completed_at.is_none(), "completed_at should be None initially");
+
+        // Verify optional fields are None
+        assert!(job_info.slurm_job_id.is_none(), "slurm_job_id should be None initially");
+        assert!(job_info.project_dir.is_none(), "project_dir should be None initially");
+        assert!(job_info.scratch_dir.is_none(), "scratch_dir should be None initially");
+        assert!(job_info.error_info.is_none(), "error_info should be None initially");
+        assert!(job_info.slurm_stdout.is_none(), "slurm_stdout should be None initially");
+        assert!(job_info.slurm_stderr.is_none(), "slurm_stderr should be None initially");
+
+        // Verify required fields
+        assert_eq!(job_info.job_id, "job_123");
+        assert_eq!(job_info.job_name, "test_job");
+        assert_eq!(job_info.template_id, "template_1");
+        assert_eq!(job_info.remote_directory, "/projects/testuser/namdrunner_jobs/job_123");
+
+        // Verify input files
+        assert_eq!(job_info.input_files.len(), 2);
+        assert_eq!(job_info.input_files[0], "structure.pdb");
+        assert_eq!(job_info.input_files[1], "topology.psf");
+
+        // Verify output files is empty
+        assert!(job_info.output_files.is_empty(), "output_files should be empty initially");
+
+        // Verify SLURM config
+        assert_eq!(job_info.slurm_config.cores, 4);
+        assert_eq!(job_info.slurm_config.memory, "16GB");
+        assert_eq!(job_info.slurm_config.walltime, "02:00:00");
+        assert_eq!(job_info.slurm_config.partition, Some("amilan".to_string()));
+        assert_eq!(job_info.slurm_config.qos, Some("normal".to_string()));
+    }
+
+    #[test]
+    fn test_create_job_info_empty_input_files() {
+        let job_info = create_job_info(
+            "job_456".to_string(),
+            "minimal_job".to_string(),
+            "template_2".to_string(),
+            HashMap::new(),
+            SlurmConfig {
+                cores: 1,
+                memory: "4GB".to_string(),
+                walltime: "01:00:00".to_string(),
+                partition: None,
+                qos: None,
+            },
+            "/projects/testuser/namdrunner_jobs/job_456".to_string(),
+            vec![],
+        );
+
+        assert_eq!(job_info.status, JobStatus::Created);
+        assert!(job_info.input_files.is_empty());
+        assert!(job_info.output_files.is_empty());
+        assert!(job_info.slurm_config.partition.is_none());
+        assert!(job_info.slurm_config.qos.is_none());
+    }
+
+    #[test]
+    fn test_create_job_info_with_template_values() {
+        let mut template_values = HashMap::new();
+        template_values.insert("structure_file".to_string(), Value::String("structure.pdb".to_string()));
+        template_values.insert("temperature".to_string(), Value::Number(serde_json::Number::from(300)));
+
+        let job_info = create_job_info(
+            "job_789".to_string(),
+            "parameterized_job".to_string(),
+            "template_3".to_string(),
+            template_values.clone(),
+            SlurmConfig {
+                cores: 8,
+                memory: "32GB".to_string(),
+                walltime: "04:00:00".to_string(),
+                partition: Some("amilan".to_string()),
+                qos: Some("normal".to_string()),
+            },
+            "/projects/testuser/namdrunner_jobs/job_789".to_string(),
+            vec!["structure.pdb".to_string()],
+        );
+
+        assert_eq!(job_info.template_values, template_values);
+        assert_eq!(job_info.template_values.len(), 2);
+    }
 }

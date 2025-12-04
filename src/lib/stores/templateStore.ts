@@ -4,7 +4,7 @@ import type {
   Template,
   TemplateSummary
 } from '$lib/types/template';
-import type { ValidationResult, ApiResult } from '$lib/types/api';
+import type { ValidationResult, ApiResult, JsonValue } from '$lib/types/api';
 
 // Template store state
 interface TemplateState {

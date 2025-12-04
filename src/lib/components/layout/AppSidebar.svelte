@@ -91,7 +91,7 @@
         class:disabled={item.disabled}
         disabled={item.disabled}
         on:click={() => handleNavClick(item.view)}
-        title={item.disabled ? (item.id === 'create' ? 'Connect to cluster first' : 'Coming soon') : item.label}
+        title={item.disabled && item.id === 'create' ? 'Connect to cluster first' : item.label}
       >
         <span class="nav-icon">{@html renderIcon(item.icon)}</span>
         <span class="nav-label">{item.label}</span>

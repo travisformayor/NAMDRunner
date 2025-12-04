@@ -85,6 +85,22 @@ pub fn ensure_trailing_slash(path: &str) -> String {
     }
 }
 
+/// Load job from database or return error
+/// Common pattern in automation workflows
+pub fn load_job_or_fail(job_id: &str, context: &str) -> Result<JobInfo> {
+    let job_id_owned = job_id.to_string();
+
+    with_database(move |db| db.load_job(&job_id_owned))
+        .map_err(|e| {
+            log_error!(category: context, message: "Database error", details: "{}", e);
+            anyhow!("Database error: {}", e)
+        })?
+        .ok_or_else(|| {
+            log_error!(category: context, message: "Job not found", details: "Job ID: {}", job_id);
+            anyhow!("Job '{}' not found", job_id)
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
