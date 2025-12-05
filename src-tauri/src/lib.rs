@@ -3,7 +3,6 @@ pub mod commands;
 pub mod ssh;
 mod security;
 mod validation;
-mod retry;
 mod database;
 mod slurm;
 mod logging;

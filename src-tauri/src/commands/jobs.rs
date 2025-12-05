@@ -154,7 +154,7 @@ pub async fn refetch_slurm_logs(job_id: String) -> ApiResult<JobInfo> {
     };
 
     // Refetch logs from server
-    if let Err(e) = automations::refetch_slurm_logs(&mut job_info).await {
+    if let Err(e) = automations::fetch_slurm_logs(&mut job_info, true).await {
         return ApiResult::error(format!("Failed to refetch logs: {}", e));
     }
 

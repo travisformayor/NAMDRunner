@@ -255,129 +255,89 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
     })
 }
 
-/// Fetch and cache SLURM logs (.out/.err) if not already cached
-/// Only fetches when logs are None - implements "fetch once, cache forever" pattern
-/// This function is public to allow other automations (job_completion, job_discovery) to use it
+/// Fetch SLURM logs from server
+///
+/// - force=false: Only fetch if not already cached, silently skip if missing dirs
+/// - force=true: Always fetch, error if missing dirs, set to empty on read failure
 ///
 /// NOTE: Logs are fetched from project_dir (after rsync in job completion)
-pub async fn fetch_slurm_logs_if_needed(job: &mut JobInfo) -> Result<()> {
-    log_debug!(category: "Log Fetch", message: "ENTRY", details: "job_id={}, status={:?}, project_dir={:?}, slurm_job_id={:?}",
-        job.job_id, job.status, job.project_dir, job.slurm_job_id);
+pub async fn fetch_slurm_logs(job: &mut JobInfo, force: bool) -> Result<()> {
+    let category = if force { "Log Refetch" } else { "Log Fetch" };
+    log_debug!(category: category, message: "ENTRY", details: "job_id={}, status={:?}, force={}", job.job_id, job.status, force);
 
-    // Use project_dir instead of scratch_dir (rsync happens first in job completion)
+    // Get project_dir - behavior differs based on force flag
     let project_dir = match &job.project_dir {
-        Some(dir) => dir,
+        Some(dir) => dir.clone(),
         None => {
-            log_debug!(category: "Log Fetch", message: "No project directory, skipping", details: "{}", job.job_id);
+            if force {
+                return Err(anyhow!("No project directory for job {}", job.job_id));
+            }
+            log_debug!(category: category, message: "No project directory, skipping", details: "{}", job.job_id);
             return Ok(());
         }
     };
 
+    // Get slurm_job_id - behavior differs based on force flag
     let slurm_job_id = match &job.slurm_job_id {
-        Some(id) => id,
+        Some(id) => id.clone(),
         None => {
-            log_debug!(category: "Log Fetch", message: "No SLURM job ID, skipping", details: "{}", job.job_id);
+            if force {
+                return Err(anyhow!("No SLURM job ID for job {}", job.job_id));
+            }
+            log_debug!(category: category, message: "No SLURM job ID, skipping", details: "{}", job.job_id);
             return Ok(());
         }
     };
 
     let connection_manager = get_connection_manager();
 
-    // Fetch stdout if not cached (from project directory after rsync)
-    if job.slurm_stdout.is_none() {
+    // Fetch stdout
+    let should_fetch_stdout = force || job.slurm_stdout.is_none();
+    if should_fetch_stdout {
         let stdout_path = format!("{}/{}_{}.out", project_dir, job.job_name, slurm_job_id);
-        log_debug!(category: "Log Fetch", message: "Stdout not cached, constructing path", details: "{}", stdout_path);
-        log_debug!(category: "Log Fetch", message: "Attempting to read stdout file from remote");
+        log_debug!(category: category, message: "Fetching stdout", details: "{}", stdout_path);
 
         match connection_manager.read_remote_file(&stdout_path).await {
             Ok(content) => {
                 let content_len = content.len();
                 job.slurm_stdout = Some(content);
-                log_info!(category: "Log Fetch", message: "Cached stdout for job", details: "{} ({} bytes)", job.job_id, content_len);
+                log_info!(category: category, message: "Fetched stdout for job", details: "{} ({} bytes)", job.job_id, content_len);
             }
             Err(e) => {
-                log_debug!(category: "Log Fetch", message: "Could not read stdout (file may not exist yet)", details: "{}: {}", job.job_id, e);
-                // Gracefully handle - log file might not exist yet or job produced no output
+                log_debug!(category: category, message: "Could not read stdout", details: "{}: {}", job.job_id, e);
+                if force {
+                    job.slurm_stdout = Some(String::new());
+                }
             }
         }
     } else {
-        log_debug!(category: "Log Fetch", message: "Stdout already cached, skipping", details: "{}", job.job_id);
+        log_debug!(category: category, message: "Stdout already cached, skipping", details: "{}", job.job_id);
     }
 
-    // Fetch stderr if not cached (from project directory after rsync)
-    if job.slurm_stderr.is_none() {
+    // Fetch stderr
+    let should_fetch_stderr = force || job.slurm_stderr.is_none();
+    if should_fetch_stderr {
         let stderr_path = format!("{}/{}_{}.err", project_dir, job.job_name, slurm_job_id);
-        log_debug!(category: "Log Fetch", message: "Stderr not cached, constructing path", details: "{}", stderr_path);
-        log_debug!(category: "Log Fetch", message: "Attempting to read stderr file from remote");
+        log_debug!(category: category, message: "Fetching stderr", details: "{}", stderr_path);
 
         match connection_manager.read_remote_file(&stderr_path).await {
             Ok(content) => {
                 let content_len = content.len();
                 job.slurm_stderr = Some(content);
-                log_info!(category: "Log Fetch", message: "Cached stderr for job", details: "{} ({} bytes)", job.job_id, content_len);
+                log_info!(category: category, message: "Fetched stderr for job", details: "{} ({} bytes)", job.job_id, content_len);
             }
             Err(e) => {
-                log_debug!(category: "Log Fetch", message: "Could not read stderr (file may not exist yet)", details: "{}: {}", job.job_id, e);
+                log_debug!(category: category, message: "Could not read stderr", details: "{}: {}", job.job_id, e);
+                if force {
+                    job.slurm_stderr = Some(String::new());
+                }
             }
         }
     } else {
-        log_debug!(category: "Log Fetch", message: "Stderr already cached, skipping", details: "{}", job.job_id);
+        log_debug!(category: category, message: "Stderr already cached, skipping", details: "{}", job.job_id);
     }
 
-    log_debug!(category: "Log Fetch", message: "EXIT: Successfully completed", details: "{}", job.job_id);
-    Ok(())
-}
-
-/// Force refetch SLURM logs from server, overwriting any cached logs
-/// Used when user explicitly requests fresh logs via "Refetch Logs" button
-///
-/// NOTE: Logs are fetched from project_dir (after rsync in job completion)
-pub async fn refetch_slurm_logs(job: &mut JobInfo) -> Result<()> {
-    log_debug!(category: "Log Refetch", message: "ENTRY", details: "job_id={}, status={:?}", job.job_id, job.status);
-
-    // Use project_dir instead of scratch_dir (logs have been rsynced to project)
-    let project_dir = job.project_dir.as_ref()
-        .ok_or_else(|| anyhow!("No project directory for job {}", job.job_id))?;
-
-    let slurm_job_id = job.slurm_job_id.as_ref()
-        .ok_or_else(|| anyhow!("No SLURM job ID for job {}", job.job_id))?;
-
-    let connection_manager = get_connection_manager();
-
-    // Force fetch stdout (overwrite cache) from project directory
-    let stdout_path = format!("{}/{}_{}.out", project_dir, job.job_name, slurm_job_id);
-    log_debug!(category: "Log Refetch", message: "Fetching stdout", details: "{}", stdout_path);
-
-    match connection_manager.read_remote_file(&stdout_path).await {
-        Ok(content) => {
-            let content_len = content.len();
-            job.slurm_stdout = Some(content);
-            log_info!(category: "Log Refetch", message: "Refetched stdout for job", details: "{} ({} bytes)", job.job_id, content_len);
-        }
-        Err(e) => {
-            log_debug!(category: "Log Refetch", message: "Could not read stdout", details: "{}: {}", job.job_id, e);
-            // Set to empty if file doesn't exist
-            job.slurm_stdout = Some(String::new());
-        }
-    }
-
-    // Force fetch stderr (overwrite cache) from project directory
-    let stderr_path = format!("{}/{}_{}.err", project_dir, job.job_name, slurm_job_id);
-    log_debug!(category: "Log Refetch", message: "Fetching stderr", details: "{}", stderr_path);
-
-    match connection_manager.read_remote_file(&stderr_path).await {
-        Ok(content) => {
-            let content_len = content.len();
-            job.slurm_stderr = Some(content);
-            log_info!(category: "Log Refetch", message: "Refetched stderr for job", details: "{} ({} bytes)", job.job_id, content_len);
-        }
-        Err(e) => {
-            log_debug!(category: "Log Refetch", message: "Could not read stderr", details: "{}: {}", job.job_id, e);
-            job.slurm_stderr = Some(String::new());
-        }
-    }
-
-    log_debug!(category: "Log Refetch", message: "EXIT: Successfully completed", details: "{}", job.job_id);
+    log_debug!(category: category, message: "EXIT: Successfully completed", details: "{}", job.job_id);
     Ok(())
 }
 

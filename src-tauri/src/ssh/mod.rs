@@ -13,7 +13,7 @@ pub use connection::{SSHConnection, ConnectionConfig, ConnectionInfo};
 pub use sftp::{SFTPOperations, FileTransferProgress, RemoteFileInfo, ProgressCallback};
 pub use commands::{CommandExecutor, CommandResult};
 pub use errors::{SSHError, map_ssh_error, ConnectionError};
-pub use manager::ConnectionManager;
+pub use manager::{ConnectionManager, retry_quick};
 pub use directory_structure::JobDirectoryStructure;
 
 lazy_static::lazy_static! {

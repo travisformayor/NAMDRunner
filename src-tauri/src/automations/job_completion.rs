@@ -41,7 +41,7 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     log_info!(category: "Job Completion", message: "Rsync complete - all files now in project directory");
 
     // Fetch logs from project directory (after rsync)
-    if let Err(e) = crate::automations::fetch_slurm_logs_if_needed(job).await {
+    if let Err(e) = crate::automations::fetch_slurm_logs(job, false).await {
         log_error!(category: "Job Completion", message: "Failed to fetch logs", details: "{}", e);
         // Don't fail completion if log fetch fails - logs are nice-to-have
     }

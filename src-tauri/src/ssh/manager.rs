@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::time::Duration;
+use std::future::Future;
 use tokio::sync::Mutex;
 use anyhow::Result;
 use tauri::Emitter;
@@ -6,7 +8,6 @@ use super::{SSHConnection, ConnectionConfig, ConnectionInfo};
 use super::commands::CommandResult;
 use super::sftp::{FileTransferProgress, RemoteFileInfo};
 use crate::security::SecurePassword;
-use crate::retry;
 use crate::{log_debug, log_info, log_error};
 
 /// Connection lifecycle management with proper cleanup and error handling
@@ -73,7 +74,7 @@ impl ConnectionManager {
     /// Execute a command using the current connection
     pub async fn execute_command(&self, command: &str, timeout: Option<u64>) -> Result<CommandResult> {
         // Use retry logic for command execution
-        retry::retry_quick(|| self.execute_command_once(command, timeout)).await
+        retry_quick(|| self.execute_command_once(command, timeout)).await
     }
 
     async fn execute_command_once(&self, command: &str, timeout: Option<u64>) -> Result<CommandResult> {
@@ -107,7 +108,7 @@ impl ConnectionManager {
     /// Upload bytes directly to remote server with retry logic
     pub async fn upload_bytes(&self, remote_path: &str, content: &[u8]) -> Result<FileTransferProgress> {
         // Use retry logic for file uploads
-        retry::retry_files(|| self.upload_bytes_once(remote_path, content)).await
+        retry_files(|| self.upload_bytes_once(remote_path, content)).await
     }
 
     async fn upload_bytes_once(&self, remote_path: &str, content: &[u8]) -> Result<FileTransferProgress> {
@@ -147,7 +148,7 @@ impl ConnectionManager {
         app_handle: Option<tauri::AppHandle>,
     ) -> Result<FileTransferProgress> {
         // Use retry logic for file uploads
-        retry::retry_files(|| self.upload_file_once(local_path, remote_path, app_handle.clone())).await
+        retry_files(|| self.upload_file_once(local_path, remote_path, app_handle.clone())).await
     }
 
     async fn upload_file_once(
@@ -238,7 +239,7 @@ impl ConnectionManager {
     /// Download a file using the current connection
     pub async fn download_file(&self, remote_path: &str, local_path: &str) -> Result<FileTransferProgress> {
         // Use retry logic for file downloads
-        retry::retry_files(|| self.download_file_once(remote_path, local_path)).await
+        retry_files(|| self.download_file_once(remote_path, local_path)).await
     }
 
     async fn download_file_once(&self, remote_path: &str, local_path: &str) -> Result<FileTransferProgress> {
@@ -275,7 +276,7 @@ impl ConnectionManager {
     /// List files in a directory using the current connection
     pub async fn list_files(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
         // Use retry logic for directory listing
-        retry::retry_quick(|| self.list_files_once(remote_path)).await
+        retry_quick(|| self.list_files_once(remote_path)).await
     }
 
     async fn list_files_once(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
@@ -305,7 +306,7 @@ impl ConnectionManager {
     /// List files in a directory with metadata for OutputFile
     /// Only returns regular files (not directories)
     pub async fn list_files_with_metadata(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
-        retry::retry_quick(|| self.list_files_with_metadata_once(remote_path)).await
+        retry_quick(|| self.list_files_with_metadata_once(remote_path)).await
     }
 
     async fn list_files_with_metadata_once(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
@@ -334,7 +335,7 @@ impl ConnectionManager {
 
     /// Get file metadata (stat) for a remote file
     pub async fn stat_file(&self, remote_path: &str) -> Result<RemoteFileInfo> {
-        retry::retry_quick(|| self.stat_file_once(remote_path)).await
+        retry_quick(|| self.stat_file_once(remote_path)).await
     }
 
     async fn stat_file_once(&self, remote_path: &str) -> Result<RemoteFileInfo> {
@@ -364,7 +365,7 @@ impl ConnectionManager {
     /// Create a directory using SSH mkdir -p command
     pub async fn create_directory(&self, remote_path: &str) -> Result<()> {
         // Use retry logic for directory creation
-        retry::retry_quick(|| self.create_directory_once(remote_path)).await
+        retry_quick(|| self.create_directory_once(remote_path)).await
     }
 
     async fn create_directory_once(&self, remote_path: &str) -> Result<()> {
@@ -425,7 +426,7 @@ impl ConnectionManager {
     /// Get file information using native SFTP
     pub async fn get_file_info(&self, remote_path: &str) -> Result<RemoteFileInfo> {
         // Use retry logic for file info retrieval
-        retry::retry_quick(|| self.get_file_info_once(remote_path)).await
+        retry_quick(|| self.get_file_info_once(remote_path)).await
     }
 
     async fn get_file_info_once(&self, remote_path: &str) -> Result<RemoteFileInfo> {
@@ -455,7 +456,7 @@ impl ConnectionManager {
     /// Check if a file or directory exists
     pub async fn file_exists(&self, remote_path: &str) -> Result<bool> {
         // Use retry logic for existence checking
-        retry::retry_quick(|| self.file_exists_once(remote_path)).await
+        retry_quick(|| self.file_exists_once(remote_path)).await
     }
 
     async fn file_exists_once(&self, remote_path: &str) -> Result<bool> {
@@ -545,6 +546,107 @@ impl Default for ConnectionManager {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// =============================================================================
+// Retry Logic
+// =============================================================================
+// Handles transient network failures with exponential backoff and jitter.
+/// Retry quick operations (commands, queries, file checks)
+/// Max 2 attempts, 200ms base delay, exponential backoff with jitter
+/// Used by SSH operations and SLURM command execution
+pub async fn retry_quick<T, F, Fut>(operation: F) -> Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T>>,
+{
+    retry_with_backoff(operation, 2, 200, 2000, 2.0).await
+}
+
+/// Retry file transfer operations (uploads, downloads)
+/// Max 5 attempts, 2s base delay, patient retry for large file transfers
+async fn retry_files<T, F, Fut>(operation: F) -> Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T>>,
+{
+    retry_with_backoff(operation, 5, 2000, 60000, 1.5).await
+}
+
+/// Core retry implementation with exponential backoff and jitter
+async fn retry_with_backoff<T, F, Fut>(
+    mut operation: F,
+    max_attempts: u32,
+    base_delay_ms: u64,
+    max_delay_ms: u64,
+    backoff_multiplier: f64,
+) -> Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T>>,
+{
+    let mut attempts = 0;
+    let mut delay_ms = base_delay_ms;
+
+    loop {
+        attempts += 1;
+
+        match operation().await {
+            Ok(result) => return Ok(result),
+            Err(error) => {
+                if attempts >= max_attempts || !is_transient_error(&error) {
+                    return Err(error);
+                }
+
+                log_debug!(
+                    category: "Retry",
+                    message: "Retrying operation",
+                    details: "Attempt {}/{}, error: {}, delay: {}ms",
+                    attempts, max_attempts, error, delay_ms
+                );
+
+                // Add jitter (±50%) to prevent thundering herd
+                let jitter_factor = rand::Rng::gen_range(&mut rand::thread_rng(), 0.5..1.5);
+                let jittered_delay = (delay_ms as f64 * jitter_factor) as u64;
+
+                tokio::time::sleep(Duration::from_millis(jittered_delay)).await;
+
+                // Calculate next delay with exponential backoff
+                delay_ms = std::cmp::min(
+                    (delay_ms as f64 * backoff_multiplier) as u64,
+                    max_delay_ms
+                );
+            }
+        }
+    }
+}
+
+/// Determine if an error is transient and worth retrying
+fn is_transient_error(error: &anyhow::Error) -> bool {
+    let error_msg = error.to_string().to_lowercase();
+
+    // Network-related errors that are often transient
+    if error_msg.contains("timeout") ||
+       error_msg.contains("connection") ||
+       error_msg.contains("network") ||
+       error_msg.contains("temporary") ||
+       error_msg.contains("busy") ||
+       error_msg.contains("unavailable") ||
+       error_msg.contains("interrupted") ||
+       error_msg.contains("broken pipe") {
+        return true;
+    }
+
+    // Authentication and permission errors are permanent
+    if error_msg.contains("authentication") ||
+       error_msg.contains("permission") ||
+       error_msg.contains("access denied") ||
+       error_msg.contains("unauthorized") {
+        return false;
+    }
+
+    // Default to not retrying for unknown errors
+    false
 }
 
 #[cfg(test)]
@@ -723,4 +825,111 @@ mod tests {
         assert!(info.unwrap().is_none());
     }
 
+    // =========================================================================
+    // Retry Logic Tests
+    // =========================================================================
+
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    #[tokio::test]
+    async fn test_successful_operation_no_retry() {
+        let counter = Arc::new(AtomicU32::new(0));
+
+        let result = retry_quick(|| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Ok::<i32, anyhow::Error>(42)
+            }
+        }).await;
+
+        assert_eq!(result.unwrap(), 42);
+        assert_eq!(counter.load(Ordering::SeqCst), 1); // Called only once
+    }
+
+    #[tokio::test]
+    async fn test_retry_with_eventual_success() {
+        let counter = Arc::new(AtomicU32::new(0));
+
+        let result = retry_quick(|| {
+            let counter = counter.clone();
+            async move {
+                let count = counter.fetch_add(1, Ordering::SeqCst) + 1;
+                if count < 2 {
+                    Err(anyhow::anyhow!("Temporary connection error"))
+                } else {
+                    Ok::<i32, anyhow::Error>(count as i32)
+                }
+            }
+        }).await;
+
+        assert_eq!(result.unwrap(), 2);
+        assert_eq!(counter.load(Ordering::SeqCst), 2); // Called twice
+    }
+
+    #[tokio::test]
+    async fn test_max_attempts_exceeded() {
+        let counter = Arc::new(AtomicU32::new(0));
+
+        let result = retry_quick(|| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err::<i32, anyhow::Error>(anyhow::anyhow!("Connection timeout"))
+            }
+        }).await;
+
+        assert!(result.is_err());
+        assert_eq!(counter.load(Ordering::SeqCst), 2); // retry_quick has max 2 attempts
+    }
+
+    #[tokio::test]
+    async fn test_permanent_error_no_retry() {
+        let counter = Arc::new(AtomicU32::new(0));
+
+        let result = retry_quick(|| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err::<i32, anyhow::Error>(anyhow::anyhow!("Authentication failed"))
+            }
+        }).await;
+
+        assert!(result.is_err());
+        assert_eq!(counter.load(Ordering::SeqCst), 1); // No retry for auth errors
+    }
+
+    #[test]
+    fn test_transient_error_detection() {
+        assert!(is_transient_error(&anyhow::anyhow!("Connection timeout")));
+        assert!(is_transient_error(&anyhow::anyhow!("Network error")));
+        assert!(is_transient_error(&anyhow::anyhow!("Server busy")));
+        assert!(is_transient_error(&anyhow::anyhow!("Temporarily unavailable")));
+
+        assert!(!is_transient_error(&anyhow::anyhow!("Authentication failed")));
+        assert!(!is_transient_error(&anyhow::anyhow!("Permission denied")));
+        assert!(!is_transient_error(&anyhow::anyhow!("Access denied")));
+        assert!(!is_transient_error(&anyhow::anyhow!("Invalid configuration")));
+    }
+
+    #[tokio::test]
+    async fn test_backoff_progression() {
+        // Verify exponential backoff happens (timing test)
+        let start = std::time::Instant::now();
+        let counter = Arc::new(AtomicU32::new(0));
+
+        let _ = retry_quick(|| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err::<i32, anyhow::Error>(anyhow::anyhow!("Timeout"))
+            }
+        }).await;
+
+        let elapsed = start.elapsed();
+
+        // Should take at least 100ms (one retry delay with jitter)
+        assert!(elapsed.as_millis() >= 100);
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
 }
