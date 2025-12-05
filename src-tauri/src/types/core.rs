@@ -108,7 +108,6 @@ pub struct JobInfo {
     pub slurm_config: SlurmConfig,
     pub input_files: Vec<String>,
     pub output_files: Vec<OutputFile>,
-    pub remote_directory: String,
 }
 
 // JobInfo has no custom constructor - construct directly using struct literal syntax
@@ -542,7 +541,6 @@ mod tests {
                 "structure.psf".to_string(),
             ],
             output_files: vec![],
-            remote_directory: "/projects/user/new_job_456".to_string(),
         };
 
         // Should serialize successfully

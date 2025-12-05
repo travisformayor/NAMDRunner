@@ -53,10 +53,9 @@ pub async fn submit_job(job_id: String, app_handle: tauri::AppHandle) -> ApiResu
     };
 
     // Call automation with progress tracking
-    let handle_clone = app_handle.clone();
+    let handle_clone = app_handle;
 
     match automations::execute_job_submission_with_progress(
-        app_handle,
         clean_job_id,
         move |msg| {
             let _ = handle_clone.emit("job-submission-progress", msg);

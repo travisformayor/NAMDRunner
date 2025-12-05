@@ -17,7 +17,6 @@ pub fn create_job_info(
     template_id: String,
     template_values: HashMap<String, Value>,
     slurm_config: SlurmConfig,
-    remote_directory: String,
     input_files: Vec<String>,
 ) -> JobInfo {
     JobInfo {
@@ -39,7 +38,6 @@ pub fn create_job_info(
         slurm_config,
         input_files,
         output_files: vec![],
-        remote_directory,
     }
 }
 
@@ -186,7 +184,6 @@ pub async fn execute_job_creation_with_progress(
         params.template_id,
         template_values_for_rendering.clone(),
         params.slurm_config,
-        project_dir.clone(),
         file_names,
     );
 
@@ -263,7 +260,6 @@ mod tests {
                 partition: "amilan".to_string(),
                 qos: "normal".to_string(),
             },
-            "/projects/testuser/namdrunner_jobs/job_123".to_string(),
             vec!["structure.pdb".to_string(), "topology.psf".to_string()],
         );
 
@@ -288,7 +284,6 @@ mod tests {
         assert_eq!(job_info.job_id, "job_123");
         assert_eq!(job_info.job_name, "test_job");
         assert_eq!(job_info.template_id, "template_1");
-        assert_eq!(job_info.remote_directory, "/projects/testuser/namdrunner_jobs/job_123");
 
         // Verify input files
         assert_eq!(job_info.input_files.len(), 2);
@@ -320,7 +315,6 @@ mod tests {
                 partition: "amilan".to_string(),
                 qos: "normal".to_string(),
             },
-            "/projects/testuser/namdrunner_jobs/job_456".to_string(),
             vec![],
         );
 
@@ -349,7 +343,6 @@ mod tests {
                 partition: "amilan".to_string(),
                 qos: "normal".to_string(),
             },
-            "/projects/testuser/namdrunner_jobs/job_789".to_string(),
             vec!["structure.pdb".to_string()],
         );
 

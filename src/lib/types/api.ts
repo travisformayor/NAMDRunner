@@ -48,7 +48,6 @@ export interface JobInfo {
   slurm_config: SlurmConfig;
   input_files: string[];
   output_files: OutputFile[];
-  remote_directory: string;
 }
 
 export interface SlurmConfig {

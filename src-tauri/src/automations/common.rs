@@ -127,7 +127,6 @@ mod tests {
             },
             input_files: vec![],
             output_files: vec![],
-            remote_directory: "/test/dir".to_string(),
         };
 
         update_job_status(&mut job, JobStatus::Running);
@@ -167,7 +166,6 @@ mod tests {
             },
             input_files: vec![],
             output_files: vec![],
-            remote_directory: "/test/dir".to_string(),
         };
 
         // Record original state
@@ -210,7 +208,6 @@ mod tests {
             },
             input_files: vec![],
             output_files: vec![],
-            remote_directory: "/test/dir".to_string(),
         };
 
         // Record original state

@@ -1,5 +1,4 @@
 use anyhow::{Result, anyhow};
-use tauri::AppHandle;
 use chrono::Utc;
 
 use crate::types::{JobInfo, JobStatus, response_data::JobSubmissionData};
@@ -26,7 +25,6 @@ pub fn validate_job_submission_state(job: &JobInfo) -> Result<()> {
 /// Key functionality: Creates scratch directories, copies files from project to scratch,
 /// submits to SLURM, and updates job status. This maintains proper workflow separation.
 pub async fn execute_job_submission_with_progress(
-    _app_handle: AppHandle,
     job_id: String,
     progress_callback: impl Fn(&str),
 ) -> Result<JobSubmissionData> {
@@ -164,7 +162,6 @@ mod tests {
             },
             input_files: vec![],
             output_files: vec![],
-            remote_directory: "/projects/testuser/namdrunner_jobs/test_job_123".to_string(),
         }
     }
 
