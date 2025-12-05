@@ -89,7 +89,7 @@
   }
 
   .dialog--lg {
-    max-width: 900px;
+    max-width: var(--namd-max-width-form);
   }
 
   .dialog-header {

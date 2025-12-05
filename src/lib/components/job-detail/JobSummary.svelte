@@ -77,8 +77,8 @@
     display: flex;
     align-items: center;
     gap: var(--namd-spacing-md);
-    font-size: var(--namd-font-size-sm);
-    color: var(--namd-text-muted);
+    font-size: var(--namd-font-size-base);
+    color: var(--namd-text-secondary);
   }
 
   .id-value {
@@ -98,12 +98,12 @@
   }
 
   .grid-label {
-    font-size: var(--namd-font-size-sm);
-    color: var(--namd-text-muted);
+    font-size: var(--namd-font-size-base);
+    color: var(--namd-text-secondary);
   }
 
   .grid-value {
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-primary);
   }
 

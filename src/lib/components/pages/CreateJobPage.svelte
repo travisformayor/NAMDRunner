@@ -96,7 +96,7 @@
   }
 </script>
 
-<div class="create-job-page">
+<div class="create-job-page namd-page">
   {#if !$isConnected}
     <div class="warning-banner">
       <strong>Not Connected:</strong> Please connect to the cluster before creating jobs.
@@ -119,8 +119,8 @@
 
 <style>
   .create-job-page {
-    padding: 2rem;
-    max-width: 1200px;
+    padding: var(--namd-spacing-xl);
+    max-width: var(--namd-max-width-content);
     margin: 0 auto;
   }
 

@@ -148,7 +148,7 @@
   <!-- Template Selection -->
   <div class="form-section">
     <h3>Simulation Template</h3>
-    <div class="form-group">
+    <div class="namd-field-group">
       <label for="template-select">Choose Template</label>
       <select
         id="template-select"
@@ -176,7 +176,7 @@
         {#each fileVariables as [key, varDef]}
           {@const config = getVariableConfig(varDef)}
           {@const hasError = fieldErrors[key]}
-          <div class="form-group" class:required={varDef.required} class:has-error={hasError}>
+          <div class="namd-field-group" class:required={varDef.required} class:has-error={hasError}>
             <label for={key}>
               {varDef.label}
               {#if varDef.required}<span class="required-mark">*</span>{/if}
@@ -229,7 +229,7 @@
             {@const config = getVariableConfig(varDef)}
             {@const hasError = fieldErrors[key]}
 
-            <div class="form-group" class:required={varDef.required} class:has-error={hasError}>
+            <div class="namd-field-group" class:required={varDef.required} class:has-error={hasError}>
               <label for={key}>
                 {varDef.label}
                 {#if varDef.required}<span class="required-mark">*</span>{/if}
@@ -302,12 +302,12 @@
 
 <style>
   .dynamic-job-form {
-    max-width: 900px;
+    max-width: var(--namd-max-width-form);
   }
 
   .form-section {
-    margin-bottom: 2rem;
-    padding-bottom: 2rem;
+    margin-bottom: var(--namd-spacing-xl);
+    padding-bottom: var(--namd-spacing-xl);
     border-bottom: 1px solid var(--namd-border);
   }
 
@@ -323,28 +323,28 @@
 
   .section-description {
     color: var(--namd-text-secondary);
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--namd-spacing-lg);
     font-size: 0.875rem;
   }
 
-  .form-group {
-    margin-bottom: 1.5rem;
+  .namd-field-group {
+    margin-bottom: var(--namd-spacing-lg);
   }
 
-  .form-group.required label {
+  .namd-field-group.required label {
     font-weight: 500;
   }
 
-  .form-group label {
+  .namd-field-group label {
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--namd-spacing-sm);
     font-size: 0.875rem;
     color: var(--namd-text-primary);
   }
 
   .required-mark {
     color: var(--namd-error);
-    margin-left: 0.25rem;
+    margin-left: var(--namd-spacing-xs);
   }
 
 
@@ -361,13 +361,13 @@
   .parameters-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
+    gap: var(--namd-spacing-lg);
   }
 
   .checkbox-label {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--namd-spacing-sm);
     cursor: pointer;
   }
 
@@ -376,23 +376,17 @@
   }
 
   .help-text {
-    margin: 0.25rem 0 0 0;
+    margin: var(--namd-spacing-xs) 0 0 0;
     font-size: 0.75rem;
     color: var(--namd-text-secondary);
   }
 
   .empty-state {
     text-align: center;
-    padding: 3rem;
+    padding: var(--namd-spacing-2xl);
     color: var(--namd-text-secondary);
   }
 
-  .form-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: flex-end;
-    margin-top: 2rem;
-  }
 
   /* Error States */
   .has-error label {

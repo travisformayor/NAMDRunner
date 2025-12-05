@@ -107,7 +107,7 @@
     <details>
       <summary class="manual-config-summary">Advanced: Manual Configuration</summary>
       <div class="resource-grid">
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="cores">Cores *</label>
           <input
             class="namd-input"
@@ -123,7 +123,7 @@
           {/if}
         </div>
 
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="memory">Memory *</label>
           <input
             class="namd-input"
@@ -138,7 +138,7 @@
           {/if}
         </div>
 
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="walltime">Wall Time *</label>
           <input
             class="namd-input"
@@ -153,7 +153,7 @@
           {/if}
         </div>
 
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="partition">Partition *</label>
           <select
             class="namd-input"
@@ -170,7 +170,7 @@
           {/if}
         </div>
 
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="qos">QoS *</label>
           <select
             class="namd-input"
@@ -243,7 +243,7 @@
   .section-description {
     color: var(--namd-text-secondary);
     margin: 0;
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
   }
 
   .preset-pills {
@@ -256,7 +256,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--namd-spacing-xs);
     padding: var(--namd-spacing-md);
     background: var(--namd-bg-primary);
     border: 2px solid var(--namd-border);
@@ -301,12 +301,6 @@
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: var(--namd-spacing-lg);
     margin-top: var(--namd-spacing-md);
-  }
-
-  .field-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--namd-spacing-xs);
   }
 
   .error-text {
@@ -358,7 +352,7 @@
   }
 
   .stat-item {
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-secondary);
     font-family: var(--namd-font-mono);
   }

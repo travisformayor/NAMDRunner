@@ -168,7 +168,7 @@
 
 <style>
   .files-section {
-    max-width: 800px;
+    max-width: var(--namd-max-width-form);
   }
 
   .files-section h3 {

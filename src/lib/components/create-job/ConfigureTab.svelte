@@ -40,7 +40,7 @@
     <div class="namd-section-header">
       <h3 class="namd-section-title">Job Information</h3>
     </div>
-    <div class="field-group">
+    <div class="namd-field-group">
       <label class="namd-label" for="job-name">Job Name <span class="required">*</span></label>
       <input
         class="namd-input"
@@ -85,12 +85,6 @@
 />
 
 <style>
-  .field-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--namd-spacing-xs);
-  }
-
   .help-text {
     margin: 0;
     font-size: var(--namd-font-size-xs);

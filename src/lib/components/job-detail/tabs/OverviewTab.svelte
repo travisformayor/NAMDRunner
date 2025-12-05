@@ -141,7 +141,7 @@
   }
 
   .overview-content {
-    max-width: 800px;
+    max-width: var(--namd-max-width-form);
   }
 
   .overview-section {
@@ -156,8 +156,8 @@
 
   .progress-card {
     background: var(--namd-bg-primary);
-    border: 1px solid var(--namd-border-color);
-    border-radius: var(--namd-border-radius-md);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius);
     padding: var(--namd-spacing-md);
   }
 
@@ -169,8 +169,8 @@
 
   .progress-bar {
     height: 8px;
-    background: var(--namd-bg-secondary);
-    border-radius: 4px;
+    background: var(--namd-bg-primary);
+    border-radius: var(--namd-border-radius-sm);
     overflow: hidden;
     margin-bottom: var(--namd-spacing-sm);
   }
@@ -200,7 +200,7 @@
   }
 
   .info-label {
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-secondary);
     font-weight: var(--namd-font-weight-medium);
   }
@@ -212,8 +212,8 @@
 
   .template-values {
     background: var(--namd-bg-primary);
-    border: 1px solid var(--namd-border-color);
-    border-radius: var(--namd-border-radius-md);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius);
     padding: var(--namd-spacing-md);
   }
 </style>

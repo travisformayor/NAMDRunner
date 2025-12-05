@@ -59,7 +59,7 @@
   }
 
   .confirm-message {
-    line-height: 1.6;
+    line-height: var(--namd-line-height-relaxed);
     color: var(--namd-text-primary);
     white-space: pre-line;
   }

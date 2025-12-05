@@ -101,7 +101,7 @@
 
       <div class="log-content">
         {#if refetchError}
-          <div class="namd-error-message" style="margin-bottom: 1rem;">
+          <div class="namd-error-message" style="margin-bottom: var(--namd-spacing-md);">
             {refetchError}
           </div>
         {/if}
@@ -118,3 +118,53 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .logs-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .logs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--namd-spacing-md);
+    border-bottom: 1px solid var(--namd-border);
+  }
+
+  .log-actions {
+    display: flex;
+    gap: var(--namd-spacing-sm);
+  }
+
+  .log-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--namd-spacing-md);
+  }
+
+  .log-viewer {
+    background-color: var(--namd-code-bg);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius-sm);
+    padding: var(--namd-spacing-md);
+    overflow-x: auto;
+  }
+
+  .log-text {
+    font-family: var(--namd-font-mono);
+    font-size: var(--namd-font-size-xs);
+    white-space: pre;
+    margin: 0;
+    color: var(--namd-text-primary);
+  }
+
+  .empty-logs {
+    text-align: center;
+    padding: var(--namd-spacing-2xl);
+    color: var(--namd-text-secondary);
+    font-style: italic;
+  }
+</style>

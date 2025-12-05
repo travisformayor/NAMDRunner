@@ -184,8 +184,8 @@
 
 <style>
   .settings-page {
-    padding: 2rem;
-    max-width: 800px;
+    padding: var(--namd-spacing-xl);
+    max-width: var(--namd-max-width-form);
   }
 
   .settings-section {
@@ -203,13 +203,13 @@
   }
 
   .db-info {
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--namd-spacing-lg);
   }
 
   .info-row {
     display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
+    gap: var(--namd-spacing-sm);
+    margin-bottom: var(--namd-spacing-sm);
     align-items: baseline;
   }
 
@@ -224,7 +224,7 @@
     padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
     border-radius: var(--namd-border-radius-sm);
     font-family: var(--namd-font-mono);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     word-break: break-all;
   }
 

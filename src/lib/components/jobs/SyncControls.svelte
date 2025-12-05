@@ -112,8 +112,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: var(--namd-font-size-sm);
-    color: var(--namd-text-muted);
+    font-size: var(--namd-font-size-base);
+    color: var(--namd-text-secondary);
   }
 
   .sync-left {
@@ -127,16 +127,16 @@
   }
 
   .status-text.offline {
-    color: var(--namd-text-muted);
+    color: var(--namd-text-secondary);
   }
 
   .sync-button {
     display: flex;
     align-items: center;
-    gap: 0.25rem; /* equivalent to mr-1 in React */
-    padding: 0 0.5rem; /* px-2 */
-    font-size: var(--namd-font-size-sm);
-    height: 2rem; /* h-8 */
+    gap: var(--namd-spacing-xs);
+    padding: 0 var(--namd-spacing-sm);
+    font-size: var(--namd-font-size-base);
+    height: 2rem;
   }
 
   .sync-button:hover:not(:disabled) {
@@ -151,7 +151,7 @@
 
   .sync-icon {
     flex-shrink: 0;
-    transition: transform 0.15s ease;
+    transition: transform var(--namd-transition-fast);
   }
 
   .sync-icon.spinning {
@@ -189,7 +189,7 @@
   }
 
   .checkbox-label {
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-secondary);
     user-select: none;
   }
@@ -202,7 +202,7 @@
     border-radius: var(--namd-border-radius-sm);
     background-color: var(--namd-bg-primary);
     color: var(--namd-text-primary);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     text-align: center;
   }
 
@@ -217,7 +217,7 @@
   }
 
   .interval-label {
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-secondary);
   }
 

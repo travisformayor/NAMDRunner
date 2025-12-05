@@ -82,25 +82,25 @@
   .validation-details summary {
     cursor: pointer;
     font-weight: 500;
-    padding: 0.5rem;
+    padding: var(--namd-spacing-sm);
     user-select: none;
   }
 
   .validation-details summary:hover {
-    background: var(--namd-surface-hover);
+    background: var(--namd-bg-muted);
   }
 
   .validation-content {
-    padding: 0.5rem;
+    padding: var(--namd-spacing-sm);
   }
 
   .validation-results,
   .validation-content {
-    border-radius: 4px;
+    border-radius: var(--namd-border-radius-sm);
   }
 
   .validation-section {
-    margin-bottom: 1rem;
+    margin-bottom: var(--namd-spacing-md);
   }
 
   .validation-section:last-child {

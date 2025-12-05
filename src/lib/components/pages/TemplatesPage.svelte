@@ -67,8 +67,8 @@
   }
 </script>
 
-<div class="templates-page">
-  <div class="page-header">
+<div class="templates-page namd-page">
+  <div class="page-header namd-page-header">
     <h1>Simulation Templates</h1>
     <button class="namd-button namd-button--primary" on:click={handleCreateNew}>
       <span class="icon">+</span>
@@ -131,8 +131,8 @@
 
 <style>
   .templates-page {
-    padding: 2rem;
-    max-width: 1200px;
+    padding: var(--namd-spacing-xl);
+    max-width: var(--namd-max-width-content);
     margin: 0 auto;
   }
 
@@ -140,7 +140,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
+    margin-bottom: var(--namd-spacing-xl);
   }
 
   .page-header h1 {
@@ -152,7 +152,7 @@
   .template-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1.5rem;
+    gap: var(--namd-spacing-lg);
   }
 
   .template-card {
@@ -161,7 +161,7 @@
     border: 1px solid var(--namd-border);
     border-radius: var(--namd-border-radius);
     padding: var(--namd-spacing-lg);
-    background: var(--namd-bg-secondary);
+    background: var(--namd-bg-primary);
     box-shadow: var(--namd-shadow-sm);
     transition: box-shadow 0.2s;
   }
@@ -174,7 +174,7 @@
     display: flex;
     justify-content: space-between;
     align-items: start;
-    margin-bottom: 1rem;
+    margin-bottom: var(--namd-spacing-md);
   }
 
   .template-header h3 {
@@ -209,7 +209,7 @@
 
   .template-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: var(--namd-spacing-sm);
     flex-wrap: wrap;
     margin-top: auto;
   }

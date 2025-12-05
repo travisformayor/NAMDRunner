@@ -105,6 +105,6 @@
   .content-area {
     flex: 1;
     overflow: auto;
-    background-color: var(--namd-bg-secondary);
+    background-color: var(--namd-bg-primary);
   }
 </style>

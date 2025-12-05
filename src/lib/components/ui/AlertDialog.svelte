@@ -57,7 +57,7 @@
     height: 24px;
     border-radius: 50%;
     font-weight: var(--namd-font-weight-bold);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     flex-shrink: 0;
   }
 
@@ -82,7 +82,7 @@
   }
 
   .alert-message {
-    line-height: 1.6;
+    line-height: var(--namd-line-height-relaxed);
     color: var(--namd-text-primary);
   }
 </style>

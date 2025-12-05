@@ -20,7 +20,7 @@
 
 <div class="jobs-page">
   <!-- Header - matches React mockup: simple title + button -->
-  <div class="jobs-header">
+  <div class="jobs-header namd-page-header">
     <h1>Jobs</h1>
     <button
       class="namd-button namd-button--primary create-job-button"
@@ -73,7 +73,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background-color: var(--namd-bg-secondary);
+    background-color: var(--namd-bg-primary);
     padding: var(--namd-spacing-lg);
     gap: var(--namd-spacing-md);
   }
@@ -129,7 +129,7 @@
     margin: 0 0 var(--namd-spacing-lg) 0;
     color: var(--namd-text-secondary);
     max-width: 400px;
-    line-height: 1.6;
+    line-height: var(--namd-line-height-relaxed);
   }
 
   @media (max-width: 768px) {

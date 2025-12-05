@@ -205,7 +205,7 @@
     display: block;
     margin-bottom: var(--namd-spacing-sm);
     font-weight: var(--namd-font-weight-medium);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-primary);
   }
 

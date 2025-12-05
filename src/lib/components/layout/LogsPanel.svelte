@@ -92,14 +92,14 @@
       </button>
 
       <div class="console-actions">
-        <button class="action-button" on:click={handleCopyAll} title="Copy All">
+        <button class="namd-button namd-button--ghost namd-button--sm" on:click={handleCopyAll} title="Copy All">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
           Copy All
         </button>
-        <button class="action-button" on:click={handleClear} title="Clear">
+        <button class="namd-button namd-button--ghost namd-button--sm" on:click={handleClear} title="Clear">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -132,16 +132,16 @@
 
   .console-toggle-collapsed {
     width: 100%;
-    padding: 8px;
+    padding: var(--namd-spacing-sm);
     background: none;
     border: none;
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: var(--namd-font-size-sm);
+    gap: var(--namd-spacing-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-primary);
     cursor: pointer;
-    transition: background-color 0.15s ease;
+    transition: background-color var(--namd-transition-fast);
   }
 
   .console-toggle-collapsed:hover {
@@ -161,7 +161,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px;
+    padding: var(--namd-spacing-sm);
     border-bottom: 1px solid var(--namd-border);
     background-color: var(--namd-bg-primary);
   }
@@ -169,10 +169,10 @@
   .console-toggle-expanded {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--namd-spacing-sm);
     background: none;
     border: none;
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     font-weight: var(--namd-font-weight-medium);
     color: var(--namd-text-primary);
     cursor: pointer;
@@ -186,34 +186,15 @@
   .console-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
-  }
-
-  .action-button {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    background: none;
-    border: none;
-    font-size: var(--namd-font-size-sm);
-    color: var(--namd-text-primary);
-    cursor: pointer;
-    border-radius: var(--namd-border-radius-sm);
-    transition: background-color 0.15s ease;
-    height: 32px;
-  }
-
-  .action-button:hover {
-    background-color: var(--namd-accent);
+    gap: var(--namd-spacing-xs);
   }
 
   .console-output {
     flex: 1;
-    padding: 12px;
+    padding: var(--namd-spacing-md);
     overflow-y: auto;
     font-family: var(--namd-font-mono);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     background-color: var(--namd-bg-primary);
     color: var(--namd-text-primary);
     line-height: 1.4;
@@ -223,7 +204,7 @@
     margin: 2px 0;
     white-space: pre-wrap;
     display: flex;
-    gap: 8px;
+    gap: var(--namd-spacing-sm);
   }
 
   .output-line.ssh-command {
@@ -241,7 +222,7 @@
   }
 
   .timestamp {
-    color: var(--namd-text-muted);
+    color: var(--namd-text-secondary);
     font-size: 0.85em;
     flex-shrink: 0;
   }
@@ -252,8 +233,7 @@
 
   /* SVG icons */
   .chevron-up,
-  .chevron-down,
-  .action-button svg {
+  .chevron-down {
     flex-shrink: 0;
   }
 </style>

@@ -143,7 +143,7 @@
     color: var(--namd-error-fg);
     padding: var(--namd-spacing-sm);
     border-radius: var(--namd-border-radius);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     margin-top: var(--namd-spacing-md);
   }
 </style>

@@ -340,7 +340,7 @@
 
 <style>
   .template-editor {
-    max-width: 900px;
+    max-width: var(--namd-max-width-form);
     margin: 0 auto;
   }
 
@@ -358,7 +358,7 @@
     display: block;
     margin-bottom: var(--namd-spacing-sm);
     font-weight: var(--namd-font-weight-medium);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-primary);
   }
 
@@ -379,7 +379,7 @@
 
   .help-text code {
     background: var(--namd-bg-muted);
-    padding: 0.125rem 0.25rem;
+    padding: var(--namd-spacing-xs) var(--namd-spacing-xs);
     border-radius: var(--namd-border-radius-sm);
     font-size: 0.875em;
     color: var(--namd-text-primary);
@@ -411,12 +411,12 @@
 
   .form-actions-left {
     display: flex;
-    gap: 1rem;
+    gap: var(--namd-spacing-md);
   }
 
   .form-actions-right {
     display: flex;
-    gap: 1rem;
+    gap: var(--namd-spacing-md);
   }
 
   /* Variable Management */
@@ -429,7 +429,7 @@
 
   .variables-header .section-label {
     font-weight: var(--namd-font-weight-medium);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     margin-bottom: 0;
     color: var(--namd-text-primary);
   }
@@ -467,7 +467,7 @@
     font-family: var(--namd-font-mono);
     font-size: var(--namd-font-size-xs);
     background: var(--namd-bg-muted);
-    padding: 0.125rem var(--namd-spacing-xs);
+    padding: var(--namd-spacing-xs) var(--namd-spacing-xs);
     border-radius: var(--namd-border-radius-sm);
     color: var(--namd-text-secondary);
   }
