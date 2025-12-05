@@ -451,8 +451,6 @@ src-tauri/src/automations/
 ├── job_sync.rs             # ✅ Status sync, job discovery, connection detection
 ├── job_completion.rs       # ✅ Automatic completion on terminal state
 ├── job_deletion.rs         # ✅ Job deletion with SLURM cancellation
-├── errors.rs               # Automation error types
-├── progress.rs             # Progress tracking utilities
 └── common.rs               # Shared helpers for automations
 
 src-tauri/src/templates/

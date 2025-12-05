@@ -905,8 +905,7 @@ components/
     ├── Dialog.svelte              # Base modal primitive (composition root)
     ├── AlertDialog.svelte         # Notification dialog (replaces alert())
     ├── ConfirmDialog.svelte       # Confirmation dialogs with Cancel/Confirm
-    ├── PreviewModal.svelte        # Code/text preview display
-    └── FormField.svelte           # Reusable form field wrapper
+    └── PreviewModal.svelte        # Code/text preview display
 ```
 
 ### Component Guidelines

@@ -208,7 +208,7 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 - Code simplification is about eliminating parallel approaches, not just line count
 - Examples of unified systems to always use:
   - **Dialog.svelte** - Never create inline modal overlays
-  - **Backend logging macros** - All logging happens in backend (log_info!, log_error!, toast_log!), frontend has no logging
+  - **Backend logging macros** - All logging happens in backend (log_info!, log_error!, log_warn!, log_debug! with optional show_toast: true parameter), frontend has no logging
   - **ApiResult<T>** - Never create custom result structs with success/data/error pattern
   - **Design system CSS** - Never write custom .btn or .form-control styles
   - **invoke() directly** - Never create thin wrapper layers over it
