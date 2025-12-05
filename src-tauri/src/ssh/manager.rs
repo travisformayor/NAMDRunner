@@ -498,19 +498,6 @@ impl ConnectionManager {
         }
     }
 
-    /// Upload a file with existence checking
-    pub async fn upload_file_with_check(&self, local_path: &str, remote_path: &str, overwrite: bool) -> Result<FileTransferProgress> {
-        // Check if the file already exists
-        let exists = self.file_exists(remote_path).await?;
-
-        if exists && !overwrite {
-            return Err(anyhow::anyhow!("File '{}' already exists and overwrite is not enabled", remote_path));
-        }
-
-        // Proceed with upload
-        self.upload_file(local_path, remote_path).await
-    }
-
     /// Get the username of the current connection
     pub async fn get_username(&self) -> Result<String> {
         let conn = self.connection.lock().await;
@@ -520,38 +507,6 @@ impl ConnectionManager {
                     return Err(anyhow::anyhow!("SSH connection is no longer active"));
                 }
                 Ok(connection.get_username().to_string())
-            }
-            None => Err(anyhow::anyhow!("Please connect to the cluster first"))
-        }
-    }
-
-    /// Check if a directory exists
-    pub async fn directory_exists(&self, remote_path: &str) -> Result<bool> {
-        // Directories can be checked the same way as files
-        self.file_exists(remote_path).await
-    }
-
-    /// Get the size of a remote file
-    pub async fn get_file_size(&self, remote_path: &str) -> Result<u64> {
-        let mut conn = self.connection.lock().await;
-        match conn.as_mut() {
-            Some(connection) => {
-                if !connection.is_connected() {
-                    return Err(anyhow::anyhow!("SSH connection is no longer active"));
-                }
-
-                // Set file transfer timeout before SFTP operation
-                connection.set_file_transfer_timeout()?;
-
-                let session = connection.get_session()?;
-                let sftp = super::sftp::SFTPOperations::new(session);
-                let result = sftp.stat(remote_path);
-
-                // Reset to command timeout after operation
-                connection.reset_command_timeout()?;
-
-                let stat = result?;
-                Ok(stat.size)
             }
             None => Err(anyhow::anyhow!("Please connect to the cluster first"))
         }

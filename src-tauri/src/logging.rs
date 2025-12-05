@@ -75,35 +75,6 @@ pub fn set_app_handle(app_handle: AppHandle) {
 /// Unified logging macro with named parameters
 #[macro_export]
 macro_rules! app_log {
-    // Full form: level, category, message, details, toast
-    (level: $level:ident, category: $category:expr, message: $message:expr, details: $details:expr, toast: $toast:expr) => {{
-        let details_str = $details.to_string();
-        let log_msg = $crate::types::core::AppLogMessage {
-            level: stringify!($level).to_lowercase(),
-            category: $category.to_string(),
-            message: $message.to_string(),
-            details: Some(details_str.clone()),
-            show_toast: $toast,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        };
-
-        // Log with details for console
-        match stringify!($level) {
-            "info" => log::info!("[{}] {}", $category, details_str),
-            "error" => log::error!("[{}] {}", $category, details_str),
-            "warn" => log::warn!("[{}] {}", $category, details_str),
-            "debug" => log::debug!("[{}] {}", $category, details_str),
-            _ => log::info!("[{}] {}", $category, details_str),
-        }
-
-        // Emit to frontend
-        if let Some(app_handle) = $crate::logging::get_app_handle() {
-            use tauri::Emitter;
-            let _ = app_handle.emit("app-log", &log_msg);
-        }
-    }};
-
-
     // With pre-formatted details and toast
     (level: $level:ident, category: $category:expr, message: $message:expr, details: $details:expr, toast: $toast:expr) => {{
         let log_msg = $crate::types::core::AppLogMessage {

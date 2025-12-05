@@ -78,50 +78,6 @@ pub enum JobStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum FileType {
-    #[serde(rename = "input")]
-    Input,
-    #[serde(rename = "output")]
-    Output,
-    #[serde(rename = "config")]
-    Config,
-    #[serde(rename = "log")]
-    Log,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum NAMDFileType {
-    #[serde(rename = "pdb")]
-    Pdb,
-    #[serde(rename = "psf")]
-    Psf,
-    #[serde(rename = "prm")]
-    Prm,
-    #[serde(rename = "exb")]
-    Exb,
-    #[serde(rename = "other")]
-    Other,
-}
-
-impl NAMDFileType {
-    /// Detect file type from filename (source of truth for type detection)
-    pub fn from_filename(filename: &str) -> Self {
-        let lower = filename.to_lowercase();
-        let ext = lower.split('.').next_back().unwrap_or("");
-
-        match ext {
-            "pdb" => Self::Pdb,
-            "psf" => Self::Psf,
-            "prm" => Self::Prm,
-            "exb" => Self::Exb,
-            _ if lower.ends_with(".enm.extra") => Self::Exb,
-            _ if lower.contains("extrabonds") => Self::Exb,
-            _ => Self::Other,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputFile {
     pub name: String,
@@ -259,24 +215,6 @@ pub struct SelectedFile {
     pub name: String,
     pub path: String,
     pub size: u64,
-    pub file_type: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoteFile {
-    pub name: String,           // Display name (just filename)
-    pub path: String,           // Full relative path from job root (e.g., "outputs/sim.dcd")
-    pub size: u64,
-    pub modified_at: String,
-    pub file_type: FileType,
-}
-
-/// Connection status response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConnectionStatusResponse {
-    pub state: ConnectionState,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_info: Option<SessionInfo>,
 }
 
 /// File information for SFTP operations
@@ -302,38 +240,6 @@ pub struct FileUploadProgress {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_namd_file_type_detection() {
-        // Standard extensions
-        assert_eq!(NAMDFileType::from_filename("structure.pdb"), NAMDFileType::Pdb);
-        assert_eq!(NAMDFileType::from_filename("structure.psf"), NAMDFileType::Psf);
-        assert_eq!(NAMDFileType::from_filename("parameters.prm"), NAMDFileType::Prm);
-        assert_eq!(NAMDFileType::from_filename("restraints.exb"), NAMDFileType::Exb);
-
-        // Case insensitive
-        assert_eq!(NAMDFileType::from_filename("STRUCTURE.PDB"), NAMDFileType::Pdb);
-        assert_eq!(NAMDFileType::from_filename("Structure.Psf"), NAMDFileType::Psf);
-
-        // Special extrabonds patterns
-        assert_eq!(
-            NAMDFileType::from_filename("hextube_MGHH_WI_k0.5.enm.extra"),
-            NAMDFileType::Exb
-        );
-        assert_eq!(
-            NAMDFileType::from_filename("mghh_extrabonds"),
-            NAMDFileType::Exb
-        );
-        assert_eq!(
-            NAMDFileType::from_filename("my_extrabonds_file.txt"),
-            NAMDFileType::Exb
-        );
-
-        // Unknown extensions
-        assert_eq!(NAMDFileType::from_filename("data.txt"), NAMDFileType::Other);
-        assert_eq!(NAMDFileType::from_filename("config.conf"), NAMDFileType::Other);
-        assert_eq!(NAMDFileType::from_filename("noextension"), NAMDFileType::Other);
-    }
 
     #[test]
     fn test_parse_memory_gb_standard_formats() {

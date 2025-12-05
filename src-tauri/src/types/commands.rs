@@ -43,16 +43,3 @@ pub struct SyncJobsResult {
     pub errors: Vec<String>,
 }
 
-// File management command parameters and results
-#[derive(Debug, Serialize)]
-pub struct UploadResult {
-    pub success: bool,
-    pub uploaded_files: Option<Vec<String>>,
-    pub failed_uploads: Option<Vec<FailedUpload>>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FailedUpload {
-    pub file_name: String,
-    pub error: String,
-}
