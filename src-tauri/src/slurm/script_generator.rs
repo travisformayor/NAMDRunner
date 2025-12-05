@@ -76,12 +76,6 @@ impl SlurmScriptGenerator {
     }
 
     fn build_slurm_directives(job_name: &str, config: &SlurmConfig, memory: &str) -> Result<String> {
-        let partition = config.partition.as_deref()
-            .unwrap_or("amilan");
-
-        let qos = config.qos.as_deref()
-            .unwrap_or("normal");
-
         Ok(format!(
             "#SBATCH --job-name={}\n\
              #SBATCH --output={}_%j.out\n\
@@ -93,8 +87,8 @@ impl SlurmScriptGenerator {
              #SBATCH --mem={}\n\
              #SBATCH --qos={}\n\
              #SBATCH --constraint=ib",
-            job_name, job_name, job_name, partition,
-            config.cores, config.walltime, memory, qos
+            job_name, job_name, job_name, config.partition,
+            config.cores, config.walltime, memory, config.qos
         ))
     }
 

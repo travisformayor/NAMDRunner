@@ -13,8 +13,8 @@ pub struct ValidateJobConfigParams {
     pub cores: u32,
     pub memory: String,
     pub walltime: String,
-    pub partition: Option<String>,
-    pub qos: Option<String>,
+    pub partition: String,
+    pub qos: String,
 }
 
 // Connection management command parameters and results

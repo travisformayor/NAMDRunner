@@ -164,8 +164,8 @@ pub struct SlurmConfig {
     pub cores: u32,
     pub memory: String,
     pub walltime: String,
-    pub partition: Option<String>,
-    pub qos: Option<String>,
+    pub partition: String,
+    pub qos: String,
 }
 
 impl SlurmConfig {
@@ -235,8 +235,8 @@ impl Default for SlurmConfig {
             cores: 4,
             memory: "4GB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: Some("compute".to_string()),
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         }
     }
 }
@@ -342,8 +342,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
 
@@ -351,8 +351,8 @@ mod tests {
             cores: 1,
             memory: "16G".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
 
@@ -361,8 +361,8 @@ mod tests {
             cores: 1,
             memory: "32".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 32.0);
 
@@ -371,8 +371,8 @@ mod tests {
             cores: 1,
             memory: "2048MB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 2.0);
 
@@ -380,8 +380,8 @@ mod tests {
             cores: 1,
             memory: "512M".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 0.5);
     }
@@ -392,8 +392,8 @@ mod tests {
             cores: 1,
             memory: "1.5GB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 1.5);
 
@@ -401,8 +401,8 @@ mod tests {
             cores: 1,
             memory: "0.5G".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 0.5);
     }
@@ -413,8 +413,8 @@ mod tests {
             cores: 1,
             memory: "  16GB  ".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
 
@@ -422,8 +422,8 @@ mod tests {
             cores: 1,
             memory: "16 GB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
     }
@@ -434,8 +434,8 @@ mod tests {
             cores: 1,
             memory: "16gb".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
 
@@ -443,8 +443,8 @@ mod tests {
             cores: 1,
             memory: "2048mb".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 2.0);
     }
@@ -456,8 +456,8 @@ mod tests {
             cores: 1,
             memory: "".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_memory_gb().is_err());
 
@@ -466,8 +466,8 @@ mod tests {
             cores: 1,
             memory: "invalid".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_memory_gb().is_err());
 
@@ -476,8 +476,8 @@ mod tests {
             cores: 1,
             memory: "16TB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_memory_gb().is_err());
     }
@@ -489,8 +489,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "24:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_walltime_hours().unwrap(), 24.0);
 
@@ -499,8 +499,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "04:30:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_walltime_hours().unwrap(), 4.5);
 
@@ -509,8 +509,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "01:30:30".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         // 1 hour + 30 minutes (0.5) + 30 seconds (0.00833...)
         let result = config.parse_walltime_hours().unwrap();
@@ -524,8 +524,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "00:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_walltime_hours().unwrap(), 0.0);
 
@@ -534,8 +534,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "99:59:59".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         let result = config.parse_walltime_hours().unwrap();
         assert!(result > 99.9 && result < 100.0);
@@ -548,8 +548,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -558,8 +558,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "24".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -568,8 +568,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "24:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -578,8 +578,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "01:60:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -588,8 +588,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "01:00:60".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -598,8 +598,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "aa:bb:cc".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
     }
@@ -628,8 +628,8 @@ mod tests {
                 cores: 4,
                 memory: "16GB".to_string(),
                 walltime: "24:00:00".to_string(),
-                partition: Some("amilan".to_string()),
-                qos: Some("normal".to_string()),
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
             },
             input_files: vec![
                 "structure.pdb".to_string(),

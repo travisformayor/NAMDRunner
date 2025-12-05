@@ -219,17 +219,12 @@ pub mod paths {
         let clean_username = super::input::sanitize_username(username)?;
         let clean_job_id = super::input::sanitize_job_id(job_id)?;
 
-        let (path, allowed_prefixes) = if cfg!(windows) {
-            let path = format!("C:\\Users\\{}\\{}\\{}", clean_username, crate::ssh::directory_structure::JOB_BASE_DIRECTORY, clean_job_id);
-            (path, vec!["C:\\Users\\"])
-        } else {
-            // Use centralized function for consistent path generation
-            let path = JobDirectoryStructure::project_dir(&clean_username, &clean_job_id);
-            (path, JobDirectoryStructure::project_allowed_prefixes())
-        };
+        // All cluster operations use Linux paths (cluster is always Linux)
+        let path = JobDirectoryStructure::project_dir(&clean_username, &clean_job_id);
+        let allowed_prefixes = JobDirectoryStructure::project_allowed_prefixes();
 
         // Validate the path is within allowed directories
-        super::input::validate_path_safety(&path, &allowed_prefixes.to_vec())?;
+        super::input::validate_path_safety(&path, &allowed_prefixes)?;
 
         Ok(path)
     }
@@ -239,17 +234,12 @@ pub mod paths {
         let clean_username = super::input::sanitize_username(username)?;
         let clean_job_id = super::input::sanitize_job_id(job_id)?;
 
-        let (path, allowed_prefixes) = if cfg!(windows) {
-            let path = format!("C:\\scratch\\{}\\{}\\{}", clean_username, crate::ssh::directory_structure::JOB_BASE_DIRECTORY, clean_job_id);
-            (path, vec!["C:\\scratch\\"])
-        } else {
-            // Use centralized function for consistent path generation
-            let path = JobDirectoryStructure::scratch_dir(&clean_username, &clean_job_id);
-            (path, JobDirectoryStructure::scratch_allowed_prefixes())
-        };
+        // All cluster operations use Linux paths (cluster is always Linux)
+        let path = JobDirectoryStructure::scratch_dir(&clean_username, &clean_job_id);
+        let allowed_prefixes = JobDirectoryStructure::scratch_allowed_prefixes();
 
         // Validate the path is within allowed directories
-        super::input::validate_path_safety(&path, &allowed_prefixes.to_vec())?;
+        super::input::validate_path_safety(&path, &allowed_prefixes)?;
 
         Ok(path)
     }

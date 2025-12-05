@@ -203,18 +203,15 @@ pub async fn validate_complete_job_config(params: ValidateJobConfigParams) -> Va
     }
 
     // Validate resource configuration
-    let partition_id = params.partition.as_deref().unwrap_or("amilan");
-    let qos_id = params.qos.as_deref().unwrap_or("normal");
-
     let slurm_config = crate::types::SlurmConfig {
         cores: params.cores,
-        memory: params.memory,
-        walltime: params.walltime,
-        partition: Some(partition_id.to_string()),
-        qos: Some(qos_id.to_string()),
+        memory: params.memory.clone(),
+        walltime: params.walltime.clone(),
+        partition: params.partition.clone(),
+        qos: params.qos.clone(),
     };
 
-    let resource_validation = validate_resource_allocation(&slurm_config, partition_id, qos_id);
+    let resource_validation = validate_resource_allocation(&slurm_config, &params.partition, &params.qos);
 
     // Merge resource validation results
     issues.extend(resource_validation.issues);
@@ -227,4 +224,24 @@ pub async fn validate_complete_job_config(params: ValidateJobConfigParams) -> Va
         warnings,
         suggestions,
     }
+}
+
+/// Validate resource allocation against cluster limits (Tauri command wrapper)
+#[tauri::command(rename_all = "snake_case", rename = "validate_resource_allocation")]
+pub fn validate_resource_allocation_command(
+    cores: u32,
+    memory: String,
+    walltime: String,
+    partition_id: String,
+    qos_id: String,
+) -> ValidationResult {
+    let config = crate::types::SlurmConfig {
+        cores,
+        memory,
+        walltime,
+        partition: partition_id.clone(),
+        qos: qos_id.clone(),
+    };
+
+    validate_resource_allocation(&config, &partition_id, &qos_id)
 }

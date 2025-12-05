@@ -177,8 +177,8 @@ pub async fn preview_slurm_script(
     cores: u32,
     memory: String,
     walltime: String,
-    partition: Option<String>,
-    qos: Option<String>
+    partition: String,
+    qos: String
 ) -> ApiResult<String> {
     log_info!(category: "Jobs", message: "Generating SLURM script preview");
 

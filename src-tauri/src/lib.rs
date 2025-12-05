@@ -51,11 +51,11 @@ pub fn run() {
             commands::connection::disconnect,
             commands::connection::get_connection_status,
             // Cluster configuration
-            commands::cluster::get_cluster_capabilities,
-            commands::cluster::suggest_qos_for_partition,
-            commands::cluster::estimate_queue_time_for_job,
-            commands::cluster::calculate_job_cost,
-            commands::cluster::validate_resource_allocation,
+            cluster::get_cluster_capabilities,
+            cluster::calculate_job_cost,
+            cluster::estimate_queue_time,
+            cluster::suggest_qos,
+            validation::job_validation::validate_resource_allocation_command,
             // Job management
             commands::jobs::create_job,
             commands::jobs::submit_job,

@@ -260,8 +260,8 @@ mod tests {
                 cores: 4,
                 memory: "16GB".to_string(),
                 walltime: "02:00:00".to_string(),
-                partition: Some("amilan".to_string()),
-                qos: Some("normal".to_string()),
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
             },
             "/projects/testuser/namdrunner_jobs/job_123".to_string(),
             vec!["structure.pdb".to_string(), "topology.psf".to_string()],
@@ -302,8 +302,8 @@ mod tests {
         assert_eq!(job_info.slurm_config.cores, 4);
         assert_eq!(job_info.slurm_config.memory, "16GB");
         assert_eq!(job_info.slurm_config.walltime, "02:00:00");
-        assert_eq!(job_info.slurm_config.partition, Some("amilan".to_string()));
-        assert_eq!(job_info.slurm_config.qos, Some("normal".to_string()));
+        assert_eq!(job_info.slurm_config.partition, "amilan");
+        assert_eq!(job_info.slurm_config.qos, "normal");
     }
 
     #[test]
@@ -317,8 +317,8 @@ mod tests {
                 cores: 1,
                 memory: "4GB".to_string(),
                 walltime: "01:00:00".to_string(),
-                partition: None,
-                qos: None,
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
             },
             "/projects/testuser/namdrunner_jobs/job_456".to_string(),
             vec![],
@@ -327,8 +327,8 @@ mod tests {
         assert_eq!(job_info.status, JobStatus::Created);
         assert!(job_info.input_files.is_empty());
         assert!(job_info.output_files.is_empty());
-        assert!(job_info.slurm_config.partition.is_none());
-        assert!(job_info.slurm_config.qos.is_none());
+        assert_eq!(job_info.slurm_config.partition, "amilan");
+        assert_eq!(job_info.slurm_config.qos, "normal");
     }
 
     #[test]
@@ -346,8 +346,8 @@ mod tests {
                 cores: 8,
                 memory: "32GB".to_string(),
                 walltime: "04:00:00".to_string(),
-                partition: Some("amilan".to_string()),
-                qos: Some("normal".to_string()),
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
             },
             "/projects/testuser/namdrunner_jobs/job_789".to_string(),
             vec!["structure.pdb".to_string()],
