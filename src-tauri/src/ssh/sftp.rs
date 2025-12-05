@@ -114,7 +114,7 @@ impl<'a> SFTPOperations<'a> {
         let file_size = local_file.metadata()?.len();
         let file_name = local_path.file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or("unknown")
+            .ok_or_else(|| SSHError::FileTransferError(format!("Failed to extract filename from path: {:?}", local_path)))?
             .to_string();
 
         let mut reader = BufReader::with_capacity(CHUNK_SIZE, local_file);
@@ -202,7 +202,10 @@ impl<'a> SFTPOperations<'a> {
         let stat = sftp.stat(Path::new(remote_path))
             .map_err(|e| SSHError::FileTransferError(format!("Failed to stat remote file: {}", e)))?;
 
-        let file_size = stat.size.unwrap_or(0);
+        let file_size = stat.size.ok_or_else(|| {
+            crate::log_error!(category: "SFTP", message: "File size unavailable", details: "File: {}", remote_path);
+            SSHError::FileTransferError(format!("File size not available for: {}", remote_path))
+        })?;
 
         // Open remote file
         let mut remote_file = sftp.open(Path::new(remote_path))
@@ -264,15 +267,29 @@ impl<'a> SFTPOperations<'a> {
         for (path, stat) in entries {
             let name = path.file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("unknown")
+                .ok_or_else(|| SSHError::FileTransferError(format!("Failed to extract filename from path: {:?}", path)))?
                 .to_string();
+
+            let size = if stat.is_dir() {
+                0
+            } else {
+                stat.size.ok_or_else(|| {
+                    crate::log_error!(category: "SFTP", message: "File size unavailable", details: "File: {:?}", path);
+                    SSHError::FileTransferError(format!("File size not available for: {:?}", path))
+                })?
+            };
+
+            let permissions = stat.perm.ok_or_else(|| {
+                crate::log_error!(category: "SFTP", message: "File permissions unavailable", details: "File: {:?}", path);
+                SSHError::FileTransferError(format!("File permissions not available for: {:?}", path))
+            })?;
 
             files.push(RemoteFileInfo {
                 name: name.clone(),
                 path: path.to_string_lossy().to_string(),
-                size: stat.size.unwrap_or(0),
+                size,
                 is_directory: stat.is_dir(),
-                permissions: stat.perm.unwrap_or(0),
+                permissions,
                 modified_time: stat.mtime,
             });
         }
@@ -297,7 +314,7 @@ impl<'a> SFTPOperations<'a> {
 
             let name = path.file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("unknown")
+                .ok_or_else(|| SSHError::FileTransferError(format!("Failed to extract filename from path: {:?}", path)))?
                 .to_string();
 
             // Format timestamp as RFC3339 string
@@ -309,9 +326,14 @@ impl<'a> SFTPOperations<'a> {
                 "unknown".to_string()
             };
 
+            let size = stat.size.ok_or_else(|| {
+                crate::log_error!(category: "SFTP", message: "File size unavailable", details: "File: {:?}", path);
+                SSHError::FileTransferError(format!("File size not available for: {:?}", path))
+            })?;
+
             files.push(crate::types::OutputFile {
                 name,
-                size: stat.size.unwrap_or(0),
+                size,
                 modified_at,
             });
         }
@@ -366,15 +388,29 @@ impl<'a> SFTPOperations<'a> {
         let name = Path::new(remote_path)
             .file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or("unknown")
+            .ok_or_else(|| SSHError::FileTransferError(format!("Failed to extract filename from path: {}", remote_path)))?
             .to_string();
+
+        let size = if stat.is_dir() {
+            0
+        } else {
+            stat.size.ok_or_else(|| {
+                crate::log_error!(category: "SFTP", message: "File size unavailable", details: "File: {}", remote_path);
+                SSHError::FileTransferError(format!("File size not available for: {}", remote_path))
+            })?
+        };
+
+        let permissions = stat.perm.ok_or_else(|| {
+            crate::log_error!(category: "SFTP", message: "File permissions unavailable", details: "File: {}", remote_path);
+            SSHError::FileTransferError(format!("File permissions not available for: {}", remote_path))
+        })?;
 
         Ok(RemoteFileInfo {
             name,
             path: remote_path.to_string(),
-            size: stat.size.unwrap_or(0),
+            size,
             is_directory: stat.is_dir(),
-            permissions: stat.perm.unwrap_or(0),
+            permissions,
             modified_time: stat.mtime,
         })
     }
