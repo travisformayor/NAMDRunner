@@ -65,14 +65,11 @@ pub fn run() {
             commands::jobs::delete_job,
             commands::jobs::refetch_slurm_logs,
             // File management
-            commands::files::detect_file_type,
             commands::files::select_input_file,
-            commands::files::upload_job_files,
             commands::files::download_job_output,
             commands::files::download_all_outputs,
             commands::files::download_job_input,
             commands::files::download_all_inputs,
-            commands::files::list_job_files,
             // Template management
             commands::templates::list_templates,
             commands::templates::get_template,
