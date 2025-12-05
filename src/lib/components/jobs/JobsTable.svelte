@@ -66,7 +66,7 @@
 
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
 
   function formatWallTime(job: JobInfo): string {
@@ -202,7 +202,7 @@
   }
 
   .sort-header:hover {
-    background-color: rgba(243, 244, 246, 0.5); /* hover:bg-muted/50 */
+    background-color: var(--namd-bg-secondary);
   }
 
   .sort-header.active {
@@ -249,6 +249,7 @@
   .id-text {
     font-family: var(--namd-font-mono);
     color: var(--namd-text-secondary);
+    font-size: var(--namd-font-size-xs);
   }
 
   .walltime-text {
@@ -259,10 +260,6 @@
   .date-text {
     color: var(--namd-text-secondary);
     font-size: var(--namd-font-size-sm);
-  }
-
-  .id-text {
-    font-size: var(--namd-font-size-xs);
   }
 
   .empty-table {

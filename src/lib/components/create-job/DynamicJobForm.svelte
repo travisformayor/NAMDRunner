@@ -92,7 +92,6 @@
       name: string;
       path: string;
       size: number;
-      file_type: string;
     } | null;
 
     if (selected) {
@@ -287,7 +286,7 @@
     <div class="form-actions">
       <button
         type="button"
-        class="btn btn-secondary"
+        class="namd-button namd-button--secondary"
         on:click={handleValidate}
         disabled={isValidating}
       >
@@ -309,7 +308,7 @@
   .form-section {
     margin-bottom: 2rem;
     padding-bottom: 2rem;
-    border-bottom: 1px solid var(--border-color, #e0e0e0);
+    border-bottom: 1px solid var(--namd-border);
   }
 
   .form-section:last-child {
@@ -319,11 +318,11 @@
   .form-section h3 {
     margin: 0 0 0.5rem 0;
     font-size: 1.25rem;
-    color: var(--text-primary, #333);
+    color: var(--namd-text-primary);
   }
 
   .section-description {
-    color: var(--text-secondary, #666);
+    color: var(--namd-text-secondary);
     margin-bottom: 1.5rem;
     font-size: 0.875rem;
   }
@@ -340,11 +339,11 @@
     display: block;
     margin-bottom: 0.5rem;
     font-size: 0.875rem;
-    color: var(--text-primary, #333);
+    color: var(--namd-text-primary);
   }
 
   .required-mark {
-    color: var(--error, #d32f2f);
+    color: var(--namd-error);
     margin-left: 0.25rem;
   }
 
@@ -379,13 +378,13 @@
   .help-text {
     margin: 0.25rem 0 0 0;
     font-size: 0.75rem;
-    color: var(--text-secondary, #666);
+    color: var(--namd-text-secondary);
   }
 
   .empty-state {
     text-align: center;
     padding: 3rem;
-    color: var(--text-secondary, #666);
+    color: var(--namd-text-secondary);
   }
 
   .form-actions {

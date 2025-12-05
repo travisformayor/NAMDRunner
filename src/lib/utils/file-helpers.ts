@@ -51,18 +51,6 @@ export function getFileIcon(extensionOrType: string): string {
   return getFileTypeInfo(extensionOrType).icon;
 }
 
-export function getTypeLabel(extensionOrType: string): string {
-  return getFileTypeInfo(extensionOrType).label;
-}
-
-export function getTypeColor(extensionOrType: string): string {
-  return getFileTypeInfo(extensionOrType).color;
-}
-
-export function getFileDescription(extensionOrType: string): string {
-  return getFileTypeInfo(extensionOrType).description;
-}
-
 export function getFileExtension(filename: string): string {
   return filename.split('.').pop()?.toLowerCase() || 'other';
 }
@@ -74,7 +62,7 @@ export function formatFileSize(bytes: number): string {
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
 export function getStatusBadgeClass(status: string): string {
@@ -125,15 +113,5 @@ export function getStatusInfo(status: string) {
         class: 'unknown',
         icon: '❓'
       };
-  }
-}
-
-export function formatMemory(gb: number): string {
-  if (gb >= 1024) {
-    return `${(gb / 1024).toFixed(1)}TB`;
-  } else if (gb >= 1) {
-    return `${gb.toFixed(gb % 1 === 0 ? 0 : 1)}GB`;
-  } else {
-    return `${(gb * 1024).toFixed(0)}MB`;
   }
 }

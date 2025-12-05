@@ -66,8 +66,8 @@
       cores: resourceConfig.cores,
       memory: resourceConfig.memory,
       walltime: resourceConfig.walltime,
-      partition: resourceConfig.partition || null,
-      qos: resourceConfig.qos || null,
+      partition: resourceConfig.partition,
+      qos: resourceConfig.qos,
     });
 
     if (result.success && result.data) {
@@ -274,7 +274,7 @@
 
   .preset-pill.selected {
     border-color: var(--namd-primary);
-    background-color: rgba(59, 130, 246, 0.05);
+    background-color: var(--namd-primary-bg);
     box-shadow: var(--namd-shadow-md);
   }
 
@@ -329,12 +329,12 @@
 
   .validation-bar.valid {
     border-color: var(--namd-success);
-    background: rgba(46, 125, 50, 0.05);
+    background: var(--namd-success-bg);
   }
 
   .validation-bar.invalid {
     border-color: var(--namd-error);
-    background: rgba(220, 38, 38, 0.05);
+    background: var(--namd-error-bg);
   }
 
   .validation-status {

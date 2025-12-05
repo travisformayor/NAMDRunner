@@ -175,12 +175,12 @@ This action cannot be undone."
   }
 
   .error-banner {
-    background-color: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #dc2626;
-    padding: 12px;
-    border-radius: 6px;
-    font-size: 14px;
+    background-color: var(--namd-error-bg);
+    border: 1px solid var(--namd-error-border);
+    color: var(--namd-error);
+    padding: var(--namd-spacing-sm);
+    border-radius: var(--namd-border-radius-sm);
+    font-size: var(--namd-font-size-sm);
   }
 
   .back-button {

@@ -15,11 +15,7 @@
     }
 
     // Use cached logs from database
-    if (job.slurm_stdout !== undefined && job.slurm_stdout !== null) {
-      return job.slurm_stdout || '(No output)';
-    }
-
-    return 'Logs are being fetched from the server automatically...';
+    return job.slurm_stdout ?? 'Logs are being fetched from the server automatically...';
   }
 
   function getStderrContent(): string {
@@ -28,11 +24,7 @@
     }
 
     // Use cached logs from database
-    if (job.slurm_stderr !== undefined && job.slurm_stderr !== null) {
-      return job.slurm_stderr || '(No errors)';
-    }
-
-    return 'Logs are being fetched from the server automatically...';
+    return job.slurm_stderr ?? 'Logs are being fetched from the server automatically...';
   }
 
   function copyLogs() {

@@ -82,21 +82,6 @@ export const billingRates = derived(
 );
 
 /**
- * Get QOS options valid for a specific partition (reactive store)
- */
-export function getQosForPartitionStore(partitionId: string) {
-  return derived(
-    clusterCapabilitiesStore,
-    $config => {
-      if (!$config) return [];
-      return $config.qos_options.filter(qos =>
-        qos.valid_partitions.includes(partitionId)
-      );
-}
-  );
-}
-
-/**
  * Get QOS options valid for a specific partition (non-reactive)
  */
 export function getQosForPartition(partitionId: string): QosSpec[] {
@@ -105,23 +90,6 @@ export function getQosForPartition(partitionId: string): QosSpec[] {
   return config.qos_options.filter(qos =>
     qos.valid_partitions.includes(partitionId)
   );
-}
-
-/**
- * Get a specific partition by ID
- */
-export function getPartition(partitionId: string): PartitionSpec | null {
-  const config = get(clusterCapabilitiesStore);
-  if (!config) return null;
-  return config.partitions.find(p => p.id === partitionId) ?? null;
-}
-
-/**
- * Get all partitions (non-reactive helper)
- */
-export function getAllPartitions(): PartitionSpec[] {
-  const config = get(clusterCapabilitiesStore);
-  return config?.partitions ?? [];
 }
 
 /**
@@ -161,24 +129,6 @@ export function walltimeToHours(walltime: string): number {
   return hours + minutes / 60 + seconds / 3600;
 }
 
-/**
- * Suggest optimal QOS based on walltime and partition via backend
- * Backend is the single source of truth for QoS selection rules
- */
-export async function suggestQos(walltimeHours: number, partitionId: string): Promise<string> {
-  try {
-    return await invoke<string>('suggest_qos_for_partition', {
-      walltime_hours: walltimeHours,
-      partition_id: partitionId
-    });
-  } catch (error) {
-    // Fallback to default QoS
-    const config = get(clusterCapabilitiesStore);
-    const validQos = getQosForPartition(partitionId);
-    const defaultQos = validQos.find(q => q.is_default);
-    return defaultQos?.id || validQos[0]?.id || (partitionId ? 'normal' : 'normal');
-  }
-}
 
 /**
  * Estimate queue time based on resources and partition via backend

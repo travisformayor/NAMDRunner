@@ -62,8 +62,8 @@
         cores: resourceConfig.cores,
         memory: resourceConfig.memory,
         walltime: resourceConfig.walltime,
-        partition: resourceConfig.partition || null,
-        qos: resourceConfig.qos || null,
+        partition: resourceConfig.partition,
+        qos: resourceConfig.qos,
       },
     });
 

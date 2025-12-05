@@ -125,11 +125,11 @@
   }
 
   .warning-banner {
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
-    background: var(--warning-light, #fff3cd);
-    border: 1px solid var(--warning, #ffc107);
-    color: var(--warning-dark, #856404);
+    padding: var(--namd-spacing-md);
+    border-radius: var(--namd-border-radius-sm);
+    margin-bottom: var(--namd-spacing-lg);
+    background: var(--namd-warning-bg);
+    border: 1px solid var(--namd-warning-border);
+    color: var(--namd-warning-fg);
   }
 </style>

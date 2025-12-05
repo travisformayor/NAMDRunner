@@ -64,10 +64,11 @@ function createJobsStore() {
         const result = await invoke<ApiResult<JobInfo[]>>('get_all_jobs');
 
         if (result.success && result.data) {
+          const jobs = result.data;
           update(state => ({
             ...state,
-            jobs: result.data || [],
-            hasEverSynced: !!(result.data && result.data.length > 0)
+            jobs,
+            hasEverSynced: jobs.length > 0
           }));
         }
       } catch (error) {
@@ -145,18 +146,12 @@ function createJobsStore() {
 
         if (result.success && result.data) {
           // Update progress to completion
+          const newJob = result.data;
           update(state => ({
             ...state,
-            creationProgress: { message: 'Job created successfully!', isActive: false }
+            creationProgress: { message: 'Job created successfully!', isActive: false },
+            jobs: [...state.jobs, newJob]
           }));
-
-          // Add the returned job directly to the store (no second backend call)
-          if (result.data) {
-            update(state => ({
-              ...state,
-              jobs: [...state.jobs, result.data as JobInfo]
-            }));
-          }
 
           return result;
         } else {

@@ -70,13 +70,6 @@ export interface FileUpload {
   remote_name: string;
 }
 
-export interface RemoteFile {
-  name: string;           // Display name (just filename)
-  path: string;           // Full relative path from job root (e.g., "outputs/sim.dcd")
-  size: number;
-  modified_at: Timestamp;
-  file_type: 'input' | 'output' | 'config' | 'log';
-}
 
 // Response DTOs for multi-field command responses
 export interface JobSubmissionData {
@@ -126,15 +119,6 @@ export interface SyncJobsResult {
   jobs: JobInfo[];           // Complete job list after sync
   jobs_updated: number;       // Number of jobs updated during sync
   errors: string[];
-}
-
-export interface UploadResult {
-  success: boolean;
-  uploaded_files?: string[];
-  failed_uploads?: Array<{
-    file_name: string;
-    error: string;
-  }>;
 }
 
 // Cluster Capabilities (from backend)
@@ -218,12 +202,4 @@ export interface AppInitializationData {
   capabilities: ClusterCapabilities;
   templates: TemplateSummary[];
   jobs: JobInfo[];
-}
-
-// Error handling
-export interface NAMDRunnerError {
-  category: 'Network' | 'Authentication' | 'Validation' | 'FileSystem' | 'SLURM' | 'Internal';
-  message: string;
-  details?: string;
-  retryable: boolean;
 }

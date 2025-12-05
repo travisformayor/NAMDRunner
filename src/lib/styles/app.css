@@ -678,11 +678,6 @@ html, body {
   color: var(--namd-success-fg);
 }
 
-.namd-file-type-analysis {
-  background-color: var(--namd-warning-bg);
-  color: var(--namd-warning-fg);
-}
-
 .namd-file-type-checkpoint {
   background-color: var(--namd-error-bg);
   color: var(--namd-error-fg);

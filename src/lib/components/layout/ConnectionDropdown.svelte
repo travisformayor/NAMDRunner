@@ -62,7 +62,7 @@
       const success = await sessionActions.connect(host, username, password);
       if (success) {
         closeDropdown();
-        password = ''; // Clear password on successful connection
+        password = '';
       } else {
         // Connection failed, checking for error message
         // Get detailed error from session store instead of generic message
@@ -219,19 +219,19 @@
   }
 
   .status-dot.fill-green-600 {
-    fill: #059669;
+    fill: var(--namd-success);
   }
 
   .status-dot.fill-red-600 {
-    fill: #dc2626;
+    fill: var(--namd-error);
   }
 
   .status-dot.fill-yellow-600 {
-    fill: #d97706;
+    fill: var(--namd-warning);
   }
 
   .status-dot.fill-gray-600 {
-    fill: #4b5563;
+    fill: var(--namd-text-muted);
   }
 
   .status-label {
@@ -239,19 +239,19 @@
   }
 
   .status-label.text-green-600 {
-    color: #059669;
+    color: var(--namd-success);
   }
 
   .status-label.text-red-600 {
-    color: #dc2626;
+    color: var(--namd-error);
   }
 
   .status-label.text-yellow-600 {
-    color: #d97706;
+    color: var(--namd-warning);
   }
 
   .status-label.text-gray-600 {
-    color: #4b5563;
+    color: var(--namd-text-muted);
   }
 
   .chevron {
@@ -267,7 +267,7 @@
     background-color: var(--namd-bg-primary);
     border: 1px solid var(--namd-border);
     border-radius: var(--namd-border-radius);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--namd-shadow-lg);
     padding: var(--namd-spacing-md);
     margin-top: var(--namd-spacing-sm);
     z-index: 50;
@@ -292,7 +292,7 @@
   }
 
   .text-green-600 {
-    color: #059669;
+    color: var(--namd-success);
   }
 
   .connection-details {
@@ -373,10 +373,10 @@
 
   .connection-error {
     padding: var(--namd-spacing-sm);
-    background-color: rgba(220, 38, 38, 0.1);
-    border: 1px solid rgba(220, 38, 38, 0.3);
+    background-color: var(--namd-error-bg);
+    border: 1px solid var(--namd-error-border);
     border-radius: var(--namd-border-radius-sm);
-    color: #dc2626;
+    color: var(--namd-error);
     font-size: var(--namd-font-size-sm);
     text-align: center;
   }
