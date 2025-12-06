@@ -14,6 +14,21 @@ pub struct Template {
     pub updated_at: String,
 }
 
+impl Template {
+    /// Get list of FileUpload variable keys from template
+    pub fn get_file_upload_keys(&self) -> Vec<String> {
+        self.variables
+            .iter()
+            .filter_map(|(key, var_def)| {
+                match var_def.var_type {
+                    VariableType::FileUpload { .. } => Some(key.clone()),
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+}
+
 /// Variable definition describes a template variable's type and constraints
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VariableDefinition {

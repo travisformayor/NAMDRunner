@@ -29,8 +29,6 @@ const sessionStore = writable<SessionState>(initialState);
 // Derived stores for common use cases
 export const connectionState = derived(sessionStore, ($session) => $session.connectionState);
 export const isConnected = derived(sessionStore, ($session) => $session.connectionState === 'Connected');
-export const isConnecting = derived(sessionStore, ($session) => $session.isConnecting);
-export const sessionInfo = derived(sessionStore, ($session) => $session.session_info);
 export const lastError = derived(sessionStore, ($session) => $session.lastError);
 
 // Actions for managing session state

@@ -6,11 +6,13 @@ import type { DatabaseInfo, DatabaseOperationData, ApiResult } from '../types/ap
 interface SettingsState {
   databaseInfo: DatabaseInfo | null;
   loading: boolean;
+  error: string | null;
 }
 
 const initialState: SettingsState = {
   databaseInfo: null,
   loading: false,
+  error: null,
 };
 
 // Create settings store
@@ -20,51 +22,57 @@ function createSettingsStore() {
   return {
     subscribe,
 
-    // Load database information
     async loadDatabaseInfo(): Promise<void> {
-      update(state => ({ ...state, loading: true }));
+      update(state => ({ ...state, loading: true, error: null }));
 
-      const result = await invoke<ApiResult<DatabaseInfo>>('get_database_info');
+      try {
+        const result = await invoke<ApiResult<DatabaseInfo>>('get_database_info');
 
-      if (result.success && result.data) {
-        const { path, size_bytes, job_count } = result.data;
+        if (result.success && result.data) {
+          const { path, size_bytes, job_count } = result.data;
+          update(state => ({
+            ...state,
+            databaseInfo: {
+              path,
+              size_bytes,
+              job_count,
+            },
+            loading: false,
+            error: null,
+          }));
+        } else {
+          update(state => ({
+            ...state,
+            loading: false,
+            error: result.error || 'Failed to load database information',
+          }));
+        }
+      } catch (error) {
         update(state => ({
           ...state,
-          databaseInfo: {
-            path,
-            size_bytes,
-            job_count,
-          },
           loading: false,
+          error: `Error loading database information: ${error}`,
         }));
-      } else {
-        update(state => ({ ...state, loading: false }));
       }
     },
 
-    async backupDatabase() {
-      const result = await invoke<ApiResult<DatabaseOperationData>>('backup_database');
-
-      return result;
-    },
-
-    async restoreDatabase() {
+    async restoreDatabase(): Promise<ApiResult<DatabaseOperationData>> {
       const result = await invoke<ApiResult<DatabaseOperationData>>('restore_database');
 
       if (result.success && result.data) {
         // Reload database info after restore
-        await settingsStore.loadDatabaseInfo();
+        await this.loadDatabaseInfo();
       }
 
       return result;
     },
 
-    async resetDatabase() {
+    async resetDatabase(): Promise<ApiResult<DatabaseOperationData>> {
       const result = await invoke<ApiResult<DatabaseOperationData>>('reset_database');
 
       if (result.success && result.data) {
         // Reload database info after reset
-        await settingsStore.loadDatabaseInfo();
+        await this.loadDatabaseInfo();
       }
 
       return result;
@@ -78,3 +86,4 @@ export const settingsStore = createSettingsStore();
 // Derived stores for convenience
 export const databaseInfo = derived(settingsStore, $store => $store.databaseInfo);
 export const settingsLoading = derived(settingsStore, $store => $store.loading);
+export const settingsError = derived(settingsStore, $store => $store.error);

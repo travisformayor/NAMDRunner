@@ -216,19 +216,8 @@ export const templateStore = createTemplateStore();
 
 // Derived stores for convenience
 export const templates = derived(templateStore, $store => $store.templates);
-export const currentTemplate = derived(templateStore, $store => $store.currentTemplate);
 export const templatesLoading = derived(templateStore, $store => $store.loading);
 export const templatesError = derived(templateStore, $store => $store.error);
-
-// Derived: Built-in templates
-export const builtInTemplates = derived(templates, $templates =>
-  $templates.filter(t => t.is_builtin)
-);
-
-// Derived: User-created templates
-export const userTemplates = derived(templates, $templates =>
-  $templates.filter(t => !t.is_builtin)
-);
 
 /**
  * Validate template values

@@ -349,9 +349,6 @@ export const lastSyncTime = derived(jobsStore, $store => $store.lastSyncTime);
 export const hasEverSynced = derived(jobsStore, $store => $store.hasEverSynced);
 export const isSyncing = derived(jobsStore, $store => $store.isSyncing);
 
-// Progress tracking stores
-export const creationProgress = derived(jobsStore, $store => $store.creationProgress);
-export const submissionProgress = derived(jobsStore, $store => $store.submissionProgress);
 
 export const jobsByStatus = derived(jobs, $jobs => {
   const grouped = {

@@ -49,13 +49,6 @@ export async function initClusterConfig(): Promise<void> {
   }
 }
 
-/**
- * Refresh cluster configuration from backend
- * Useful if config changes (future user-editable settings)
- */
-export async function refreshClusterConfig(): Promise<void> {
-  return initClusterConfig();
-}
 
 // Derived store: all partitions (for dropdowns)
 export const partitions = derived(
@@ -81,16 +74,6 @@ export const billingRates = derived(
   $config => $config?.billing_rates
 );
 
-/**
- * Get QOS options valid for a specific partition (non-reactive)
- */
-export function getQosForPartition(partitionId: string): QosSpec[] {
-  const config = get(clusterCapabilitiesStore);
-  if (!config) return [];
-  return config.qos_options.filter(qos =>
-    qos.valid_partitions.includes(partitionId)
-  );
-}
 
 /**
  * Calculate estimated job cost via backend
@@ -203,14 +186,7 @@ export function setClusterCapabilities(capabilities: ClusterCapabilities): void 
 export const clusterConfig = {
   subscribe: clusterCapabilitiesStore.subscribe,
   init: initClusterConfig,
-  refresh: refreshClusterConfig,
+  refresh: initClusterConfig,
   set: setClusterCapabilities,
 };
 
-export const isLoaded = {
-  subscribe: isLoadedStore.subscribe
-};
-
-export const loadError = {
-  subscribe: loadErrorStore.subscribe
-};

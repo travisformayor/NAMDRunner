@@ -1,15 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { getName, getVersion } from '@tauri-apps/api/app';
-  import { settingsStore } from '$lib/stores/settings';
+  import { settingsStore, databaseInfo, settingsLoading, settingsError } from '$lib/stores/settings';
+  import type { ApiResult, DatabaseOperationData } from '$lib/types/api';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import AlertDialog from '../ui/AlertDialog.svelte';
   import { jobsStore } from '$lib/stores/jobs';
   import { templateStore } from '$lib/stores/templateStore';
-
-  // Store subscriptions
-  $: databaseInfo = $settingsStore.databaseInfo;
-  $: isLoading = $settingsStore.loading;
 
   // App information state for about section
   let appName = '';
@@ -34,7 +32,7 @@
 
   // Load database info and app metadata on mount
   onMount(async () => {
-    settingsStore.loadDatabaseInfo();
+    await settingsStore.loadDatabaseInfo();
 
     // Fetch app metadata from Tauri APIs
     appName = await getName();
@@ -52,7 +50,7 @@
 
   // Backup handler
   async function handleBackup() {
-    const result = await settingsStore.backupDatabase();
+    const result = await invoke<ApiResult<DatabaseOperationData>>('backup_database');
 
     if (result.success) {
       // Success
@@ -103,21 +101,25 @@
   }
 </script>
 
-<div class="settings-page">
+<div class="settings-page namd-page">
   <div class="settings-section">
     <h2>Database</h2>
 
-    {#if isLoading}
+    {#if $settingsLoading}
       <p class="loading">Loading database information...</p>
-    {:else if databaseInfo}
+    {:else if $settingsError}
+      <div class="error">
+        <strong>Error:</strong> {$settingsError}
+      </div>
+    {:else if $databaseInfo}
       <div class="db-info">
         <div class="info-row">
           <span class="label">Location:</span>
-          <code class="path">{databaseInfo.path}</code>
+          <code class="path">{$databaseInfo.path}</code>
         </div>
         <div class="info-row">
           <span class="label">Size:</span>
-          <span class="value">{formatBytes(databaseInfo.size_bytes)}</span>
+          <span class="value">{formatBytes($databaseInfo.size_bytes)}</span>
         </div>
       </div>
 
@@ -129,7 +131,7 @@
         <button class="namd-button namd-button--destructive" on:click={handleResetClick}> Reset Database </button>
       </div>
     {:else}
-      <p class="error">Failed to load database information</p>
+      <p class="error">No database information available</p>
     {/if}
   </div>
 

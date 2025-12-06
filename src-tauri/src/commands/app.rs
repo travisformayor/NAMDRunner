@@ -9,13 +9,13 @@ pub async fn initialize_app() -> ApiResult<AppInitializationData> {
 
     let capabilities = crate::cluster::get_cluster_capabilities();
 
+    // Ensure default templates are loaded
+    if let Err(e) = crate::database::ensure_default_templates_loaded() {
+        log_error!(category: "Initialization", message: "Failed to ensure default templates", details: "{}", e);
+    }
+
     // Load templates with error handling
-    let templates = match crate::database::with_database(|db| {
-        if let Err(e) = crate::database::ensure_default_templates_loaded() {
-            log_error!(category: "Initialization", message: "Failed to ensure default templates", details: "{}", e);
-        }
-        db.list_templates()
-    }) {
+    let templates = match crate::database::with_database(|db| db.list_templates()) {
         Ok(t) => t,
         Err(e) => {
             log_error!(category: "Initialization", message: "Templates unavailable", details: "Database error: {}", e, show_toast: true);
