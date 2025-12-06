@@ -194,6 +194,7 @@ export interface ValidationResult {
   issues: string[];
   warnings: string[];
   suggestions: string[];
+  field_errors?: Record<string, string>;
 }
 
 // App initialization data

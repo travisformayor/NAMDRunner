@@ -14,7 +14,6 @@ pub async fn select_input_file(_app: AppHandle) -> Result<Option<SelectedFile>, 
     use rfd::FileDialog;
 
     let file = FileDialog::new()
-        .add_filter("NAMD Files", &["pdb", "psf", "prm", "exb"])
         .set_title("Select NAMD Input File")
         .pick_file();
 

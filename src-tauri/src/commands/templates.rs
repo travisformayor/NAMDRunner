@@ -152,6 +152,7 @@ pub async fn validate_template_values(
                 issues: vec![e.to_string()],
                 warnings: vec![],
                 suggestions: vec![],
+                field_errors: None,
             };
         }
     };

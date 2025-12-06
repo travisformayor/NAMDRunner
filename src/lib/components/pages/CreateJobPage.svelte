@@ -7,10 +7,12 @@
   import { partitions, allQosOptions } from '../../stores/clusterConfig';
   import CreateJobTabs from '../create-job/CreateJobTabs.svelte';
   import type { CreateJobParams } from '../../types/api';
+  import type { Template } from '$lib/types/template';
 
   // Job configuration
   let jobName = '';
   let templateId = '';
+  let template: Template | null = null;
   let templateValues: Record<string, any> = {};
 
   // Resource configuration
@@ -26,9 +28,7 @@
   let errors: Record<string, string> = {};
   let isSubmitting = false;
   let uploadProgress: Map<string, { percentage: number }> = new Map();
-  let uploadFileList: string[] = [];
   let unlistenUpload: (() => void) | undefined;
-  let unlistenFileList: (() => void) | undefined;
 
   // Get defaults from cluster config
   $: defaultPartition = $partitions.find(p => p.is_default) || $partitions[0];
@@ -40,12 +40,6 @@
       resourceConfig.partition = defaultPartition.id;
       resourceConfig.qos = defaultQos.id;
     }
-
-    // Listen for file upload list (emitted before uploads start)
-    unlistenFileList = await listen('file-upload-list', (event) => {
-      const fileList = event.payload as string[];
-      uploadFileList = fileList;
-    });
 
     // Listen for file upload progress
     unlistenUpload = await listen('file-upload-progress', (event) => {
@@ -59,9 +53,6 @@
   onDestroy(() => {
     if (unlistenUpload) {
       unlistenUpload();
-    }
-    if (unlistenFileList) {
-      unlistenFileList();
     }
   });
 
@@ -105,11 +96,11 @@
     <CreateJobTabs
       bind:jobName
       bind:templateId
+      bind:template
       bind:templateValues
       bind:resourceConfig
       bind:errors
       {uploadProgress}
-      {uploadFileList}
       onSubmit={handleSubmit}
       onCancel={handleCancel}
       {isSubmitting}

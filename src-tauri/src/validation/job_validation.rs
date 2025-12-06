@@ -13,6 +13,8 @@ pub struct ValidationResult {
     pub issues: Vec<String>,
     pub warnings: Vec<String>,
     pub suggestions: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_errors: Option<std::collections::HashMap<String, String>>,
 }
 
 impl ValidationResult {
@@ -22,15 +24,17 @@ impl ValidationResult {
             issues: vec![],
             warnings: vec![],
             suggestions: vec![],
+            field_errors: Some(std::collections::HashMap::new()),
         }
     }
 
-    pub fn invalid(issues: Vec<String>) -> Self {
+    pub fn invalid(issues: Vec<String>, field_errors: std::collections::HashMap<String, String>) -> Self {
         ValidationResult {
             is_valid: false,
             issues,
             warnings: vec![],
             suggestions: vec![],
+            field_errors: Some(field_errors),
         }
     }
 
@@ -52,22 +56,29 @@ pub fn validate_resource_allocation(
     let mut issues = Vec::new();
     let mut warnings = Vec::new();
     let mut suggestions = Vec::new();
+    let mut field_errors = std::collections::HashMap::new();
 
     // Validate cores
     if config.cores == 0 {
-        issues.push("Cores must be greater than 0".to_string());
+        let error = "Cores must be greater than 0".to_string();
+        issues.push(error.clone());
+        field_errors.insert("cores".to_string(), error);
     }
 
     // Parse and validate memory
     let memory_gb = match config.parse_memory_gb() {
         Ok(gb) => {
             if gb <= 0.0 {
-                issues.push("Memory must be greater than 0".to_string());
+                let error = "Memory must be greater than 0".to_string();
+                issues.push(error.clone());
+                field_errors.insert("memory".to_string(), error);
             }
             gb
         }
         Err(e) => {
+            let error = format!("{}", e);
             issues.push(format!("Memory: {}", e));
+            field_errors.insert("memory".to_string(), error);
             0.0  // Continue validation with default to collect all issues
         }
     };
@@ -76,12 +87,16 @@ pub fn validate_resource_allocation(
     let walltime_hours = match config.parse_walltime_hours() {
         Ok(hours) => {
             if hours <= 0.0 {
-                issues.push("Walltime must be greater than 0".to_string());
+                let error = "Walltime must be greater than 0".to_string();
+                issues.push(error.clone());
+                field_errors.insert("walltime".to_string(), error);
             }
             hours
         }
         Err(e) => {
+            let error = format!("{}", e);
             issues.push(format!("Walltime: {}", e));
+            field_errors.insert("walltime".to_string(), error);
             0.0  // Continue validation with default to collect all issues
         }
     };
@@ -90,26 +105,38 @@ pub fn validate_resource_allocation(
     let limits = match get_partition_limits(partition_id) {
         Some(l) => l,
         None => {
-            issues.push(format!("Unknown partition: {}", partition_id));
-            return ValidationResult { is_valid: false, issues, warnings, suggestions };
+            let error = format!("Unknown partition: {}", partition_id);
+            issues.push(error.clone());
+            field_errors.insert("partition".to_string(), error);
+            return ValidationResult {
+                is_valid: false,
+                issues,
+                warnings,
+                suggestions,
+                field_errors: Some(field_errors),
+            };
         }
     };
 
     // Validate cores against partition limit
     if config.cores > limits.max_cores {
-        issues.push(format!(
+        let error = format!(
             "Cores ({}) exceeds partition '{}' limit ({})",
             config.cores, partition_id, limits.max_cores
-        ));
+        );
+        issues.push(error.clone());
+        field_errors.insert("cores".to_string(), error);
     }
 
     // Validate memory against partition limit
     let max_memory = config.cores as f64 * limits.max_memory_per_core;
     if memory_gb > max_memory {
-        issues.push(format!(
+        let error = format!(
             "Memory ({:.1}GB) exceeds limit for {} cores on partition '{}' ({:.1}GB)",
             memory_gb, config.cores, partition_id, max_memory
-        ));
+        );
+        issues.push(error.clone());
+        field_errors.insert("memory".to_string(), error);
     }
 
     // Validate QOS
@@ -117,21 +144,27 @@ pub fn validate_resource_allocation(
     if let Some(qos) = valid_qos.iter().find(|q| q.id == qos_id) {
         // Validate walltime against QOS limit
         if walltime_hours > qos.max_walltime_hours as f64 {
-            issues.push(format!(
+            let error = format!(
                 "Walltime ({:.1}h) exceeds QOS '{}' limit ({}h)",
                 walltime_hours, qos_id, qos.max_walltime_hours
-            ));
+            );
+            issues.push(error.clone());
+            field_errors.insert("walltime".to_string(), error);
         }
 
         // QOS-specific validation
         if qos_id == "mem" && memory_gb < 256.0 {
-            issues.push("QOS 'mem' requires at least 256GB memory".to_string());
+            let error = "QOS 'mem' requires at least 256GB memory".to_string();
+            issues.push(error.clone());
+            field_errors.insert("qos".to_string(), error);
         }
     } else {
-        issues.push(format!(
+        let error = format!(
             "QOS '{}' is not valid for partition '{}'",
             qos_id, partition_id
-        ));
+        );
+        issues.push(error.clone());
+        field_errors.insert("qos".to_string(), error);
     }
 
     // Efficiency warnings
@@ -161,6 +194,7 @@ pub fn validate_resource_allocation(
         issues,
         warnings,
         suggestions,
+        field_errors: if field_errors.is_empty() { None } else { Some(field_errors) },
     }
 }
 
@@ -170,17 +204,24 @@ pub async fn validate_complete_job_config(params: ValidateJobConfigParams) -> Va
     let mut issues = Vec::new();
     let mut warnings = Vec::new();
     let mut suggestions = Vec::new();
+    let mut field_errors = std::collections::HashMap::new();
 
     // Validate job name
     if params.job_name.trim().is_empty() {
-        issues.push("Job name is required".to_string());
+        let error = "Job name is required".to_string();
+        issues.push(error.clone());
+        field_errors.insert("job_name".to_string(), error);
     } else if let Err(e) = input::sanitize_job_id(&params.job_name) {
+        let error = format!("{}", e);
         issues.push(format!("Job name invalid: {}", e));
+        field_errors.insert("job_name".to_string(), error);
     }
 
     // Validate template selection
     if params.template_id.is_empty() {
-        issues.push("Template selection is required".to_string());
+        let error = "Template selection is required".to_string();
+        issues.push(error.clone());
+        field_errors.insert("template".to_string(), error);
     }
 
     // Validate template values (if template selected)
@@ -195,9 +236,14 @@ pub async fn validate_complete_job_config(params: ValidateJobConfigParams) -> Va
                 issues.extend(template_validation.issues);
                 warnings.extend(template_validation.warnings);
                 suggestions.extend(template_validation.suggestions);
+                if let Some(template_field_errors) = template_validation.field_errors {
+                    field_errors.extend(template_field_errors);
+                }
             }
             Err(e) => {
+                let error = format!("{}", e);
                 issues.push(format!("Template error: {}", e));
+                field_errors.insert("template".to_string(), error);
             }
         }
     }
@@ -217,12 +263,16 @@ pub async fn validate_complete_job_config(params: ValidateJobConfigParams) -> Va
     issues.extend(resource_validation.issues);
     warnings.extend(resource_validation.warnings);
     suggestions.extend(resource_validation.suggestions);
+    if let Some(resource_field_errors) = resource_validation.field_errors {
+        field_errors.extend(resource_field_errors);
+    }
 
     ValidationResult {
         is_valid: issues.is_empty(),
         issues,
         warnings,
         suggestions,
+        field_errors: if field_errors.is_empty() { None } else { Some(field_errors) },
     }
 }
 

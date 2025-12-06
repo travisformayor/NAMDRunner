@@ -45,23 +45,7 @@ pub fn validate_upload_file(file: &FileUpload) -> Result<()> {
         return Err(anyhow!("Invalid remote filename"));
     }
 
-    // File type validation for NAMD files (warning only for non-standard types)
-    let extension = local_path.extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-
-    match extension.as_str() {
-        "pdb" | "psf" | "prm" | "rtf" | "namd" | "conf" | "dat" | "coor" | "vel" | "xsc" | "exb" => {
-            // Valid NAMD file types
-            Ok(())
-        }
-        _ => {
-            // Allow other file types but warn
-            log::warn!("Uploading file with non-standard NAMD extension: {}", extension);
-            Ok(())
-        }
-    }
+    Ok(())
 }
 
 /// Download a single file from a job

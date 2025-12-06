@@ -1,12 +1,14 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import type { ApiResult } from '$lib/types/api';
+  import type { Template } from '$lib/types/template';
   import DynamicJobForm from './DynamicJobForm.svelte';
   import PreviewModal from '../ui/PreviewModal.svelte';
 
   export let jobName: string;
   export let templateId: string;
   export let templateValues: Record<string, any>;
+  export let template: Template | null = null;
   export let errors: Record<string, string>;
 
   let showPreview = false;
@@ -59,7 +61,7 @@
   </div>
 
   <!-- Template-Based Configuration -->
-  <DynamicJobForm bind:templateId bind:templateValues />
+  <DynamicJobForm bind:templateId bind:templateValues bind:selectedTemplate={template} />
 
   <!-- Preview Button -->
   {#if templateId}

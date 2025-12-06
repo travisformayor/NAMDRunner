@@ -1,6 +1,10 @@
 <script lang="ts">
+  import type { Template } from '$lib/types/template';
+  import { getVariableTypeName } from '$lib/types/template';
+
   export let jobName: string;
   export let templateId: string;
+  export let template: Template | null;
   export let templateValues: Record<string, any>;
   export let resourceConfig: {
     cores: number;
@@ -11,16 +15,30 @@
   };
   export let errors: Record<string, string>;
   export let uploadProgress: Map<string, { percentage: number }>;
-  export let uploadFileList: string[] = [];
   export let onSubmit: () => void;
   export let onCancel: () => void;
   export let isSubmitting: boolean = false;
 
-  // Build file list with progress (backend tells us which files exist)
-  $: filesWithProgress = uploadFileList.map(fileName => ({
-    name: fileName,
-    progress: uploadProgress.get(fileName)?.percentage || 0
-  }));
+  // Filter non-file template values for display
+  $: nonFileValues = Object.entries(templateValues).filter(([key, _value]) => {
+    if (!template) return true;
+    const varDef = template.variables[key];
+    if (!varDef) return true;
+    return getVariableTypeName(varDef.var_type) !== 'FileUpload';
+  });
+
+  // Build file list from template variables
+  $: fileValues = Object.entries(templateValues)
+    .filter(([key, _value]) => {
+      if (!template) return false;
+      const varDef = template.variables[key];
+      if (!varDef) return false;
+      return getVariableTypeName(varDef.var_type) === 'FileUpload';
+    })
+    .map(([key, value]) => ({
+      name: typeof value === 'string' ? value.split('/').pop() || value : String(value),
+      progress: uploadProgress.get(key)?.percentage || 0
+    }));
 </script>
 
 <div class="namd-tab-panel">
@@ -104,13 +122,11 @@
             <span class="error-indicator">⚠</span>
           {/if}
         </div>
-        {#each Object.entries(templateValues) as [key, value]}
-          {#if typeof value !== 'string' || !value.includes('/')}
-            <div class="review-item">
-              <span class="review-label">{key}:</span>
-              <span class="review-value">{value}</span>
-            </div>
-          {/if}
+        {#each nonFileValues as [key, value]}
+          <div class="review-item">
+            <span class="review-label">{key}:</span>
+            <span class="review-value">{value}</span>
+          </div>
         {/each}
       </div>
     </div>
@@ -118,9 +134,9 @@
     <!-- Input Files with Upload Progress -->
     <div class="review-section">
       <h4 class="review-section-title">Input Files</h4>
-      {#if filesWithProgress.length > 0}
+      {#if fileValues.length > 0}
         <div class="namd-file-list">
-          {#each filesWithProgress as file}
+          {#each fileValues as file}
             <div class="namd-file-item">
               <!-- Animated progress background -->
               <div class="namd-file-progress-bg" style="width: {file.progress}%"></div>

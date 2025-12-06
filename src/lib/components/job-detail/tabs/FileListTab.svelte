@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import type { JobInfo, DownloadInfo, ApiResult } from '../../../types/api';
-  import { getFileIcon, getFileExtension, formatFileSize } from '../../../utils/file-helpers';
+  import { formatFileSize } from '../../../utils/file-helpers';
   import { isConnected } from '../../../stores/session';
 
   export let job: JobInfo;
@@ -31,14 +31,12 @@
       return job.input_files.map(fileName => ({
         name: fileName,
         path: `${config.pathPrefix}${fileName}`,
-        ext: getFileExtension(fileName),
         size: undefined
       }));
     } else {
       return (job.output_files || []).map(file => ({
         name: file.name,
         path: `${config.pathPrefix}${file.name}`,
-        ext: getFileExtension(file.name),
         size: formatFileSize(file.size)
       }));
     }
@@ -131,7 +129,6 @@
         {#each getFiles() as file}
           <div class="namd-file-item">
             <div class="namd-file-content">
-              <span class="namd-file-icon">{getFileIcon(file.ext)}</span>
               <span class="namd-file-name">{file.name}</span>
               {#if config.showSize && file.size}
                 <span class="namd-file-metadata">{file.size}</span>

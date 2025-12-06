@@ -7,11 +7,14 @@ use crate::validation::job_validation::ValidationResult;
 /// Pure business logic - no database or AppHandle dependencies
 pub fn validate_values(template: &Template, values: &HashMap<String, Value>) -> ValidationResult {
     let mut issues = Vec::new();
+    let mut field_errors = std::collections::HashMap::new();
 
     // Check all template variables have values (all variables are required)
     for (key, var_def) in &template.variables {
         if !values.contains_key(key) {
-            issues.push(format!("Required variable missing: {}", var_def.label));
+            let error = format!("Required variable missing: {}", var_def.label);
+            issues.push(error.clone());
+            field_errors.insert(key.clone(), format!("{} is required", var_def.label));
         }
     }
 
@@ -22,39 +25,55 @@ pub fn validate_values(template: &Template, values: &HashMap<String, Value>) -> 
                 VariableType::Number { min, max, .. } => {
                     if let Some(num) = value.as_f64() {
                         if num < *min {
-                            issues.push(format!("{}: value {} below minimum {}", var_def.label, num, min));
+                            let error = format!("value {} below minimum {}", num, min);
+                            issues.push(format!("{}: {}", var_def.label, error));
+                            field_errors.insert(key.clone(), error);
                         }
                         if num > *max {
-                            issues.push(format!("{}: value {} above maximum {}", var_def.label, num, max));
+                            let error = format!("value {} above maximum {}", num, max);
+                            issues.push(format!("{}: {}", var_def.label, error));
+                            field_errors.insert(key.clone(), error);
                         }
                     } else {
-                        issues.push(format!("{}: expected number, got {:?}", var_def.label, value));
+                        let error = format!("expected number, got {:?}", value);
+                        issues.push(format!("{}: {}", var_def.label, error));
+                        field_errors.insert(key.clone(), error);
                     }
                 }
                 VariableType::Text { .. } => {
                     if !value.is_string() {
-                        issues.push(format!("{}: expected text, got {:?}", var_def.label, value));
+                        let error = format!("expected text, got {:?}", value);
+                        issues.push(format!("{}: {}", var_def.label, error));
+                        field_errors.insert(key.clone(), error);
                     }
                 }
                 VariableType::Boolean { .. } => {
                     if !value.is_boolean() {
-                        issues.push(format!("{}: expected boolean, got {:?}", var_def.label, value));
+                        let error = format!("expected boolean, got {:?}", value);
+                        issues.push(format!("{}: {}", var_def.label, error));
+                        field_errors.insert(key.clone(), error);
                     }
                 }
                 VariableType::FileUpload { extensions } => {
                     if let Some(filename) = value.as_str() {
                         // Check file is provided (not empty)
                         if filename.trim().is_empty() {
-                            issues.push(format!("{}: file is required", var_def.label));
+                            let error = "file is required".to_string();
+                            issues.push(format!("{}: {}", var_def.label, error));
+                            field_errors.insert(key.clone(), error);
                         } else {
                             // Validate file extension
                             let ext_match = extensions.iter().any(|ext| filename.to_lowercase().ends_with(&ext.to_lowercase()));
                             if !ext_match {
-                                issues.push(format!("{}: file '{}' does not match allowed extensions: {:?}", var_def.label, filename, extensions));
+                                let error = format!("file '{}' does not match allowed extensions: {:?}", filename, extensions);
+                                issues.push(format!("{}: {}", var_def.label, error));
+                                field_errors.insert(key.clone(), error);
                             }
                         }
                     } else {
-                        issues.push(format!("{}: expected filename string, got {:?}", var_def.label, value));
+                        let error = format!("expected filename string, got {:?}", value);
+                        issues.push(format!("{}: {}", var_def.label, error));
+                        field_errors.insert(key.clone(), error);
                     }
                 }
             }
@@ -66,6 +85,7 @@ pub fn validate_values(template: &Template, values: &HashMap<String, Value>) -> 
         issues,
         warnings: vec![],
         suggestions: vec![],
+        field_errors: if field_errors.is_empty() { None } else { Some(field_errors) },
     }
 }
 

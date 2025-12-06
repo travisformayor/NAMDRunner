@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { onDestroy } from 'svelte';
   import { templateStore, templatesError } from '$lib/stores/templateStore';
   import type { Template } from '$lib/types/template';
   import type { ApiResult } from '$lib/types/api';
@@ -190,6 +191,12 @@
 
     isGeneratingPreview = false;
   }
+
+  onDestroy(() => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+  });
 </script>
 
 <div class="template-editor">

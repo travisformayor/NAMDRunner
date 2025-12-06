@@ -2,20 +2,15 @@
   import { invoke } from '@tauri-apps/api/core';
   import { extractVariablesFromTemplate } from '$lib/utils/template-utils';
   import { onMount } from 'svelte';
-  import { templates, templateStore, validateTemplateValues } from '$lib/stores/templateStore';
+  import { templates, templateStore } from '$lib/stores/templateStore';
   import type { Template, VariableDefinition } from '$lib/types/template';
   import { getVariableTypeName } from '$lib/types/template';
-  import type { ValidationResult } from '$lib/types/api';
-  import ValidationDisplay from '../ui/ValidationDisplay.svelte';
 
   // Props
   export let templateId: string = '';
   export let templateValues: Record<string, any> = {};
-
-  let selectedTemplate: Template | null = null;
-  let validation: ValidationResult = { is_valid: true, issues: [], warnings: [], suggestions: [] };
+  export let selectedTemplate: Template | null = null;
   let fieldErrors: Record<string, string> = {};
-  let isValidating = false;
   let lastLoadedTemplateId = '';
 
   // Separate variables by type, preserving template text order
@@ -100,33 +95,6 @@
     }
   }
 
-  async function handleValidate() {
-    if (!selectedTemplate) return;
-
-    isValidating = true;
-    validation = await validateTemplateValues(selectedTemplate.id, templateValues);
-
-    // Parse issues to extract field-specific errors
-    fieldErrors = {};
-    for (const error of validation.issues) {
-      // Try to extract field name from error message (format: "FieldLabel: error message")
-      const colonIndex = error.indexOf(':');
-      if (colonIndex > 0) {
-        const fieldLabel = error.substring(0, colonIndex).trim();
-        const errorMsg = error.substring(colonIndex + 1).trim();
-
-        // Find the variable key by label
-        for (const [key, varDef] of Object.entries(selectedTemplate.variables)) {
-          if (varDef.label === fieldLabel) {
-            fieldErrors[key] = errorMsg;
-            break;
-          }
-        }
-      }
-    }
-
-    isValidating = false;
-  }
 
   function getVariableConfig(varDef: VariableDefinition) {
     const typeName = getVariableTypeName(varDef.var_type);
@@ -279,20 +247,6 @@
       </div>
     {/if}
 
-    <!-- Validation Results -->
-    <ValidationDisplay {validation} />
-
-    <!-- Validate Button -->
-    <div class="form-actions">
-      <button
-        type="button"
-        class="namd-button namd-button--secondary"
-        on:click={handleValidate}
-        disabled={isValidating}
-      >
-        {isValidating ? 'Validating...' : 'Validate Configuration'}
-      </button>
-    </div>
   {:else}
     <div class="empty-state">
       <p>Select a template to begin configuring your simulation.</p>
