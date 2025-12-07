@@ -155,7 +155,7 @@ pub async fn execute_job_creation_with_progress(
         let remote_path = crate::ssh::JobDirectoryStructure::full_input_path(&project_dir, &filename);
 
         // Upload file
-        connection_manager.upload_file_with_progress(&local_file_path, &remote_path, Some(app_handle.clone())).await
+        connection_manager.upload_file(&local_file_path, &remote_path, Some(app_handle.clone())).await
             .map_err(|e| {
                 log_error!(category: "Job Creation", message: "Failed to upload file", details: "{}: {}", filename, e);
                 anyhow!("Could not upload file '{}': {}", filename, e)

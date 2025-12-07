@@ -11,7 +11,7 @@ use crate::automations::common;
 /// 3. Updates database with final state
 ///
 /// Called automatically by job_sync when a job reaches terminal state (Completed, Failed, etc.)
-pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
+pub async fn execute_job_completion(job: &mut JobInfo) -> Result<()> {
     let job_id = job.job_id.clone();
     log_info!(category: "Job Completion", message: "Starting automatic completion", details: "{}", job_id);
 
@@ -32,7 +32,7 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     let source_with_slash = common::ensure_trailing_slash(&scratch_dir);
 
     log_info!(category: "Job Completion", message: "Rsyncing scratch to project", details: "{} -> {}", scratch_dir, project_dir);
-    connection_manager.sync_directory_rsync(&source_with_slash, &project_dir).await
+    connection_manager.mirror_directory(&source_with_slash, &project_dir).await
         .map_err(|e| {
             log_error!(category: "Job Completion", message: "Rsync failed", details: "{}", e);
             anyhow!("Failed to rsync: {}", e)
@@ -41,7 +41,7 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     log_info!(category: "Job Completion", message: "Rsync complete - all files now in project directory");
 
     // Fetch logs from project directory (after rsync)
-    if let Err(e) = crate::automations::fetch_slurm_logs(job, false).await {
+    if let Err(e) = crate::automations::load_slurm_logs(job, false).await {
         log_error!(category: "Job Completion", message: "Failed to fetch logs", details: "{}", e);
         // Don't fail completion if log fetch fails - logs are nice-to-have
     }
@@ -50,8 +50,16 @@ pub async fn execute_job_completion_internal(job: &mut JobInfo) -> Result<()> {
     let output_dir = format!("{}/outputs", project_dir);
     log_info!(category: "Job Completion", message: "Fetching output file metadata", details: "{}", output_dir);
 
-    match connection_manager.list_files_with_metadata(&output_dir).await {
-        Ok(output_files) => {
+    match connection_manager.list_files(&output_dir, false).await {
+        Ok(files) => {
+            // Convert SftpFileEntry to OutputFile
+            let output_files: Vec<crate::types::OutputFile> = files.into_iter()
+                .map(|entry| crate::types::OutputFile {
+                    name: entry.name,
+                    size: entry.size,
+                    modified_at: entry.modified_time.map(|t| t.to_string()).unwrap_or_else(|| "unknown".to_string()),
+                })
+                .collect();
             log_info!(category: "Job Completion", message: "Found output files", details: "{} files", output_files.len());
             job.output_files = output_files;
         }

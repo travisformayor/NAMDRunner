@@ -9,16 +9,14 @@
 
   const config = type === 'input' ? {
     title: 'Input Files',
-    downloadCommand: 'download_job_input',
-    downloadAllCommand: 'download_all_inputs',
+    fileType: 'input',
     pathPrefix: 'input_files/',
     showSize: false,
     checkStatus: false,
     emptyMessage: 'No input files available for this job.'
   } : {
     title: 'Output Files',
-    downloadCommand: 'download_job_output',
-    downloadAllCommand: 'download_all_outputs',
+    fileType: 'output',
     pathPrefix: 'outputs/',
     showSize: true,
     checkStatus: true,
@@ -58,8 +56,9 @@
     downloadingFiles.add(file_name);
     downloadingFiles = new Set(downloadingFiles);
 
-    const result = await invoke<ApiResult<DownloadInfo>>(config.downloadCommand, {
+    const result = await invoke<ApiResult<DownloadInfo>>('download_file', {
       job_id: job.job_id,
+      file_type: config.fileType,
       file_path,
     });
 
@@ -85,8 +84,9 @@
 
     isDownloadingAll = true;
 
-    const result = await invoke<ApiResult<DownloadInfo>>(config.downloadAllCommand, {
+    const result = await invoke<ApiResult<DownloadInfo>>('download_all_files', {
       job_id: job.job_id,
+      file_type: config.fileType,
     });
 
     if (!result.success) {

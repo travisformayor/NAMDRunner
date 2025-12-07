@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use super::errors::SSHError;
-use super::sftp::{RemoteFileInfo, FileTransferProgress};
+use super::sftp::{SftpFileEntry, FileTransferProgress};
 use super::commands::CommandResult;
 
 /// Mock file system state for SFTP operations testing
@@ -85,7 +85,7 @@ impl MockFileSystem {
     }
 
     /// Get file info for a path (simulates SFTP stat operation)
-    pub fn get_file_info(&self, path: &str) -> Result<RemoteFileInfo, SSHError> {
+    pub fn get_file_info(&self, path: &str) -> Result<SftpFileEntry, SSHError> {
         match self.files.get(path) {
             Some(file) => {
                 let name = std::path::Path::new(path)
@@ -94,7 +94,7 @@ impl MockFileSystem {
                     .unwrap_or(path)
                     .to_string();
 
-                Ok(RemoteFileInfo {
+                Ok(SftpFileEntry {
                     name,
                     path: path.to_string(),
                     size: file.size,
@@ -108,7 +108,7 @@ impl MockFileSystem {
     }
 
     /// List directory contents (simulates SFTP readdir operation)
-    pub fn list_directory(&self, path: &str) -> Result<Vec<RemoteFileInfo>, SSHError> {
+    pub fn list_directory(&self, path: &str) -> Result<Vec<SftpFileEntry>, SSHError> {
         match self.directories.get(path) {
             Some(entries) => {
                 let mut results = Vec::new();
@@ -212,6 +212,7 @@ impl MockProgressBuilder {
             total_bytes,
             percentage: 0.0,
             transfer_rate: 0.0,
+            file_name: None,
         }
     }
 
@@ -223,6 +224,7 @@ impl MockProgressBuilder {
             total_bytes,
             percentage,
             transfer_rate: 1024.0, // Mock transfer rate
+            file_name: None,
         }
     }
 
@@ -233,6 +235,7 @@ impl MockProgressBuilder {
             total_bytes,
             percentage: 100.0,
             transfer_rate: 1024.0,
+            file_name: None,
         }
     }
 }

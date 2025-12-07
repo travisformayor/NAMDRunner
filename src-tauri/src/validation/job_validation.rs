@@ -200,7 +200,7 @@ pub fn validate_resource_allocation(
 
 /// Validate complete job configuration
 /// Orchestrates job name, template, and resource validation
-pub async fn validate_complete_job_config(params: ValidateJobConfigParams) -> ValidationResult {
+pub async fn validate_job_config(params: ValidateJobConfigParams) -> ValidationResult {
     let mut issues = Vec::new();
     let mut warnings = Vec::new();
     let mut suggestions = Vec::new();
@@ -294,4 +294,143 @@ pub fn validate_resource_allocation_command(
     };
 
     validate_resource_allocation(&config, &partition_id, &qos_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn create_valid_params() -> ValidateJobConfigParams {
+        ValidateJobConfigParams {
+            job_name: "test_job".to_string(),
+            template_id: "".to_string(), // Empty to avoid database dependency
+            template_values: HashMap::new(),
+            cores: 16,
+            memory: "32GB".to_string(),
+            walltime: "24:00:00".to_string(),
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_validate_job_config_empty_job_name() {
+        let mut params = create_valid_params();
+        params.job_name = "".to_string();
+
+        let result = validate_job_config(params).await;
+
+        assert!(!result.is_valid);
+        assert!(!result.issues.is_empty());
+        assert!(result.issues.iter().any(|e| e.contains("Job name is required")));
+        assert!(result.field_errors.as_ref().unwrap().contains_key("job_name"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_job_config_whitespace_job_name() {
+        let mut params = create_valid_params();
+        params.job_name = "   ".to_string();
+
+        let result = validate_job_config(params).await;
+
+        assert!(!result.is_valid);
+        assert!(result.issues.iter().any(|e| e.contains("Job name")));
+    }
+
+    #[tokio::test]
+    async fn test_validate_job_config_empty_template() {
+        let mut params = create_valid_params();
+        params.template_id = "".to_string();
+
+        let result = validate_job_config(params).await;
+
+        // Empty template should produce error
+        assert!(!result.is_valid);
+        assert!(result.issues.iter().any(|e| e.contains("Template selection is required")));
+        assert!(result.field_errors.as_ref().unwrap().contains_key("template"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_job_config_invalid_job_name_characters() {
+        let mut params = create_valid_params();
+        params.job_name = "../../../etc/passwd".to_string();
+
+        let result = validate_job_config(params).await;
+
+        // Path traversal in job name should fail
+        assert!(!result.is_valid);
+        assert!(result.issues.iter().any(|e| e.contains("Job name invalid")));
+        assert!(result.field_errors.as_ref().unwrap().contains_key("job_name"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_job_config_resource_validation_integration() {
+        let mut params = create_valid_params();
+        params.cores = 0; // Invalid
+
+        let result = validate_job_config(params).await;
+
+        // Should catch resource validation errors
+        assert!(!result.is_valid);
+        assert!(result.issues.iter().any(|e| e.contains("Cores")));
+        assert!(result.field_errors.as_ref().unwrap().contains_key("cores"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_job_config_multiple_errors() {
+        let mut params = create_valid_params();
+        params.job_name = "".to_string(); // Invalid
+        params.template_id = "".to_string(); // Invalid
+        params.cores = 0; // Invalid
+
+        let result = validate_job_config(params).await;
+
+        // Should collect all errors
+        assert!(!result.is_valid);
+        assert!(result.issues.len() >= 3); // At least 3 errors
+        let field_errors = result.field_errors.as_ref().unwrap();
+        assert!(field_errors.contains_key("job_name"));
+        assert!(field_errors.contains_key("template"));
+        assert!(field_errors.contains_key("cores"));
+    }
+
+    #[test]
+    fn test_validation_result_valid() {
+        let result = ValidationResult::valid();
+        assert!(result.is_valid);
+        assert!(result.issues.is_empty());
+        assert!(result.warnings.is_empty());
+        assert!(result.suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_validation_result_invalid() {
+        let mut field_errors = HashMap::new();
+        field_errors.insert("cores".to_string(), "Invalid cores".to_string());
+
+        let result = ValidationResult::invalid(
+            vec!["Error 1".to_string(), "Error 2".to_string()],
+            field_errors
+        );
+
+        assert!(!result.is_valid);
+        assert_eq!(result.issues.len(), 2);
+        assert!(result.field_errors.as_ref().unwrap().contains_key("cores"));
+    }
+
+    #[test]
+    fn test_validation_result_to_error() {
+        let mut field_errors = HashMap::new();
+        field_errors.insert("test".to_string(), "test error".to_string());
+
+        let result = ValidationResult::invalid(
+            vec!["Error 1".to_string()],
+            field_errors
+        );
+
+        let error_opt = result.to_error();
+        assert!(error_opt.is_some());
+        assert!(error_opt.unwrap().to_string().contains("Error 1"));
+    }
 }

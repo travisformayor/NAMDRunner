@@ -216,26 +216,6 @@ pub struct SelectedFile {
     pub size: u64,
 }
 
-/// File information for SFTP operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileInfo {
-    pub name: String,
-    pub path: String,
-    pub size: u64,
-    pub modified_at: String,
-    pub is_directory: bool,
-}
-
-/// File upload progress information for real-time progress tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileUploadProgress {
-    pub file_name: String,
-    pub bytes_transferred: u64,
-    pub total_bytes: u64,
-    pub percentage: f32,
-    pub transfer_rate_mbps: f64,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

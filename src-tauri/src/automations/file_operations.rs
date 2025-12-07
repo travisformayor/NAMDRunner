@@ -87,7 +87,7 @@ pub async fn download_job_file(
 
 /// Download all files of a specific type as a zip archive
 /// file_type: "inputs" or "outputs"
-pub async fn download_all_files_as_zip(
+pub async fn download_files_zip(
     job_id: &str,
     file_type: &str, // "inputs" or "outputs"
     local_destination: &str,

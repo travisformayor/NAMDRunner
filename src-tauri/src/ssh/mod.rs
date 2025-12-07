@@ -10,7 +10,7 @@ pub mod directory_structure;
 pub mod test_utils;
 
 pub use connection::{SSHConnection, ConnectionConfig, ConnectionInfo};
-pub use sftp::{SFTPOperations, FileTransferProgress, RemoteFileInfo, ProgressCallback};
+pub use sftp::{SFTPOperations, FileTransferProgress, SftpFileEntry, ProgressCallback};
 pub use commands::{CommandExecutor, CommandResult};
 pub use errors::{SSHError, map_ssh_error, ConnectionError};
 pub use manager::{ConnectionManager, retry_quick};

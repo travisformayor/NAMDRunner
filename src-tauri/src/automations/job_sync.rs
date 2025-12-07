@@ -43,7 +43,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         log_info!(category: "Job Sync", message: "Database empty - triggering automatic job discovery");
 
         // Attempt discovery (don't fail sync if discovery fails)
-        match discover_jobs_from_server_internal(&username).await {
+        match discover_jobs(&username).await {
             Ok(report) => {
                 if !report.imported_jobs.is_empty() {
                     log_info!(
@@ -225,7 +225,7 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
         log_info!(category: "Job Sync", message: "Job reached terminal state", details: "{}: {:?}", job_id, new_status);
 
         // Trigger automatic job completion (rsync scratch→project, fetch logs, update metadata)
-        if let Err(e) = crate::automations::execute_job_completion_internal(&mut job).await {
+        if let Err(e) = crate::automations::execute_job_completion(&mut job).await {
             log_error!(category: "Job Sync", message: "Automatic completion failed", details: "{}: {}", job_id, e);
             // Don't fail sync - completion will retry on next sync
         } else {
@@ -261,7 +261,7 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
 /// - force=true: Always fetch, error if missing dirs, set to empty on read failure
 ///
 /// NOTE: Logs are fetched from project_dir (after rsync in job completion)
-pub async fn fetch_slurm_logs(job: &mut JobInfo, force: bool) -> Result<()> {
+pub async fn load_slurm_logs(job: &mut JobInfo, force: bool) -> Result<()> {
     let category = if force { "Log Refetch" } else { "Log Fetch" };
     log_debug!(category: category, message: "ENTRY", details: "job_id={}, status={:?}, force={}", job.job_id, job.status, force);
 
@@ -343,7 +343,7 @@ pub async fn fetch_slurm_logs(job: &mut JobInfo, force: bool) -> Result<()> {
 
 /// Internal helper to discover jobs from server
 /// Returns detailed report of imported jobs and failures
-async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::types::response_data::DiscoveryReport> {
+async fn discover_jobs(username: &str) -> Result<crate::types::response_data::DiscoveryReport> {
     use crate::types::response_data::{DiscoveryReport, JobSummary, FailedImport};
 
     log_info!(category: "Job Discovery", message: "Starting automatic discovery", details: "user: {}", username);
@@ -356,7 +356,7 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
     log_debug!(category: "Job Discovery", message: "Scanning directory", details: "{}", remote_jobs_dir);
 
     // List directories in the jobs folder
-    let job_dirs = connection_manager.list_files(&remote_jobs_dir).await
+    let job_dirs = connection_manager.list_files(&remote_jobs_dir, true).await
         .map_err(|e| {
             log_error!(category: "Job Discovery", message: "Failed to list directories", details: "{}", e);
             anyhow!("Failed to list job directories: {}", e)

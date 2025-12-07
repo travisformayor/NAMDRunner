@@ -40,9 +40,9 @@ pub async fn select_input_file(_app: AppHandle) -> Result<Option<SelectedFile>, 
     }
 }
 
-/// Download a single output file from a job
+/// Download a single file from a job (input or output)
 #[tauri::command(rename_all = "snake_case")]
-pub async fn download_job_output(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
+pub async fn download_file(job_id: String, file_type: String, file_path: String) -> ApiResult<DownloadInfo> {
     use rfd::FileDialog;
 
     // Validate and sanitize job ID
@@ -51,16 +51,22 @@ pub async fn download_job_output(job_id: String, file_path: String) -> ApiResult
         Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
     };
 
+    // Validate file type
+    if file_type != "input" && file_type != "output" {
+        return ApiResult::error(format!("Invalid file type: {}", file_type));
+    }
+
     // Extract filename for save dialog
     let file_name = std::path::Path::new(&file_path)
         .file_name()
         .and_then(|n| n.to_str())
-        .unwrap_or("output.dat");
+        .unwrap_or("file.dat");
 
     // Show save dialog (UI concern - handled in command layer)
+    let title = if file_type == "input" { "Save Input File" } else { "Save Output File" };
     let save_path = FileDialog::new()
         .set_file_name(file_name)
-        .set_title("Save Output File")
+        .set_title(title)
         .save_file();
 
     let save_path = match save_path {
@@ -75,9 +81,9 @@ pub async fn download_job_output(job_id: String, file_path: String) -> ApiResult
     }
 }
 
-/// Download all output files as a zip archive
+/// Download all files as a zip archive (inputs or outputs)
 #[tauri::command(rename_all = "snake_case")]
-pub async fn download_all_outputs(job_id: String) -> ApiResult<DownloadInfo> {
+pub async fn download_all_files(job_id: String, file_type: String) -> ApiResult<DownloadInfo> {
     use rfd::FileDialog;
 
     // Validate and sanitize job ID
@@ -86,10 +92,22 @@ pub async fn download_all_outputs(job_id: String) -> ApiResult<DownloadInfo> {
         Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
     };
 
+    // Validate file type
+    if file_type != "input" && file_type != "output" {
+        return ApiResult::error(format!("Invalid file type: {}", file_type));
+    }
+
+    // Determine folder and dialog settings
+    let (folder, title) = if file_type == "input" {
+        ("inputs", "Save Input Files")
+    } else {
+        ("outputs", "Save Output Files")
+    };
+
     // Show save dialog (UI concern)
     let save_path = FileDialog::new()
-        .set_file_name(format!("{}_outputs.zip", clean_job_id))
-        .set_title("Save Output Files")
+        .set_file_name(format!("{}_{}.zip", clean_job_id, folder))
+        .set_title(title)
         .add_filter("ZIP Archive", &["zip"])
         .save_file();
 
@@ -99,73 +117,83 @@ pub async fn download_all_outputs(job_id: String) -> ApiResult<DownloadInfo> {
     };
 
     // Delegate to automation layer (business logic)
-    match automations::download_all_files_as_zip(&clean_job_id, "outputs", &save_path.to_string_lossy()).await {
+    match automations::download_files_zip(&clean_job_id, folder, &save_path.to_string_lossy()).await {
         Ok(info) => ApiResult::success(info),
         Err(e) => ApiResult::error(e.to_string()),
     }
 }
 
-/// Download a single input file from a job
-#[tauri::command(rename_all = "snake_case")]
-pub async fn download_job_input(job_id: String, file_path: String) -> ApiResult<DownloadInfo> {
-    use rfd::FileDialog;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // Validate and sanitize job ID
-    let clean_job_id = match sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
-    };
+    #[tokio::test]
+    async fn test_download_file_invalid_job_id() {
+        let result = download_file(
+            "../invalid".to_string(),
+            "output".to_string(),
+            "test.dat".to_string()
+        ).await;
 
-    // Extract filename for save dialog
-    let file_name = std::path::Path::new(&file_path)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("input.dat");
-
-    // Show save dialog (UI concern)
-    let save_path = FileDialog::new()
-        .set_file_name(file_name)
-        .set_title("Save Input File")
-        .save_file();
-
-    let save_path = match save_path {
-        Some(path) => path,
-        None => return ApiResult::error("Download cancelled".to_string()),
-    };
-
-    // Delegate to automation layer (business logic)
-    match automations::download_job_file(&clean_job_id, &file_path, &save_path.to_string_lossy()).await {
-        Ok(info) => ApiResult::success(info),
-        Err(e) => ApiResult::error(e.to_string()),
+        assert!(!result.success);
+        assert!(result.error.as_ref().unwrap().contains("Invalid job ID"));
     }
-}
 
-/// Download all input files as a zip archive
-#[tauri::command(rename_all = "snake_case")]
-pub async fn download_all_inputs(job_id: String) -> ApiResult<DownloadInfo> {
-    use rfd::FileDialog;
+    #[tokio::test]
+    async fn test_download_file_invalid_file_type() {
+        let result = download_file(
+            "test_job_123".to_string(),
+            "invalid_type".to_string(),
+            "test.dat".to_string()
+        ).await;
 
-    // Validate and sanitize job ID
-    let clean_job_id = match sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
-    };
+        assert!(!result.success);
+        assert!(result.error.as_ref().unwrap().contains("Invalid file type"));
+    }
 
-    // Show save dialog (UI concern)
-    let save_path = FileDialog::new()
-        .set_file_name(format!("{}_inputs.zip", clean_job_id))
-        .set_title("Save Input Files")
-        .add_filter("ZIP Archive", &["zip"])
-        .save_file();
+    #[tokio::test]
+    async fn test_download_all_files_invalid_job_id() {
+        let result = download_all_files(
+            "../../../etc/passwd".to_string(),
+            "output".to_string()
+        ).await;
 
-    let save_path = match save_path {
-        Some(path) => path,
-        None => return ApiResult::error("Download cancelled".to_string()),
-    };
+        assert!(!result.success);
+        assert!(result.error.as_ref().unwrap().contains("Invalid job ID"));
+    }
 
-    // Delegate to automation layer (business logic)
-    match automations::download_all_files_as_zip(&clean_job_id, "inputs", &save_path.to_string_lossy()).await {
-        Ok(info) => ApiResult::success(info),
-        Err(e) => ApiResult::error(e.to_string()),
+    #[tokio::test]
+    async fn test_download_all_files_invalid_file_type() {
+        let result = download_all_files(
+            "test_job_123".to_string(),
+            "bad_type".to_string()
+        ).await;
+
+        assert!(!result.success);
+        assert!(result.error.as_ref().unwrap().contains("Invalid file type"));
+    }
+
+    #[tokio::test]
+    async fn test_download_file_validates_both_input_and_output_types() {
+        // Test that both "input" and "output" are valid file types
+        // These will fail with "Download cancelled" because file dialog returns None
+        // but should NOT fail with "Invalid file type"
+
+        let result = download_file(
+            "valid_job_id".to_string(),
+            "input".to_string(),
+            "test.dat".to_string()
+        ).await;
+        // Should fail with "Download cancelled" not "Invalid file type"
+        assert!(!result.success);
+        assert!(result.error.as_ref().unwrap().contains("Download cancelled"));
+
+        let result = download_file(
+            "valid_job_id".to_string(),
+            "output".to_string(),
+            "test.dat".to_string()
+        ).await;
+        assert!(!result.success);
+        assert!(result.error.as_ref().unwrap().contains("Download cancelled"));
     }
 }

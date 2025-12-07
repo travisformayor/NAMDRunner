@@ -67,7 +67,7 @@ pub async fn execute_job_submission_with_progress(
     // Note: source must end with / to sync contents, destination should NOT end with / to create/sync into it
     let source_with_slash = common::ensure_trailing_slash(project_dir);
 
-    connection_manager.sync_directory_rsync(&source_with_slash, &scratch_dir).await
+    connection_manager.mirror_directory(&source_with_slash, &scratch_dir).await
         .map_err(|e| {
             log_error!(category: "Job Submission", message: "Failed to mirror directory to scratch", details: "{}", e);
             anyhow!("Failed to mirror job directory to scratch: {}", e)

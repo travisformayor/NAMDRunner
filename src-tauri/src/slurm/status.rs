@@ -118,7 +118,7 @@ impl SlurmStatusSync {
         }
 
         // Try batch query first (more efficient)
-        let batch_result = self.batch_query_jobs_internal(job_ids).await;
+        let batch_result = self.batch_query_jobs(job_ids).await;
 
         match batch_result {
             Ok(batch_statuses) => {
@@ -145,7 +145,7 @@ impl SlurmStatusSync {
         Ok(results)
     }
 
-    async fn batch_query_jobs_internal(&self, job_ids: &[String]) -> Result<Vec<(String, JobStatus)>> {
+    async fn batch_query_jobs(&self, job_ids: &[String]) -> Result<Vec<(String, JobStatus)>> {
         if job_ids.is_empty() {
             return Ok(Vec::new());
         }
