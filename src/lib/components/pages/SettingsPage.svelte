@@ -5,7 +5,6 @@
   import { settingsStore, databaseInfo, settingsLoading, settingsError } from '$lib/stores/settings';
   import type { ApiResult, DatabaseOperationData } from '$lib/types/api';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
-  import AlertDialog from '../ui/AlertDialog.svelte';
   import { jobsStore } from '$lib/stores/jobs';
   import { templateStore } from '$lib/stores/templateStore';
 
@@ -176,12 +175,15 @@
 />
 
 <!-- Alert Dialog -->
-<AlertDialog
-  open={showAlert}
+<ConfirmDialog
+  isOpen={showAlert}
   title={alertTitle}
   message={alertMessage}
   variant={alertVariant}
-  onClose={() => (showAlert = false)}
+  showCancel={false}
+  confirmText="OK"
+  onConfirm={() => (showAlert = false)}
+  onCancel={() => (showAlert = false)}
 />
 
 <style>
