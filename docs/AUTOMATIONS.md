@@ -336,7 +336,7 @@ jobsStore.set(syncResult.jobs);
 
 **Implementation** (Correct Order):
 
-When job status changes to terminal state during `sync_all_jobs()`, the `execute_job_completion_internal()` function automatically triggers:
+When job status changes to terminal state during `sync_all_jobs()`, the `execute_job_completion()` function automatically triggers:
 
 1. **Automatic Rsync Scratch→Project** (FIRST AND CRITICAL):
    - Triggered immediately when terminal state detected in status sync

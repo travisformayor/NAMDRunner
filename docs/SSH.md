@@ -112,11 +112,12 @@ for chunk in file_data.chunks(CHUNK_SIZE) {
 
 **Progress Tracking:**
 ```rust
-pub struct FileUploadProgress {
-    pub file_name: String,
-    pub bytes_uploaded: u64,
+pub struct FileTransferProgress {
+    pub bytes_transferred: u64,
     pub total_bytes: u64,
-    pub percentage: f64,
+    pub percentage: f32,
+    pub transfer_rate: f64,  // bytes per second
+    pub file_name: Option<String>,
 }
 ```
 

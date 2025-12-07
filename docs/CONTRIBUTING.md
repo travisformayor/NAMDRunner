@@ -328,7 +328,7 @@ async function loadJobs() {
 - Use `--namd-*` CSS custom properties for all colors, spacing, typography (never hardcode colors)
 - Use `.namd-button` classes for buttons (never create custom `.btn` styles)
 - Use `Dialog.svelte` primitive for modals (never duplicate backdrop/overlay code)
-- Use `AlertDialog`/`ConfirmDialog` instead of native `alert()`/`confirm()` for theme consistency
+- Use `ConfirmDialog` instead of native `alert()`/`confirm()` for theme consistency
 
 **Quick Reference:**
 ```svelte
@@ -337,12 +337,12 @@ async function loadJobs() {
 <button class="namd-button namd-button--destructive">Delete</button>
 
 <!-- Modals - Compose Dialog primitive -->
-<Dialog {open} size="md" {onClose}>
+<Dialog open={isOpen} size="md" {onClose}>
   <svelte:fragment slot="body">Content</svelte:fragment>
 </Dialog>
 
-<!-- Alerts - Use AlertDialog instead of alert() -->
-<AlertDialog {open} title="Success" message="Done!" variant="success" {onClose} />
+<!-- Alerts - Use ConfirmDialog with showCancel=false -->
+<ConfirmDialog isOpen={showAlert} title="Success" message="Done!" variant="success" showCancel={false} confirmText="OK" onConfirm={handleClose} onCancel={handleClose} />
 ```
 
 ### Connection-Aware UI
@@ -545,7 +545,7 @@ const variables = [...templateText.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]);
 - **Hardcoded Styling**: Use CSS custom properties and design system classes, not hardcoded colors
 - **Over-Complex Component APIs**: Keep component interfaces focused and simple
 - **Duplicate Modal Logic**: Never recreate backdrop/overlay/escape handling - always compose Dialog primitive
-- **Native alert()/confirm()**: Use AlertDialog/ConfirmDialog components for theme consistency
+- **Native alert()/confirm()**: Use ConfirmDialog component for theme consistency (supports both alert and confirm modes)
 - **Custom Button Classes**: Never create component-specific `.btn` styles - use `.namd-button` design system classes
 
 > **For detailed UI patterns, design system usage, and component examples**, see [`docs/DESIGN.md`](DESIGN.md)

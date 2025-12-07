@@ -235,7 +235,7 @@ The create job page uses a 3-tab interface for organizing job configuration:
 - **Backup**: Opens OS save dialog, uses SQLite Backup API for safe online backup
 - **Restore**: Shows warning with ConfirmDialog (destructive style), opens file dialog, validates backup, replaces database, reinitializes connection
 - **Reset**: Shows warning with ConfirmDialog (destructive style), deletes database file, recreates schema, reloads stores
-- **Post-Operation**: AlertDialog shows success/error messages, all stores reload automatically
+- **Post-Operation**: ConfirmDialog shows success/error messages (with variant and showCancel=false for alerts), all stores reload automatically
 
 #### Database Paths
 - **Production Linux**: `~/.local/share/namdrunner/namdrunner.db`
@@ -365,21 +365,15 @@ NAMDRunner uses a composition-based modal system with a single primitive compone
 - Slots: `header`, `body` (default), `footer`
 - All other modals use Dialog internally via composition
 
-**AlertDialog** (Replaces native `alert()`)
-- Wrapper around Dialog for simple notifications
-- Located: `src/lib/components/ui/AlertDialog.svelte`
-- Props: `open`, `title`, `message`, `variant`, `onClose`
-- Variants: `success`, `error`, `warning`, `info` (with colored icons)
-- Used for: Settings page notifications, operation feedback
-- Single OK button to dismiss
-
-**ConfirmDialog** (Confirmation Dialogs)
-- Wrapper around Dialog for confirmation actions
+**ConfirmDialog** (Replaces native `alert()` and `confirm()`)
+- Wrapper around Dialog for confirmations and alerts
 - Located: `src/lib/components/ui/ConfirmDialog.svelte`
-- Props: `isOpen`, `title`, `message`, `confirmText`, `cancelText`, `confirmStyle`, `onConfirm`, `onCancel`
+- Props: `isOpen`, `title`, `message`, `confirmText`, `cancelText`, `confirmStyle`, `showCancel`, `variant`, `onConfirm`, `onCancel`
 - confirmStyle: `'destructive'` (red) or `'primary'` (blue)
-- Used for: template deletion, job deletion, database operations
-- Two buttons: Cancel (secondary) and Confirm (primary/destructive)
+- variant: Optional `success`, `error`, `warning`, `info` (adds colored icon to title)
+- showCancel: Set to `false` for alert mode (single OK button)
+- Used for: Confirmations (delete job, reset database), alerts (success/error notifications), warnings
+- Modes: Two-button confirmation or single-button alert (via showCancel prop)
 
 **PreviewModal**
 - Wrapper around Dialog for displaying code/text previews
@@ -903,8 +897,7 @@ components/
 │   └── SyncControls.svelte        # Sync status/controls
 └── ui/
     ├── Dialog.svelte              # Base modal primitive (composition root)
-    ├── AlertDialog.svelte         # Notification dialog (replaces alert())
-    ├── ConfirmDialog.svelte       # Confirmation dialogs with Cancel/Confirm
+    ├── ConfirmDialog.svelte       # Confirmation/alert dialogs (replaces alert()/confirm())
     └── PreviewModal.svelte        # Code/text preview display
 ```
 
@@ -1027,8 +1020,7 @@ NAMDRunner uses a composition-based modal architecture with a single primitive:
 - Slots: header, body, footer
 
 **Wrappers:**
-- `AlertDialog.svelte` - Simple notifications (success/error/warning/info)
-- `ConfirmDialog.svelte` - Confirmation actions with Cancel/Confirm buttons
+- `ConfirmDialog.svelte` - Confirmations and alerts (with variant icons and optional cancel button)
 - `PreviewModal.svelte` - Code/text preview with monospace display
 
 All modals use Dialog internally via composition. No duplicate modal code exists.

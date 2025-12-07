@@ -315,17 +315,11 @@ interface IFileCommands {
   // Upload files to job directory on cluster
   upload_job_files(job_id: JobId, files: FileUpload[]): Promise<UploadResult>;
 
-  // Download single job output file (shows native save dialog)
-  download_job_output(job_id: JobId, file_path: string): Promise<ApiResult<DownloadInfo>>;
+  // Download single file (input or output) from job (shows native save dialog)
+  download_file(job_id: JobId, file_type: 'input' | 'output', file_path: string): Promise<ApiResult<DownloadInfo>>;
 
-  // Download all output files as ZIP archive (shows native save dialog)
-  download_all_outputs(job_id: JobId): Promise<ApiResult<DownloadInfo>>;
-
-  // Download single job input file (shows native save dialog)
-  download_job_input(job_id: JobId, file_path: string): Promise<ApiResult<DownloadInfo>>;
-
-  // Download all input files as ZIP archive (shows native save dialog)
-  download_all_inputs(job_id: JobId): Promise<ApiResult<DownloadInfo>>;
+  // Download all files as ZIP archive (shows native save dialog)
+  download_all_files(job_id: JobId, file_type: 'input' | 'output'): Promise<ApiResult<DownloadInfo>>;
 
   // List files in job directory
   list_job_files(job_id: JobId): Promise<ApiResult<RemoteFile[]>>;

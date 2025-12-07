@@ -226,6 +226,22 @@ See `docs/CONTRIBUTING.md` for complete setup and development commands.
 - Call underlying systems directly (invoke(), parse functions, etc.) instead of wrapping them
 - Ask: "Does this abstraction add value or just add indirection?"
 
+**Method Naming Convention:**
+| Verb | Usage |
+|------|-------|
+| `get_` | Single item retrieval (`get_job`, `get_session`) |
+| `list_` | Multiple items (`list_files`, `list_templates`) |
+| `load_` / `save_` | Database operations (`load_job`, `save_job`) |
+| `sync_` | Refresh state from external source (`sync_job_status`) |
+| `mirror_` | Directory copy/rsync operations |
+| `create_` | New entity creation |
+| `delete_` | Entity removal |
+| `validate_` | Validation functions |
+
+- No `_internal` suffix on private methods (Rust enforces privacy)
+- Prefer 2-3 word names; 4+ words only when distinguishing similar methods
+- When finding methods that violate this scheme, propose corrections
+
 ### Cluster Integration Pitfalls
 - **Don't hardcode module versions** - Make configurable (gcc/14.2.0, etc.)
 - **Don't skip error handling** - SSH operations WILL fail

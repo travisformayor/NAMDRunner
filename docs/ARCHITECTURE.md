@@ -401,8 +401,7 @@ src/
 │   │   │   └── SettingsPage.svelte       # Settings and database management
 │   │   ├── ui/                  # Reusable UI components
 │   │   │   ├── Dialog.svelte             # Base modal primitive
-│   │   │   ├── AlertDialog.svelte        # Success/Error/Warning notifications
-│   │   │   ├── ConfirmDialog.svelte      # Confirmation dialog
+│   │   │   ├── ConfirmDialog.svelte      # Confirmation/alert dialogs (with variant support)
 │   │   │   └── PreviewModal.svelte       # Template preview modal
 │   │   └── AppShell.svelte      # Main application shell
 │   ├── types/                   # TypeScript types
@@ -513,8 +512,7 @@ NAMDRunner uses a centralized design system with comprehensive theming support.
 - **Centralized CSS variables** - All colors defined in `app.css` with light/dark theme support
 - **Unified component patterns** - Single primitive components extended through composition
   - `Dialog.svelte` - Base modal primitive (escape key, click-outside, z-index management)
-  - `AlertDialog.svelte` - Success/Error/Warning/Info notifications
-  - `ConfirmDialog.svelte` - Confirmation dialogs with destructive action support
+  - `ConfirmDialog.svelte` - Confirmation and alert dialogs with variant support (success/error/warning/info) and optional cancel button
   - Button system: `.namd-button` classes (primary, secondary, destructive variants)
 - **Theme consistency** - All interactive elements use `--namd-*` CSS variables (no hardcoded colors)
 
@@ -763,7 +761,7 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
   - Job creation: `src/lib/components/create-job/` (3-tab workflow with dynamic forms)
   - Template management: `src/lib/components/templates/` (template editor, variable editor)
   - Settings page: `src/lib/components/pages/SettingsPage.svelte` (database management UI)
-  - UI primitives: `src/lib/components/ui/` (Dialog, AlertDialog, ConfirmDialog, PreviewModal)
+  - UI primitives: `src/lib/components/ui/` (Dialog, ConfirmDialog with variant support, PreviewModal)
   - Layout components: `src/lib/components/layout/` directory
   - Page components: `src/lib/components/pages/` directory
 
