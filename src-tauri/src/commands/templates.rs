@@ -352,9 +352,6 @@ pub async fn import_template() -> ApiResult<Template> {
         }
     }
 
-    // Imported templates are never built-in
-    template.is_builtin = false;
-
     // Save imported template
     let template_id = template.id.clone();
     let template_name = template.name.clone();
@@ -376,9 +373,8 @@ fn sanitize_filename(name: &str) -> String {
         .map(|c| {
             if c.is_alphanumeric() || c == '-' || c == '_' {
                 c
-            } else if c.is_whitespace() {
-                '_'
             } else {
+                // Replace whitespace and any other non-alphanumeric characters with underscore
                 '_'
             }
         })
@@ -490,7 +486,6 @@ mod tests {
             description: "Test template".to_string(),
             namd_config_template: "temperature {{temperature}}\nstructure {{structure_file}}".to_string(),
             variables,
-            is_builtin: false,
             created_at: "2025-01-01T00:00:00Z".to_string(),
             updated_at: "2025-01-01T00:00:00Z".to_string(),
         }
@@ -691,11 +686,10 @@ mod tests {
         assert_eq!(template.description, deserialized.description);
         assert_eq!(template.namd_config_template, deserialized.namd_config_template);
         assert_eq!(template.variables.len(), deserialized.variables.len());
-        assert_eq!(template.is_builtin, deserialized.is_builtin);
     }
 
     #[test]
-    fn test_template_json_matches_builtin_format() {
+    fn test_template_json_format() {
         let template = create_test_template("test_template_v1", "Test Template");
 
         let json = serde_json::to_string_pretty(&template).unwrap();
@@ -706,7 +700,6 @@ mod tests {
         assert!(json.contains("\"description\""));
         assert!(json.contains("\"namd_config_template\""));
         assert!(json.contains("\"variables\""));
-        assert!(json.contains("\"is_builtin\""));
         assert!(json.contains("\"created_at\""));
         assert!(json.contains("\"updated_at\""));
     }

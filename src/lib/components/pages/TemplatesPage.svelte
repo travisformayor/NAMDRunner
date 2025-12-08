@@ -33,8 +33,7 @@
         id: `${template.id}_copy_${Date.now()}`,
         name: `${template.name} (Copy)`,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        is_builtin: false
+        updated_at: new Date().toISOString()
       };
 
       const success = await templateStore.createTemplate(duplicatedTemplate);
@@ -109,13 +108,9 @@
     <!-- All Templates in Single List -->
     <div class="template-grid">
       {#each $templates as template}
-        {@const isBuiltIn = template.is_builtin}
-        <div class="template-card" class:built-in={isBuiltIn}>
+        <div class="template-card">
           <div class="template-header">
             <h3>{template.name}</h3>
-            <span class="badge" class:badge-builtin={isBuiltIn} class:badge-custom={!isBuiltIn}>
-              {isBuiltIn ? 'Built-in' : 'Custom'}
-            </span>
           </div>
           <p class="template-description">{template.description}</p>
           <div class="template-actions">
@@ -212,24 +207,6 @@
     margin: 0;
     font-size: var(--namd-font-size-xl);
     color: var(--namd-text-primary);
-  }
-
-  .badge {
-    padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
-    border-radius: var(--namd-border-radius-sm);
-    font-size: var(--namd-font-size-xs);
-    font-weight: var(--namd-font-weight-semibold);
-    text-transform: uppercase;
-  }
-
-  .badge-builtin {
-    background: var(--namd-info-bg);
-    color: var(--namd-info-fg);
-  }
-
-  .badge-custom {
-    background: var(--namd-success-bg);
-    color: var(--namd-success-fg);
   }
 
   .template-description {

@@ -95,8 +95,7 @@
       namd_config_template: namdConfigTemplate,
       variables,
       created_at: template?.created_at ?? now,
-      updated_at: now,
-      is_builtin: false  // User-created or edited templates are always custom
+      updated_at: now
     };
 
     let success = false;

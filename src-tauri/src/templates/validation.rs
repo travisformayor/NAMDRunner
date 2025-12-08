@@ -141,7 +141,6 @@ mod tests {
             variables,
             created_at: "2025-01-01".to_string(),
             updated_at: "2025-01-01".to_string(),
-            is_builtin: false,
         }
     }
 

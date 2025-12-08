@@ -45,7 +45,6 @@ impl JobDatabase {
                 description TEXT,
                 namd_config_template TEXT NOT NULL,
                 variables TEXT NOT NULL,
-                is_builtin INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -125,14 +124,13 @@ impl JobDatabase {
         let variables_json = serde_json::to_string(&template.variables)?;
 
         conn.execute(
-            "INSERT OR REPLACE INTO templates (id, name, description, namd_config_template, variables, is_builtin, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT OR REPLACE INTO templates (id, name, description, namd_config_template, variables, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             rusqlite::params![
                 &template.id,
                 &template.name,
                 &template.description,
                 &template.namd_config_template,
                 &variables_json,
-                &template.is_builtin,
                 &template.created_at,
                 &template.updated_at,
             ],
@@ -145,7 +143,7 @@ impl JobDatabase {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, namd_config_template, variables, is_builtin, created_at, updated_at FROM templates WHERE id = ?1"
+            "SELECT id, name, description, namd_config_template, variables, created_at, updated_at FROM templates WHERE id = ?1"
         )?;
 
         let mut rows = stmt.query([id])?;
@@ -156,12 +154,10 @@ impl JobDatabase {
             let description: String = row.get(2)?;
             let namd_config_template: String = row.get(3)?;
             let variables_json: String = row.get(4)?;
-            let is_builtin_int: i32 = row.get(5)?;
-            let created_at: String = row.get(6)?;
-            let updated_at: String = row.get(7)?;
+            let created_at: String = row.get(5)?;
+            let updated_at: String = row.get(6)?;
 
             let variables = serde_json::from_str(&variables_json)?;
-            let is_builtin = is_builtin_int != 0;
 
             Ok(Some(Template {
                 id,
@@ -169,7 +165,6 @@ impl JobDatabase {
                 description,
                 namd_config_template,
                 variables,
-                is_builtin,
                 created_at,
                 updated_at,
             }))
@@ -182,16 +177,14 @@ impl JobDatabase {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, is_builtin FROM templates ORDER BY name"
+            "SELECT id, name, description FROM templates ORDER BY name"
         )?;
 
         let rows = stmt.query_map([], |row| {
-            let is_builtin_int: i32 = row.get(3)?;
             Ok(TemplateSummary {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 description: row.get(2)?,
-                is_builtin: is_builtin_int != 0,
             })
         })?;
 
