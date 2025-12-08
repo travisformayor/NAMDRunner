@@ -8,7 +8,6 @@ interface UIState {
   selectedTemplateId: string | null;
   templateEditorMode: 'create' | 'edit';
   consoleOpen: boolean;
-  sidebarCollapsed: boolean;
   theme: 'light' | 'dark';
 }
 
@@ -24,7 +23,6 @@ const initialState: UIState = {
   selectedTemplateId: null,
   templateEditorMode: 'create',
   consoleOpen: false,
-  sidebarCollapsed: false,
   theme: 'light'
 };
 
@@ -54,10 +52,6 @@ function createUIStore() {
     toggleConsole: () => update(state => ({
       ...state,
       consoleOpen: !state.consoleOpen
-    })),
-    toggleSidebar: () => update(state => ({
-      ...state,
-      sidebarCollapsed: !state.sidebarCollapsed
     })),
     setTheme: (theme: 'light' | 'dark') => {
       update(state => ({ ...state, theme }));

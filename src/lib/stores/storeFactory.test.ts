@@ -86,21 +86,6 @@ describe('createStore', () => {
     expect(state.error).toBe(null);
   });
 
-  it('should create store with custom initial state', () => {
-    const store = createStore({
-      initialData: null,
-      initialState: {
-        data: { test: 'value' },
-        loading: true,
-        error: 'Custom error',
-      },
-    });
-
-    const state = get(store);
-    expect(state.data).toEqual({ test: 'value' });
-    expect(state.loading).toBe(true);
-    expect(state.error).toBe('Custom error');
-  });
 
   it('should setData correctly', () => {
     const store = createStore({
@@ -129,13 +114,9 @@ describe('createStore', () => {
   it('should clearError correctly', () => {
     const store = createStore({
       initialData: null,
-      initialState: {
-        data: null,
-        loading: false,
-        error: 'Existing error',
-      },
     });
 
+    store.setError('Existing error');
     store.clearError();
 
     const state = get(store);
@@ -214,7 +195,6 @@ describe('createStore', () => {
     const store = createStore({
       initialData: '',
       loadCommand: 'test_command',
-      enableConnectionHandling: true,
     });
 
     await store.load();
@@ -232,7 +212,6 @@ describe('createStore', () => {
     const store = createStore({
       initialData: '',
       loadCommand: 'test_command',
-      enableConnectionHandling: true,
     });
 
     await store.load();
@@ -364,8 +343,7 @@ describe('invokeWithErrorHandling', () => {
 
     const result = await invokeWithErrorHandling<string>(
       'test_command',
-      {},
-      { enableConnectionHandling: true }
+      {}
     );
 
     expect(result.success).toBe(false);
@@ -381,17 +359,4 @@ describe('invokeWithErrorHandling', () => {
     expect(result.error).toBe('Unexpected error');
   });
 
-  it('should not mark session expired when connection handling disabled', async () => {
-    vi.mocked(invoke).mockResolvedValue({
-      success: false,
-      // data omitted
-      error: 'Connection timeout',
-    } as ApiResult<string>);
-
-    await invokeWithErrorHandling<string>('test_command', {}, {
-      enableConnectionHandling: false,
-    });
-
-    expect(sessionActions.markExpired).not.toHaveBeenCalled();
-  });
 });

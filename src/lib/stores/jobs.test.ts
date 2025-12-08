@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isConnectionError } from './jobs';
+import { isConnectionError } from './storeFactory';
 
 describe('Connection Error Detection', () => {
 

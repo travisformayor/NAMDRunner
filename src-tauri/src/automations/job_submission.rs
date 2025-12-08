@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 
-use crate::types::{JobInfo, JobStatus, response_data::JobSubmissionData};
+use crate::types::{JobInfo, JobStatus};
 use crate::validation::paths;
 use crate::database::with_database;
 use crate::{log_info, log_debug, log_error};
@@ -27,7 +27,7 @@ pub fn validate_job_submission_state(job: &JobInfo) -> Result<()> {
 pub async fn execute_job_submission_with_progress(
     job_id: String,
     progress_callback: impl Fn(&str),
-) -> Result<JobSubmissionData> {
+) -> Result<JobInfo> {
     progress_callback("Loading job information...");
     log_info!(category: "Job Submission", message: "Starting job submission", details: "{}", job_id);
 
@@ -124,11 +124,7 @@ pub async fn execute_job_submission_with_progress(
     progress_callback("Job submission completed successfully");
     log_info!(category: "Job Submission", message: "Job submitted successfully", details: "SLURM job ID: {}", slurm_job_id, show_toast: true);
 
-    Ok(JobSubmissionData {
-        job_id,
-        slurm_job_id,
-        submitted_at,
-    })
+    Ok(job_info)
 }
 
 #[cfg(test)]

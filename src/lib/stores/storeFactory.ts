@@ -33,12 +33,6 @@ export interface StoreConfig<T> {
 
   /** IPC command to load data */
   loadCommand?: string;
-
-  /** Enable connection error detection and session expiry */
-  enableConnectionHandling?: boolean;
-
-  /** Custom initial state (overrides standard state + initialData) */
-  initialState?: StoreState<T>;
 }
 
 /**
@@ -119,8 +113,8 @@ function handleApiResult<T>(
   } else {
     const errorMsg = result.error || 'Operation failed';
 
-    // Handle connection errors if enabled
-    if (config.enableConnectionHandling && isConnectionError(errorMsg)) {
+    // Handle connection errors
+    if (isConnectionError(errorMsg)) {
       sessionActions.markExpired(errorMsg);
     }
 
@@ -143,8 +137,8 @@ function handleException<T>(
 ): void {
   const errorMsg = error instanceof Error ? error.message : String(error);
 
-  // Handle connection errors if enabled
-  if (config.enableConnectionHandling && isConnectionError(errorMsg)) {
+  // Handle connection errors
+  if (isConnectionError(errorMsg)) {
     sessionActions.markExpired(errorMsg);
   }
 
@@ -166,25 +160,22 @@ function handleException<T>(
  * });
  * ```
  *
- * @example With connection handling
+ * @example With load command
  * ```ts
  * const jobsStore = createStore({
  *   initialData: [] as JobInfo[],
- *   loadCommand: 'get_all_jobs',
- *   enableConnectionHandling: true
+ *   loadCommand: 'get_all_jobs'
  * });
  * ```
  */
 export function createStore<T>(
   config: StoreConfig<T>
 ): StoreActions<T> {
-  const initialState: StoreState<T> =
-    config.initialState ||
-    ({
-      data: config.initialData,
-      loading: false,
-      error: null,
-    } as StoreState<T>);
+  const initialState: StoreState<T> = {
+    data: config.initialData,
+    loading: false,
+    error: null,
+  };
 
   const { subscribe, update, set } = writable<StoreState<T>>(initialState);
 
@@ -258,15 +249,13 @@ export function createStore<T>(
  * ```ts
  * const result = await invokeWithErrorHandling<JobInfo>(
  *   'get_job_status',
- *   { job_id: '123' },
- *   { enableConnectionHandling: true }
+ *   { job_id: '123' }
  * );
  * ```
  */
 export async function invokeWithErrorHandling<T>(
   command: string,
-  args?: Record<string, unknown>,
-  options: { enableConnectionHandling?: boolean } = {}
+  args?: Record<string, unknown>
 ): Promise<{ success: boolean; data?: T; error?: string }> {
   try {
     const result = await invoke<ApiResult<T>>(command, args);
@@ -276,8 +265,8 @@ export async function invokeWithErrorHandling<T>(
     } else {
       const errorMsg = result.error || 'Operation failed';
 
-      // Handle connection errors if enabled
-      if (options.enableConnectionHandling && isConnectionError(errorMsg)) {
+      // Handle connection errors
+      if (isConnectionError(errorMsg)) {
         sessionActions.markExpired(errorMsg);
       }
 
@@ -286,8 +275,8 @@ export async function invokeWithErrorHandling<T>(
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
 
-    // Handle connection errors if enabled
-    if (options.enableConnectionHandling && isConnectionError(errorMsg)) {
+    // Handle connection errors
+    if (isConnectionError(errorMsg)) {
       sessionActions.markExpired(errorMsg);
     }
 

@@ -146,6 +146,3 @@ export const sessionActions = {
     sessionStore.set(initialState);
   },
 };
-
-// Export the store for subscription
-export const session = { subscribe: sessionStore.subscribe };

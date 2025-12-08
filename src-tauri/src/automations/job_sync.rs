@@ -344,7 +344,7 @@ pub async fn load_slurm_logs(job: &mut JobInfo, force: bool) -> Result<()> {
 /// Internal helper to discover jobs from server
 /// Returns detailed report of imported jobs and failures
 async fn discover_jobs(username: &str) -> Result<crate::types::response_data::DiscoveryReport> {
-    use crate::types::response_data::{DiscoveryReport, JobSummary, FailedImport};
+    use crate::types::response_data::{DiscoveryReport, FailedImport};
 
     log_info!(category: "Job Discovery", message: "Starting automatic discovery", details: "user: {}", username);
 
@@ -406,7 +406,6 @@ async fn discover_jobs(username: &str) -> Result<crate::types::response_data::Di
         // Check if job already exists in database
         let job_id = job_info.job_id.clone();
         let job_name = job_info.job_name.clone();
-        let job_status = job_info.status.clone();
         let job_info_clone = job_info.clone();
 
         // Clone for closure to avoid move issues
@@ -429,11 +428,7 @@ async fn discover_jobs(username: &str) -> Result<crate::types::response_data::Di
         })?;
 
         if imported {
-            imported_jobs.push(JobSummary {
-                job_id,
-                job_name,
-                status: job_status,
-            });
+            imported_jobs.push(job_info);
         }
     }
 

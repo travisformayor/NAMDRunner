@@ -3,8 +3,6 @@
   import { isConnected } from '../../stores/session';
   import { lastSyncTime, hasEverSynced, isSyncing } from '../../stores/jobs';
 
-  let autoSync = false;
-  let syncInterval = 5;
   let currentTime = new Date();
   let updateTimer: number;
 
@@ -81,30 +79,6 @@
       Sync Now
     </button>
   </div>
-
-  <div class="sync-right">
-    <div class="auto-sync-control">
-      <label class="checkbox-wrapper">
-        <input
-          type="checkbox"
-          bind:checked={autoSync}
-          disabled={!$isConnected}
-        />
-        <span class="checkbox-label">Auto-sync: every</span>
-      </label>
-    </div>
-
-    <input
-      type="number"
-      bind:value={syncInterval}
-      disabled={!autoSync || !$isConnected}
-      min="1"
-      max="60"
-      class="interval-input"
-    />
-
-    <span class="interval-label">min</span>
-  </div>
 </div>
 
 <style>
@@ -158,81 +132,12 @@
     animation: spin 1s linear infinite;
   }
 
-  .sync-right {
-    display: flex;
-    align-items: center;
-    gap: var(--namd-spacing-md);
-  }
-
-  .auto-sync-control {
-    display: flex;
-    align-items: center;
-    gap: var(--namd-spacing-sm);
-  }
-
-  .checkbox-wrapper {
-    display: flex;
-    align-items: center;
-    gap: var(--namd-spacing-sm);
-    cursor: pointer;
-  }
-
-  .checkbox-wrapper input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-  }
-
-  .checkbox-wrapper input[type="checkbox"]:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .checkbox-label {
-    font-size: var(--namd-font-size-base);
-    color: var(--namd-text-secondary);
-    user-select: none;
-  }
-
-  .interval-input {
-    width: 64px;
-    height: 32px;
-    padding: var(--namd-spacing-xs);
-    border: 1px solid var(--namd-border);
-    border-radius: var(--namd-border-radius-sm);
-    background-color: var(--namd-bg-primary);
-    color: var(--namd-text-primary);
-    font-size: var(--namd-font-size-base);
-    text-align: center;
-  }
-
-  .interval-input:focus {
-    outline: none;
-    border-color: var(--namd-primary);
-  }
-
-  .interval-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .interval-label {
-    font-size: var(--namd-font-size-base);
-    color: var(--namd-text-secondary);
-  }
-
   @keyframes spin {
     from {
       transform: rotate(0deg);
     }
     to {
       transform: rotate(360deg);
-    }
-  }
-
-  @media (max-width: 768px) {
-    .sync-right {
-      display: none;
     }
   }
 </style>

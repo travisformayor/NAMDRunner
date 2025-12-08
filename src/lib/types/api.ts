@@ -71,12 +71,6 @@ export interface FileUpload {
 
 
 // Response DTOs for multi-field command responses
-export interface JobSubmissionData {
-  job_id: string;
-  slurm_job_id: string;
-  submitted_at: string;
-}
-
 export interface DownloadInfo {
   saved_to: string;
   file_size: number;
