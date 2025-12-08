@@ -4,14 +4,6 @@ use super::core::*;
 /// Response DTOs for commands that return multiple fields
 /// These are used with ApiResult<T> for type-safe IPC responses
 ///
-/// Job submission response data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobSubmissionData {
-    pub slurm_job_id: String,
-    pub submitted_at: String,
-    pub job_id: String,
-}
-
 /// Download operation response data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadInfo {
@@ -45,16 +37,8 @@ pub struct ConnectionStatus {
 /// Used when scanning cluster for existing jobs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveryReport {
-    pub imported_jobs: Vec<JobSummary>,
+    pub imported_jobs: Vec<JobInfo>,
     pub failed_imports: Vec<FailedImport>,
-}
-
-/// Summary of an imported job
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobSummary {
-    pub job_id: String,
-    pub job_name: String,
-    pub status: JobStatus,
 }
 
 /// Information about a failed import during discovery

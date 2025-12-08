@@ -1,7 +1,8 @@
 use anyhow::{Result, anyhow};
-use crate::types::JobInfo;
+use crate::types::{JobInfo, ApiResult};
 use crate::templates::Template;
-use crate::database::with_database;
+use crate::database::{with_database, get_current_database_path};
+use crate::validation::input;
 use crate::log_error;
 
 /// Load job from database or return error
@@ -35,6 +36,24 @@ pub fn load_template_or_fail(template_id: &str, context: &str) -> Result<Templat
             log_error!(category: context, message: "Template not found", details: "Template ID: {}", template_id);
             anyhow!("Template '{}' not found", template_id)
         })
+}
+
+/// Sanitize and validate job_id from command input
+/// Returns ApiResult with sanitized job_id on success, error on validation failure
+pub fn sanitize_command_job_id(job_id: &str) -> ApiResult<String> {
+    match input::sanitize_job_id(job_id) {
+        Ok(clean_id) => ApiResult::success(clean_id),
+        Err(error) => ApiResult::error(error.to_string()),
+    }
+}
+
+/// Get database path or return ApiResult error
+/// Used by commands that need to return database path
+pub fn get_database_path_or_fail() -> ApiResult<String> {
+    match get_current_database_path() {
+        Some(path) => ApiResult::success(path.to_string_lossy().to_string()),
+        None => ApiResult::error("Database not initialized".to_string()),
+    }
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@
 use crate::types::*;
 use crate::types::response_data::DownloadInfo;
 use crate::automations;
-use crate::validation::input::sanitize_job_id;
+use crate::commands::helpers;
 use tauri::AppHandle;
 
 /// Open a file dialog to select a single NAMD input file
@@ -46,10 +46,11 @@ pub async fn download_file(job_id: String, file_type: String, file_path: String)
     use rfd::FileDialog;
 
     // Validate and sanitize job ID
-    let clean_job_id = match sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
-    };
+    let sanitize_result = helpers::sanitize_command_job_id(&job_id);
+    if !sanitize_result.success {
+        return ApiResult::error(sanitize_result.error.unwrap_or_else(|| "Invalid job ID".to_string()));
+    }
+    let clean_job_id = sanitize_result.data.unwrap();
 
     // Validate file type
     if file_type != "input" && file_type != "output" {
@@ -87,10 +88,11 @@ pub async fn download_all_files(job_id: String, file_type: String) -> ApiResult<
     use rfd::FileDialog;
 
     // Validate and sanitize job ID
-    let clean_job_id = match sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(e) => return ApiResult::error(format!("Invalid job ID: {}", e)),
-    };
+    let sanitize_result = helpers::sanitize_command_job_id(&job_id);
+    if !sanitize_result.success {
+        return ApiResult::error(sanitize_result.error.unwrap_or_else(|| "Invalid job ID".to_string()));
+    }
+    let clean_job_id = sanitize_result.data.unwrap();
 
     // Validate file type
     if file_type != "input" && file_type != "output" {
@@ -136,7 +138,8 @@ mod tests {
         ).await;
 
         assert!(!result.success);
-        assert!(result.error.as_ref().unwrap().contains("Invalid job ID"));
+        // Error is "Job ID contains invalid path sequences" from sanitize_job_id
+        assert!(result.error.as_ref().unwrap().contains("Job ID"));
     }
 
     #[tokio::test]
@@ -159,7 +162,8 @@ mod tests {
         ).await;
 
         assert!(!result.success);
-        assert!(result.error.as_ref().unwrap().contains("Invalid job ID"));
+        // Error is "Job ID contains invalid path sequences" from sanitize_job_id
+        assert!(result.error.as_ref().unwrap().contains("Job ID"));
     }
 
     #[tokio::test]

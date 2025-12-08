@@ -68,7 +68,7 @@ pub async fn upload_content(
 
     let temp_path = temp_file.path().to_string_lossy().to_string();
 
-    connection.upload_file(&temp_path, remote_path, None).await
+    connection.upload_file(&temp_path, remote_path, None, None).await
         .map_err(|e| anyhow!("Failed to upload to {}: {}", remote_path, e))?;
 
     Ok(())

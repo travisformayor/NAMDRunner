@@ -214,14 +214,33 @@ pub mod paths {
     use super::*;
     use crate::ssh::directory_structure::JobDirectoryStructure;
 
-    /// Generate a safe project directory path for a user and job
-    pub fn project_directory(username: &str, job_id: &str) -> Result<String> {
+    /// Directory type for job operations
+    pub enum DirectoryType {
+        Project,
+        Scratch,
+    }
+
+    /// Generate a safe job directory path (project or scratch)
+    /// Validates username, job_id, and ensures path is within allowed prefixes
+    fn safe_job_directory(
+        username: &str,
+        job_id: &str,
+        dir_type: DirectoryType,
+    ) -> Result<String> {
         let clean_username = super::input::sanitize_username(username)?;
         let clean_job_id = super::input::sanitize_job_id(job_id)?;
 
-        // All cluster operations use Linux paths (cluster is always Linux)
-        let path = JobDirectoryStructure::project_dir(&clean_username, &clean_job_id);
-        let allowed_prefixes = JobDirectoryStructure::project_allowed_prefixes();
+        // Build path and get allowed prefixes based on directory type
+        let (path, allowed_prefixes) = match dir_type {
+            DirectoryType::Project => (
+                JobDirectoryStructure::project_dir(&clean_username, &clean_job_id),
+                JobDirectoryStructure::project_allowed_prefixes(),
+            ),
+            DirectoryType::Scratch => (
+                JobDirectoryStructure::scratch_dir(&clean_username, &clean_job_id),
+                JobDirectoryStructure::scratch_allowed_prefixes(),
+            ),
+        };
 
         // Validate the path is within allowed directories
         super::input::validate_path_safety(&path, &allowed_prefixes)?;
@@ -229,19 +248,14 @@ pub mod paths {
         Ok(path)
     }
 
+    /// Generate a safe project directory path for a user and job
+    pub fn project_directory(username: &str, job_id: &str) -> Result<String> {
+        safe_job_directory(username, job_id, DirectoryType::Project)
+    }
+
     /// Generate a safe scratch directory path for a user and job
     pub fn scratch_directory(username: &str, job_id: &str) -> Result<String> {
-        let clean_username = super::input::sanitize_username(username)?;
-        let clean_job_id = super::input::sanitize_job_id(job_id)?;
-
-        // All cluster operations use Linux paths (cluster is always Linux)
-        let path = JobDirectoryStructure::scratch_dir(&clean_username, &clean_job_id);
-        let allowed_prefixes = JobDirectoryStructure::scratch_allowed_prefixes();
-
-        // Validate the path is within allowed directories
-        super::input::validate_path_safety(&path, &allowed_prefixes)?;
-
-        Ok(path)
+        safe_job_directory(username, job_id, DirectoryType::Scratch)
     }
 
 }

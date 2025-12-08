@@ -1,6 +1,5 @@
 use crate::types::*;
 use crate::types::commands::ValidateJobConfigParams;
-use crate::types::response_data;
 use crate::validation::input;
 use crate::validation::job_validation::ValidationResult;
 use crate::database::with_database;
@@ -44,13 +43,12 @@ pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -
 
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn submit_job(job_id: String, app_handle: tauri::AppHandle) -> ApiResult<response_data::JobSubmissionData> {
-    let clean_job_id = match input::sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(error) => {
-            return ApiResult::error(error.to_string());
-        }
-    };
+pub async fn submit_job(job_id: String, app_handle: tauri::AppHandle) -> ApiResult<JobInfo> {
+    let sanitize_result = helpers::sanitize_command_job_id(&job_id);
+    if !sanitize_result.success {
+        return ApiResult::error(sanitize_result.error.unwrap_or_else(|| "Invalid job ID".to_string()));
+    }
+    let clean_job_id = sanitize_result.data.unwrap();
 
     // Call automation with progress tracking
     let handle_clone = app_handle;
@@ -114,12 +112,11 @@ pub async fn sync_jobs() -> SyncJobsResult {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn delete_job(job_id: String, delete_remote: bool, app_handle: tauri::AppHandle) -> ApiResult<()> {
-    let clean_job_id = match input::sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(error) => {
-            return ApiResult::error(error.to_string());
-        }
-    };
+    let sanitize_result = helpers::sanitize_command_job_id(&job_id);
+    if !sanitize_result.success {
+        return ApiResult::error(sanitize_result.error.unwrap_or_else(|| "Invalid job ID".to_string()));
+    }
+    let clean_job_id = sanitize_result.data.unwrap();
 
     let handle_clone = app_handle.clone();
 
@@ -139,12 +136,11 @@ pub async fn delete_job(job_id: String, delete_remote: bool, app_handle: tauri::
 /// Used when user explicitly clicks "Refetch Logs" button
 #[tauri::command(rename_all = "snake_case")]
 pub async fn refetch_slurm_logs(job_id: String) -> ApiResult<JobInfo> {
-    let clean_job_id = match input::sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(e) => {
-            return ApiResult::error(format!("Invalid job ID: {}", e));
-        }
-    };
+    let sanitize_result = helpers::sanitize_command_job_id(&job_id);
+    if !sanitize_result.success {
+        return ApiResult::error(sanitize_result.error.unwrap_or_else(|| "Invalid job ID".to_string()));
+    }
+    let clean_job_id = sanitize_result.data.unwrap();
 
     // Get job from database
     let mut job_info = match helpers::load_job_or_fail(&clean_job_id, "Refetch Logs") {

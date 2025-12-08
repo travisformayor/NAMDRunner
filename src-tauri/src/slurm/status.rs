@@ -13,7 +13,7 @@ impl SlurmStatusSync {
 
     pub async fn sync_job_status(&self, slurm_job_id: &str) -> Result<JobStatus> {
         // Use command builder for consistent SLURM command construction
-        let squeue_cmd = job_status_command(slurm_job_id)?;
+        let squeue_cmd = squeue_command(&[slurm_job_id.to_string()])?;
 
         // Use retry with quick backoff for SLURM operations
         let result = retry_quick(|| {
@@ -49,7 +49,7 @@ impl SlurmStatusSync {
 
     async fn check_completed_job(&self, slurm_job_id: &str) -> Result<JobStatus> {
         // Use command builder for consistent SLURM command construction
-        let sacct_cmd = completed_job_status_command(slurm_job_id)?;
+        let sacct_cmd = sacct_command(&[slurm_job_id.to_string()])?;
 
         // Use retry with quick backoff for SLURM operations
         let result = retry_quick(|| {
@@ -151,7 +151,7 @@ impl SlurmStatusSync {
         }
 
         // Use command builder for batch query
-        let squeue_cmd = batch_job_status_command(job_ids)?;
+        let squeue_cmd = squeue_command(job_ids)?;
 
         let mut results = Vec::new();
 
@@ -181,7 +181,7 @@ impl SlurmStatusSync {
 
         if !missing_jobs.is_empty() {
             let missing_job_strings: Vec<String> = missing_jobs.iter().map(|s| s.to_string()).collect();
-            let sacct_cmd = batch_completed_job_status_command(&missing_job_strings)?;
+            let sacct_cmd = sacct_command(&missing_job_strings)?;
 
             let sacct_result = retry_quick(|| {
                 let cmd = sacct_cmd.clone();
@@ -273,7 +273,7 @@ mod tests {
     fn test_slurm_command_construction() {
         // Test squeue command format matches reference documentation using command builder
         let job_id = "12345678";
-        let cmd = crate::slurm::commands::job_status_command(job_id).expect("Valid job ID should work");
+        let cmd = crate::slurm::commands::squeue_command(&[job_id.to_string()]).expect("Valid job ID should work");
 
         // This tests that the command builder creates commands matching the reference docs
         // Note: module initialization is only needed in batch scripts, not SSH commands
@@ -286,7 +286,7 @@ mod tests {
     #[test]
     fn test_sacct_command_construction() {
         let job_id = "12345678";
-        let cmd = crate::slurm::commands::completed_job_status_command(job_id).expect("Valid job ID should work");
+        let cmd = crate::slurm::commands::sacct_command(&[job_id.to_string()]).expect("Valid job ID should work");
 
         // Test that sacct command matches reference documentation
         // Note: module initialization is only needed in batch scripts, not SSH commands

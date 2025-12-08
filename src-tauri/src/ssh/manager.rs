@@ -141,9 +141,10 @@ impl ConnectionManager {
         local_path: &str,
         remote_path: &str,
         app_handle: Option<tauri::AppHandle>,
+        progress_key: Option<String>,
     ) -> Result<FileTransferProgress> {
         // Use retry logic for file uploads
-        retry_files(|| self.upload_file_once(local_path, remote_path, app_handle.clone())).await
+        retry_files(|| self.upload_file_once(local_path, remote_path, app_handle.clone(), progress_key.clone())).await
     }
 
     async fn upload_file_once(
@@ -151,6 +152,7 @@ impl ConnectionManager {
         local_path: &str,
         remote_path: &str,
         app_handle: Option<tauri::AppHandle>,
+        progress_key: Option<String>,
     ) -> Result<FileTransferProgress> {
         let mut conn = self.connection.lock().await;
         match conn.as_mut() {
@@ -160,13 +162,6 @@ impl ConnectionManager {
                     return Err(anyhow::anyhow!("SSH connection is no longer active"));
                 }
                 log_info!(category: "SFTP", message: "Uploading file", details: "{} -> {}", local_path, remote_path);
-
-                // Get file name for progress reporting
-                let file_name = std::path::Path::new(local_path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unknown")
-                    .to_string();
 
                 // Get file size for progress calculation (used in closure below)
                 let _file_size = std::fs::metadata(local_path)
@@ -181,7 +176,7 @@ impl ConnectionManager {
 
                 // Create progress callback if app_handle is provided
                 let progress_callback: Option<super::sftp::ProgressCallback> = app_handle.map(|handle| {
-                    let file_name = file_name.clone();
+                    let progress_key = progress_key.clone();
                     let start_time = std::time::Instant::now();
 
                     Box::new(move |bytes_transferred: u64, total_bytes: u64| {
@@ -203,7 +198,7 @@ impl ConnectionManager {
                             total_bytes,
                             percentage,
                             transfer_rate,
-                            file_name: Some(file_name.clone()),
+                            file_name: progress_key.clone(),
                         };
 
                         // Emit progress event to frontend
@@ -305,18 +300,18 @@ impl ConnectionManager {
     }
 
     /// Create a directory using SSH mkdir -p command
-    pub async fn create_directory(&self, remote_path: &str) -> Result<()> {
+    pub async fn create_directory(&self, remote_path: &str) -> Result<CommandResult> {
         // Use retry logic for directory creation
         retry_quick(|| self.create_directory_once(remote_path)).await
     }
 
-    async fn create_directory_once(&self, remote_path: &str) -> Result<()> {
+    async fn create_directory_once(&self, remote_path: &str) -> Result<CommandResult> {
         // Use mkdir -p command for directory creation (matches delete_directory pattern)
         log_info!(category: "SSH", message: "Creating directory", details: "{}", remote_path);
         let mkdir_command = format!("mkdir -p -m 0755 {}", crate::validation::shell::escape_parameter(remote_path));
-        self.execute_command(&mkdir_command, Some(crate::cluster::timeouts::QUICK_OPERATION)).await?;
+        let result = self.execute_command(&mkdir_command, Some(crate::cluster::timeouts::QUICK_OPERATION)).await?;
         log_info!(category: "SSH", message: "Directory created successfully", details: "{}", remote_path);
-        Ok(())
+        Ok(result)
     }
 
     /// Delete a directory and all its contents using SSH command
@@ -600,7 +595,7 @@ mod tests {
         let manager = ConnectionManager::new();
 
         // Test upload without connection
-        let upload_result = manager.upload_file("/local/file.txt", "/remote/file.txt", None).await;
+        let upload_result = manager.upload_file("/local/file.txt", "/remote/file.txt", None, None).await;
         assert!(upload_result.is_err());
         assert!(upload_result.unwrap_err().to_string().contains("Please connect to the cluster"));
 
