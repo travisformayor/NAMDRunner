@@ -65,15 +65,33 @@
     deleteTargetId = null;
     deleteTargetName = null;
   }
+
+  async function handleImport() {
+    await templateStore.importTemplate();
+  }
+
+  async function handleExport(templateId: string) {
+    await templateStore.exportTemplate(templateId);
+  }
 </script>
 
 <div class="templates-page namd-page">
   <div class="page-header namd-page-header">
     <h1>Simulation Templates</h1>
-    <button class="namd-button namd-button--primary" on:click={handleCreateNew}>
-      <span class="icon">+</span>
-      Create Template
-    </button>
+    <div class="header-actions">
+      <button class="namd-button namd-button--secondary" on:click={handleImport}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7,10 12,15 17,10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Import Template
+      </button>
+      <button class="namd-button namd-button--primary" on:click={handleCreateNew}>
+        <span class="icon">+</span>
+        Create Template
+      </button>
+    </div>
   </div>
 
   {#if $templatesLoading}
@@ -106,6 +124,14 @@
             </button>
             <button class="namd-button namd-button--secondary namd-button--sm" on:click={() => handleDuplicate(template)}>
               Duplicate
+            </button>
+            <button class="namd-button namd-button--secondary namd-button--sm" on:click={() => handleExport(template.id)} title="Export template to JSON file">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17,8 12,3 7,8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Export
             </button>
             <button class="namd-button namd-button--destructive namd-button--sm" on:click={() => confirmDelete(template)}>
               Delete
@@ -147,6 +173,11 @@
     margin: 0;
     font-size: var(--namd-font-size-2xl);
     color: var(--namd-text-primary);
+  }
+
+  .header-actions {
+    display: flex;
+    gap: var(--namd-spacing-sm);
   }
 
   .template-grid {

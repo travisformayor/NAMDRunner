@@ -164,7 +164,7 @@ describe('createStore', () => {
     vi.mocked(invoke).mockResolvedValue({
       success: true,
       data: { value: 'test data' },
-      error: null,
+      // error omitted
     } as ApiResult<{ value: string }>);
 
     const store = createStore({
@@ -186,7 +186,7 @@ describe('createStore', () => {
   it('should handle load errors', async () => {
     vi.mocked(invoke).mockResolvedValue({
       success: false,
-      data: null,
+      // data omitted
       error: 'Load failed',
     } as ApiResult<string>);
 
@@ -207,7 +207,7 @@ describe('createStore', () => {
   it('should handle connection errors with session expiry', async () => {
     vi.mocked(invoke).mockResolvedValue({
       success: false,
-      data: null,
+      // data omitted
       error: 'Connection timeout',
     } as ApiResult<string>);
 
@@ -225,7 +225,7 @@ describe('createStore', () => {
   it('should not mark session expired for non-connection errors', async () => {
     vi.mocked(invoke).mockResolvedValue({
       success: false,
-      data: null,
+      // data omitted
       error: 'Template not found',
     } as ApiResult<string>);
 
@@ -277,7 +277,7 @@ describe('createStore', () => {
               resolve({
                 success: true,
                 data: 'test',
-                error: null,
+                // error omitted
               } as ApiResult<string>),
             10
           )
@@ -305,7 +305,7 @@ describe('createStore', () => {
     vi.mocked(invoke).mockResolvedValue({
       success: true,
       data: 'refreshed',
-      error: null,
+      // error omitted
     } as ApiResult<string>);
 
     const store = createStore({
@@ -329,7 +329,7 @@ describe('invokeWithErrorHandling', () => {
     vi.mocked(invoke).mockResolvedValue({
       success: true,
       data: { value: 42 },
-      error: null,
+      // error omitted
     } as ApiResult<{ value: number }>);
 
     const result = await invokeWithErrorHandling<{ value: number }>(
@@ -345,7 +345,7 @@ describe('invokeWithErrorHandling', () => {
   it('should return error on failure', async () => {
     vi.mocked(invoke).mockResolvedValue({
       success: false,
-      data: null,
+      // data omitted
       error: 'Operation failed',
     } as ApiResult<string>);
 
@@ -358,7 +358,7 @@ describe('invokeWithErrorHandling', () => {
   it('should detect connection errors', async () => {
     vi.mocked(invoke).mockResolvedValue({
       success: false,
-      data: null,
+      // data omitted
       error: 'SSH connection lost',
     } as ApiResult<string>);
 
@@ -384,7 +384,7 @@ describe('invokeWithErrorHandling', () => {
   it('should not mark session expired when connection handling disabled', async () => {
     vi.mocked(invoke).mockResolvedValue({
       success: false,
-      data: null,
+      // data omitted
       error: 'Connection timeout',
     } as ApiResult<string>);
 

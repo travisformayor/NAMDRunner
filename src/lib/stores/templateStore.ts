@@ -66,6 +66,8 @@ export const templateStore = {
 
     const result = await invokeWithErrorHandling<string>('create_template', { template });
 
+    templatesListStore.update((state) => ({ ...state, loading: false }));
+
     if (result.success) {
       // Reload templates after creation
       await templatesListStore.load();
@@ -85,6 +87,8 @@ export const templateStore = {
       template,
     });
 
+    templatesListStore.update((state) => ({ ...state, loading: false }));
+
     if (result.success) {
       // Reload templates after update
       await templatesListStore.load();
@@ -103,6 +107,8 @@ export const templateStore = {
       template_id: templateId,
     });
 
+    templatesListStore.update((state) => ({ ...state, loading: false }));
+
     if (result.success) {
       // Clear current template if it was deleted
       const current = get(currentTemplateStore);
@@ -115,6 +121,49 @@ export const templateStore = {
       return true;
     } else {
       templatesListStore.setError(result.error || 'Failed to delete template');
+      return false;
+    }
+  },
+
+  // Export template to JSON file
+  async exportTemplate(templateId: string): Promise<boolean> {
+    templatesListStore.update((state) => ({ ...state, loading: true, error: null }));
+
+    const result = await invokeWithErrorHandling<string>('export_template', {
+      template_id: templateId,
+    });
+
+    templatesListStore.update((state) => ({ ...state, loading: false }));
+
+    if (result.success) {
+      // Success - backend shows toast
+      return true;
+    } else {
+      // Only set error if not cancelled
+      if (result.error && !result.error.toLowerCase().includes('cancelled')) {
+        templatesListStore.setError(result.error);
+      }
+      return false;
+    }
+  },
+
+  // Import template from JSON file
+  async importTemplate(): Promise<boolean> {
+    templatesListStore.update((state) => ({ ...state, loading: true, error: null }));
+
+    const result = await invokeWithErrorHandling<Template>('import_template');
+
+    templatesListStore.update((state) => ({ ...state, loading: false }));
+
+    if (result.success) {
+      // Reload template list to show imported template
+      await templatesListStore.load();
+      return true;
+    } else {
+      // Only set error if not cancelled
+      if (result.error && !result.error.toLowerCase().includes('cancelled')) {
+        templatesListStore.setError(result.error);
+      }
       return false;
     }
   },

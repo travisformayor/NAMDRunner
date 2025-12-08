@@ -73,6 +73,8 @@ pub fn run() {
             commands::templates::create_template,
             commands::templates::update_template,
             commands::templates::delete_template,
+            commands::templates::export_template,
+            commands::templates::import_template,
             commands::templates::validate_template_values,
             commands::templates::preview_namd_config,
             commands::templates::preview_template_with_defaults,
