@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import type { ApiResult, JobPreset, ValidationResult } from '$lib/types/api';
   import ValidationDisplay from '../ui/ValidationDisplay.svelte';
-  import { jobPresets, partitions, allQosOptions, validateResourceRequest, calculateJobCost, estimateQueueTime, walltimeToHours } from '$lib/stores/clusterConfig';
+  import { jobPresets, partitions, allQosOptions, validateResourceRequest, calculateJobCost, estimateQueueTime } from '$lib/stores/clusterConfig';
   import PreviewModal from '../ui/PreviewModal.svelte';
 
   export let resourceConfig: {
@@ -38,12 +38,11 @@
   }
 
   async function updateCostEstimate() {
-    const walltimeHours = walltimeToHours(resourceConfig.walltime);
     const partitionSpec = $partitions.find(p => p.id === resourceConfig.partition);
     const hasGpu = partitionSpec?.gpu_type ? true : false;
     const gpuCount = partitionSpec?.gpu_count || 1;
 
-    const totalCost = await calculateJobCost(resourceConfig.cores, walltimeHours, hasGpu, gpuCount);
+    const totalCost = await calculateJobCost(resourceConfig.cores, resourceConfig.walltime, hasGpu, gpuCount);
     const queueEstimate = await estimateQueueTime(resourceConfig.cores, resourceConfig.partition);
 
     costEstimate = { totalCost, queueEstimate };

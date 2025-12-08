@@ -186,6 +186,7 @@ export interface ClusterCapabilities {
   qos_options: QosSpec[];
   job_presets: JobPreset[];
   billing_rates: BillingRates;
+  default_host: string;
 }
 
 // Unified validation result type matching Rust ValidationResult

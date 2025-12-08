@@ -10,7 +10,6 @@
   export let templateId: string = '';
   export let templateValues: Record<string, any> = {};
   export let selectedTemplate: Template | null = null;
-  let fieldErrors: Record<string, string> = {};
   let lastLoadedTemplateId = '';
 
   // Separate variables by type, preserving template text order
@@ -143,8 +142,7 @@
 
         {#each fileVariables as [key, varDef]}
           {@const config = getVariableConfig(varDef)}
-          {@const hasError = fieldErrors[key]}
-          <div class="namd-field-group" class:required={varDef.required} class:has-error={hasError}>
+          <div class="namd-field-group" class:required={varDef.required}>
             <label for={key}>
               {varDef.label}
               {#if varDef.required}<span class="required-mark">*</span>{/if}
@@ -158,7 +156,6 @@
                 placeholder="No file selected"
                 readonly
                 class="namd-input file-display"
-                class:error={hasError}
               />
               <button
                 type="button"
@@ -168,10 +165,6 @@
                 Browse...
               </button>
             </div>
-
-            {#if hasError}
-              <p class="error-text">{hasError}</p>
-            {/if}
             {#if config && 'extensions' in config}
               <p class="help-text">
                 Allowed extensions: {config.extensions.join(', ')}
@@ -195,9 +188,8 @@
           {#each parameterVariables as [key, varDef]}
             {@const typeName = getVariableTypeName(varDef.var_type)}
             {@const config = getVariableConfig(varDef)}
-            {@const hasError = fieldErrors[key]}
 
-            <div class="namd-field-group" class:required={varDef.required} class:has-error={hasError}>
+            <div class="namd-field-group" class:required={varDef.required}>
               <label for={key}>
                 {varDef.label}
                 {#if varDef.required}<span class="required-mark">*</span>{/if}
@@ -212,7 +204,6 @@
                   max={config.max ?? undefined}
                   step="any"
                   class="namd-input"
-                  class:error={hasError}
                   required={varDef.required}
                 />
               {:else if typeName === 'Text'}
@@ -221,7 +212,6 @@
                   id={key}
                   bind:value={templateValues[key]}
                   class="namd-input"
-                  class:error={hasError}
                   required={varDef.required}
                 />
               {:else if typeName === 'Boolean' && config && 'default' in config}
@@ -233,10 +223,6 @@
                   />
                   <span>Enable</span>
                 </label>
-              {/if}
-
-              {#if hasError}
-                <p class="error-text">{hasError}</p>
               {/if}
               {#if varDef.help_text}
                 <p class="help-text">{varDef.help_text}</p>
@@ -339,28 +325,5 @@
     text-align: center;
     padding: var(--namd-spacing-2xl);
     color: var(--namd-text-secondary);
-  }
-
-
-  /* Error States */
-  .has-error label {
-    color: var(--namd-error);
-  }
-
-  .namd-input.error {
-    border-color: var(--namd-error);
-    background: var(--namd-error-bg);
-  }
-
-  .namd-input.error:focus {
-    border-color: var(--namd-error);
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
-  }
-
-  .error-text {
-    margin: var(--namd-spacing-xs) 0 0 0;
-    font-size: var(--namd-font-size-xs);
-    color: var(--namd-error);
-    font-weight: var(--namd-font-weight-medium);
   }
 </style>

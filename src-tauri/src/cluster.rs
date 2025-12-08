@@ -18,6 +18,7 @@ pub struct ClusterCapabilities {
     pub qos_options: Vec<QosSpec>,
     pub job_presets: Vec<JobPreset>,
     pub billing_rates: BillingRates,
+    pub default_host: String,
 }
 
 // ============================================================================
@@ -170,6 +171,7 @@ fn alpine_capabilities() -> ClusterCapabilities {
             cpu_cost_per_core_hour: 1.0,
             gpu_cost_per_gpu_hour: 108.2,
         },
+        default_host: "login.rc.colorado.edu".to_string(),
     }
 }
 
@@ -639,7 +641,13 @@ pub fn get_qos_for_partition(partition_id: &str) -> Vec<QosSpec> {
 
 /// Calculate estimated job cost
 #[tauri::command(rename_all = "snake_case")]
-pub fn calculate_job_cost(cores: u32, walltime_hours: f64, has_gpu: bool, gpu_count: u32) -> u32 {
+pub fn calculate_job_cost(cores: u32, walltime: String, has_gpu: bool, gpu_count: u32) -> u32 {
+    // Parse walltime string to hours
+    let walltime_hours = match parse_walltime_to_hours(&walltime) {
+        Ok(hours) => hours,
+        Err(_) => return 0, // Return 0 cost if walltime is invalid
+    };
+
     let billing = &alpine_capabilities().billing_rates;
     let core_cost = cores as f64 * walltime_hours * billing.cpu_cost_per_core_hour;
     let gpu_cost = if has_gpu {
@@ -648,6 +656,35 @@ pub fn calculate_job_cost(cores: u32, walltime_hours: f64, has_gpu: bool, gpu_co
         0.0
     };
     (core_cost + gpu_cost).round() as u32
+}
+
+/// Helper function to parse walltime string (HH:MM:SS) to hours
+fn parse_walltime_to_hours(walltime: &str) -> anyhow::Result<f64> {
+    if walltime.trim().is_empty() {
+        return Err(anyhow::anyhow!("Walltime is required"));
+    }
+
+    let parts: Vec<&str> = walltime.split(':').collect();
+
+    if parts.len() != 3 {
+        return Err(anyhow::anyhow!("Walltime must be in HH:MM:SS format"));
+    }
+
+    let hours: u32 = parts[0].parse()
+        .map_err(|_| anyhow::anyhow!("Invalid hours in walltime"))?;
+    let minutes: u32 = parts[1].parse()
+        .map_err(|_| anyhow::anyhow!("Invalid minutes in walltime"))?;
+    let seconds: u32 = parts[2].parse()
+        .map_err(|_| anyhow::anyhow!("Invalid seconds in walltime"))?;
+
+    if minutes >= 60 {
+        return Err(anyhow::anyhow!("Minutes must be less than 60"));
+    }
+    if seconds >= 60 {
+        return Err(anyhow::anyhow!("Seconds must be less than 60"));
+    }
+
+    Ok(hours as f64 + (minutes as f64 / 60.0) + (seconds as f64 / 3600.0))
 }
 
 /// Estimate queue time based on resources and partition
@@ -779,10 +816,10 @@ mod tests {
     #[test]
     fn test_calculate_job_cost() {
         // CPU only: 24 cores * 4 hours = 96 SU
-        assert_eq!(calculate_job_cost(24, 4.0, false, 0), 96);
+        assert_eq!(calculate_job_cost(24, "04:00:00".to_string(), false, 0), 96);
 
         // With GPU: (64 cores * 24 hours) + (1 GPU * 24 hours * 108.2) = 1536 + 2596.8 = 4133
-        let cost = calculate_job_cost(64, 24.0, true, 1);
+        let cost = calculate_job_cost(64, "24:00:00".to_string(), true, 1);
         assert!((4130..=4140).contains(&cost));
     }
 

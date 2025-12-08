@@ -1,8 +1,9 @@
 <script lang="ts">
   import { isConnected, connectionState, sessionActions, lastError } from '../../stores/session';
+  import { clusterConfig } from '../../stores/clusterConfig';
 
   let isOpen = false;
-  let host = 'login.rc.colorado.edu'; // Pre-populated default value
+  let host = $clusterConfig?.default_host; // Pre-populated from cluster config
   let username = '';
   let password = '';
   let isConnecting = false;
@@ -16,8 +17,7 @@
         return {
           label: 'Connected',
           color: 'namd-connection-connected',
-          dotColor: 'namd-connection-dot-connected',
-          since: '10:30 AM'
+          dotColor: 'namd-connection-dot-connected'
         };
       case 'Connecting':
         return {
@@ -124,7 +124,6 @@
           <div class="connection-details">
             <div>Host: {host}</div>
             <div>User: {username}</div>
-            <div>Since: {statusInfo.since}</div>
           </div>
 
           <button class="namd-button namd-button--secondary" on:click={handleDisconnect}>

@@ -81,35 +81,20 @@ export const billingRates = derived(
  */
 export async function calculateJobCost(
   cores: number,
-  walltimeHours: number,
+  walltime: string,
   hasGpu: boolean = false,
   gpuCount: number = 1
 ): Promise<number> {
   try {
     return await invoke<number>('calculate_job_cost', {
       cores,
-      walltime_hours: walltimeHours,
+      walltime,
       has_gpu: hasGpu,
       gpu_count: gpuCount
     });
   } catch (error) {
     return 0;
   }
-}
-
-/**
- * Convert walltime string (HH:MM:SS) to hours
- */
-export function walltimeToHours(walltime: string): number {
-  if (!walltime) return 0;
-  const parts = walltime.split(':');
-  if (parts.length !== 3) return 0;
-
-  const hours = parseInt(parts[0] || '0') || 0;
-  const minutes = parseInt(parts[1] || '0') || 0;
-  const seconds = parseInt(parts[2] || '0') || 0;
-
-  return hours + minutes / 60 + seconds / 3600;
 }
 
 
