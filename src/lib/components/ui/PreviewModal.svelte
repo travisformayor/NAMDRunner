@@ -13,7 +13,7 @@
 
 <Dialog open={isOpen} size="lg" {onClose}>
   <svelte:fragment slot="header">
-    <h3 class="preview-title">{title}</h3>
+    <h2 class="dialog-title">{title}</h2>
   </svelte:fragment>
 
   <svelte:fragment slot="body">
@@ -28,13 +28,6 @@
 </Dialog>
 
 <style>
-  .preview-title {
-    margin: 0;
-    font-size: var(--namd-font-size-lg);
-    font-weight: var(--namd-font-weight-semibold);
-    color: var(--namd-text-primary);
-  }
-
   .preview-content {
     background: var(--namd-code-bg);
     padding: var(--namd-spacing-md);

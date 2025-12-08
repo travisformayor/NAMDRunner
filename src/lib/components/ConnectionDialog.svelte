@@ -52,7 +52,7 @@
 
 <Dialog open={isOpen} size="sm" onClose={handleCancel}>
   <svelte:fragment slot="header">
-    <h2 class="connection-title">Connect to Cluster</h2>
+    <h2 class="dialog-title">Connect to Cluster</h2>
   </svelte:fragment>
 
   <svelte:fragment slot="body">
@@ -126,13 +126,6 @@
 </Dialog>
 
 <style>
-  .connection-title {
-    margin: 0;
-    font-size: var(--namd-font-size-lg);
-    font-weight: var(--namd-font-weight-semibold);
-    color: var(--namd-text-primary);
-  }
-
   .form-group {
     margin-bottom: var(--namd-spacing-md);
   }

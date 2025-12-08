@@ -87,8 +87,6 @@
 </script>
 
 <div class="variable-editor">
-  <h3>Variable Editor</h3>
-
   <form on:submit|preventDefault={handleSave}>
     <div class="form-group">
       <label for="var-key">Variable Key <span class="required">*</span></label>
@@ -189,12 +187,6 @@
 <style>
   .variable-editor {
     max-width: 600px;
-  }
-
-  h3 {
-    margin-bottom: var(--namd-spacing-lg);
-    color: var(--namd-text-primary);
-    font-size: var(--namd-font-size-xl);
   }
 
   .form-group {

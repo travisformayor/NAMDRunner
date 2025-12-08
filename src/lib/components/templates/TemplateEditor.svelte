@@ -316,6 +316,9 @@
 
 <!-- Variable Editor Modal -->
 <Dialog open={showVariableEditor} size="md" onClose={handleVariableCancel}>
+  <svelte:fragment slot="header">
+    <h2 class="dialog-title">Variable Editor</h2>
+  </svelte:fragment>
   <svelte:fragment slot="body">
     <VariableEditor
       variable={editingVariable}

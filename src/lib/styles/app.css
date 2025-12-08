@@ -30,11 +30,11 @@
   --namd-warning-bg: #fffbeb;
   --namd-warning-fg: #92400e;
   --namd-warning-border: #fbbf24;
-  --namd-error: #ef4444;
-  --namd-error-hover: #dc2626;
+  --namd-error: #f87171;
+  --namd-error-hover: #ef4444;
   --namd-error-bg: #fef2f2;
   --namd-error-fg: #991b1b;
-  --namd-error-border: #f87171;
+  --namd-error-border: #fca5a5;
   --namd-info: #3b82f6;
   --namd-info-bg: #eff6ff;
   --namd-info-fg: #1e40af;
@@ -137,11 +137,11 @@
   --namd-warning-bg: #451a03;     /* Dark amber background */
   --namd-warning-fg: #fbbf24;     /* Light amber text */
   --namd-warning-border: #d97706;  /* Amber border */
-  --namd-error: #ef4444;
-  --namd-error-hover: #dc2626;
+  --namd-error: #f87171;
+  --namd-error-hover: #ef4444;
   --namd-error-bg: #7f1d1d;       /* Dark red background */
   --namd-error-fg: #fecaca;       /* Light red text */
-  --namd-error-border: #dc2626;   /* Bright red border */
+  --namd-error-border: #fca5a5;   /* Lighter red border */
   --namd-info: #3b82f6;
   --namd-info-bg: #1e3a8a;        /* Dark blue background */
   --namd-info-fg: #93c5fd;        /* Light blue text */
@@ -268,6 +268,55 @@ html, body {
 
 .namd-shadow-md {
   box-shadow: var(--namd-shadow-md);
+}
+
+/* Dialog Styles */
+.dialog-title {
+  display: flex;
+  align-items: center;
+  gap: var(--namd-spacing-sm);
+  margin: 0;
+  font-size: var(--namd-font-size-lg);
+  font-weight: var(--namd-font-weight-semibold);
+  color: var(--namd-text-primary);
+}
+
+.dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-weight: var(--namd-font-weight-bold);
+  font-size: var(--namd-font-size-base);
+  flex-shrink: 0;
+}
+
+.dialog-icon--success {
+  background-color: var(--namd-success-bg);
+  color: var(--namd-success-fg);
+}
+
+.dialog-icon--error {
+  background-color: var(--namd-error-bg);
+  color: var(--namd-error-fg);
+}
+
+.dialog-icon--warning {
+  background-color: var(--namd-warning-bg);
+  color: var(--namd-warning-fg);
+}
+
+.dialog-icon--info {
+  background-color: var(--namd-info-bg);
+  color: var(--namd-info-fg);
+}
+
+.dialog-message {
+  line-height: var(--namd-line-height-relaxed);
+  color: var(--namd-text-primary);
+  white-space: pre-line;
 }
 
 /* Button Base Styles */
