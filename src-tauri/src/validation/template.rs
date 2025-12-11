@@ -1,7 +1,7 @@
-use super::{Template, VariableType};
+use crate::templates::{Template, VariableType};
 use serde_json::Value;
 use std::collections::HashMap;
-use crate::validation::job_validation::ValidationResult;
+use super::job::ValidationResult;
 
 /// Validate template values against template variable definitions
 /// Pure business logic - no database or AppHandle dependencies

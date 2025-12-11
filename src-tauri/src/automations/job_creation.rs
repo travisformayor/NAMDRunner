@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use crate::types::{CreateJobParams, JobInfo, JobStatus, SlurmConfig, FileUpload};
-use crate::validation::{input, paths};
+use crate::security::input;
+use crate::ssh::paths;
 use crate::{log_info, log_debug, log_error};
 use crate::automations::{common, file_operations};
 

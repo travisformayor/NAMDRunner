@@ -8,7 +8,7 @@ use std::path::Path;
 use crate::types::FileUpload;
 use crate::types::response_data::DownloadInfo;
 use crate::ssh::ConnectionManager;
-use crate::validation::input;
+use crate::security::input;
 use crate::{log_info, log_debug};
 use crate::automations::common;
 use crate::commands::helpers;

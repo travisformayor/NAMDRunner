@@ -124,10 +124,10 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         });
     }
 
-    log_debug!(category: "Job Sync", message: "Batch querying SLURM jobs", details: "{} jobs", job_ids.len());
+    log_debug!(category: "Job Sync", message: "Querying SLURM job statuses", details: "{} jobs", job_ids.len());
 
-    // Use centralized batch query method (1 SSH command instead of N)
-    let batch_results = slurm_sync.sync_all_jobs(&job_ids).await
+    // Query all job statuses in batch (squeue for active, sacct for completed)
+    let batch_results = slurm_sync.query_job_statuses(&job_ids).await
         .map_err(|e| {
             log_error!(category: "Job Sync", message: "Batch SLURM query failed", details: "{}", e);
             anyhow!("Failed to query SLURM job status: {}", e)
@@ -151,7 +151,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         if let Some(job) = job_map.get(&slurm_job_id) {
             match status_result {
                 Ok(new_status) => {
-                    match sync_single_job_with_status(&slurm_sync, job.clone(), new_status).await {
+                    match update_job_with_status(job.clone(), new_status).await {
                         Ok(result) => {
                             if result.updated {
                                 log_info!(
@@ -198,8 +198,8 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
     })
 }
 
-/// Sync a single job with already-fetched SLURM status (from batch query)
-async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: JobInfo, new_status: JobStatus) -> Result<JobSyncResult> {
+/// Update a single job with fetched SLURM status
+async fn update_job_with_status(mut job: JobInfo, new_status: JobStatus) -> Result<JobSyncResult> {
     let job_id = job.job_id.clone();
     let old_status = job.status.clone();
 

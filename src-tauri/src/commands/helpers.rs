@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use crate::types::{JobInfo, ApiResult};
 use crate::templates::Template;
 use crate::database::{with_database, get_current_database_path};
-use crate::validation::input;
+use crate::security::input;
 use crate::log_error;
 
 /// Load job from database or return error

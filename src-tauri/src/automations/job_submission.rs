@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use chrono::Utc;
 
 use crate::types::{JobInfo, JobStatus};
-use crate::validation::paths;
+use crate::ssh::paths;
 use crate::database::with_database;
 use crate::{log_info, log_debug, log_error};
 use crate::automations::common;

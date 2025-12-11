@@ -308,7 +308,7 @@ impl ConnectionManager {
     async fn create_directory_once(&self, remote_path: &str) -> Result<CommandResult> {
         // Use mkdir -p command for directory creation (matches delete_directory pattern)
         log_info!(category: "SSH", message: "Creating directory", details: "{}", remote_path);
-        let mkdir_command = format!("mkdir -p -m 0755 {}", crate::validation::shell::escape_parameter(remote_path));
+        let mkdir_command = format!("mkdir -p -m 0755 {}", crate::security::shell::escape_parameter(remote_path));
         let result = self.execute_command(&mkdir_command, Some(crate::cluster::timeouts::QUICK_OPERATION)).await?;
         log_info!(category: "SSH", message: "Directory created successfully", details: "{}", remote_path);
         Ok(result)
@@ -318,7 +318,7 @@ impl ConnectionManager {
     pub async fn delete_directory(&self, remote_path: &str) -> Result<CommandResult> {
         // Use rm -rf command for directory deletion with retry logic
         log_info!(category: "SSH", message: "Deleting directory", details: "{}", remote_path);
-        let rm_command = format!("rm -rf {}", crate::validation::shell::escape_parameter(remote_path));
+        let rm_command = format!("rm -rf {}", crate::security::shell::escape_parameter(remote_path));
         let result = self.execute_command(&rm_command, Some(crate::cluster::timeouts::QUICK_OPERATION)).await?;
         log_info!(category: "SSH", message: "Directory deleted successfully", details: "{}", remote_path);
         Ok(result)
@@ -349,8 +349,8 @@ impl ConnectionManager {
         // -z: compress during transfer
         let rsync_command = format!(
             "rsync -az {} {}",
-            crate::validation::shell::escape_parameter(source),
-            crate::validation::shell::escape_parameter(destination)
+            crate::security::shell::escape_parameter(source),
+            crate::security::shell::escape_parameter(destination)
         );
 
         // Use default command timeout (rsync is efficient for cluster-side operations)

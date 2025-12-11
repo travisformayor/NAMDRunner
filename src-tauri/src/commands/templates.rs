@@ -2,7 +2,7 @@ use crate::types::*;
 use crate::database::with_database;
 use crate::templates::Template;
 use crate::commands::helpers;
-use crate::validation::job_validation::ValidationResult;
+use crate::validation::job::ValidationResult;
 use crate::{log_info, log_error};
 use std::collections::HashMap;
 use serde_json::Value;
@@ -159,7 +159,7 @@ pub async fn validate_template_values(
     };
 
     // Use extracted validation logic (testable without database)
-    let result = crate::templates::validate_values(&template, &values);
+    let result = crate::validation::template::validate_values(&template, &values);
 
     if !result.is_valid {
         log_error!(category: "Templates", message: "Template validation failed", details: "{} issues found", result.issues.len());

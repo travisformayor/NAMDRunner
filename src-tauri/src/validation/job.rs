@@ -1,7 +1,7 @@
 use anyhow::anyhow;
-use crate::cluster::{get_partition_limits, get_qos_for_partition};
+use crate::cluster::{get_partition_by_name, get_qos_for_partition};
 use crate::types::commands::ValidateJobConfigParams;
-use crate::validation::input;
+use crate::security::input;
 use crate::commands::helpers;
 
 /// Business logic validation for job operations
@@ -101,9 +101,9 @@ pub fn validate_resource_allocation(
         }
     };
 
-    // Get partition limits
-    let limits = match get_partition_limits(partition_id) {
-        Some(l) => l,
+    // Get partition from cached config
+    let partition = match get_partition_by_name(partition_id) {
+        Some(p) => p,
         None => {
             let error = format!("Unknown partition: {}", partition_id);
             issues.push(error.clone());
@@ -119,17 +119,17 @@ pub fn validate_resource_allocation(
     };
 
     // Validate cores against partition limit
-    if config.cores > limits.max_cores {
+    if config.cores > partition.max_cores {
         let error = format!(
             "Cores ({}) exceeds partition '{}' limit ({})",
-            config.cores, partition_id, limits.max_cores
+            config.cores, partition_id, partition.max_cores
         );
         issues.push(error.clone());
         field_errors.insert("cores".to_string(), error);
     }
 
     // Validate memory against partition limit
-    let max_memory = config.cores as f64 * limits.max_memory_per_core;
+    let max_memory = config.cores as f64 * partition.max_memory_per_core_gb;
     if memory_gb > max_memory {
         let error = format!(
             "Memory ({:.1}GB) exceeds limit for {} cores on partition '{}' ({:.1}GB)",
@@ -141,7 +141,7 @@ pub fn validate_resource_allocation(
 
     // Validate QOS
     let valid_qos = get_qos_for_partition(partition_id);
-    if let Some(qos) = valid_qos.iter().find(|q| q.id == qos_id) {
+    if let Some(qos) = valid_qos.iter().find(|q| q.name == qos_id) {
         // Validate walltime against QOS limit
         if walltime_hours > qos.max_walltime_hours as f64 {
             let error = format!(
@@ -152,11 +152,13 @@ pub fn validate_resource_allocation(
             field_errors.insert("walltime".to_string(), error);
         }
 
-        // QOS-specific validation
-        if qos_id == "mem" && memory_gb < 256.0 {
-            let error = "QOS 'mem' requires at least 256GB memory".to_string();
-            issues.push(error.clone());
-            field_errors.insert("qos".to_string(), error);
+        // QOS-specific memory validation (use min_memory_gb field)
+        if let Some(min_mem) = qos.min_memory_gb {
+            if memory_gb < min_mem as f64 {
+                let error = format!("QOS '{}' requires at least {}GB memory", qos_id, min_mem);
+                issues.push(error.clone());
+                field_errors.insert("qos".to_string(), error);
+            }
         }
     } else {
         let error = format!(
@@ -230,7 +232,7 @@ pub async fn validate_job_config(params: ValidateJobConfigParams) -> ValidationR
         match helpers::load_template_or_fail(&params.template_id, "Validation") {
             Ok(template) => {
                 // Call template validation module directly (not command wrapper)
-                let template_validation = crate::templates::validate_values(&template, &params.template_values);
+                let template_validation = crate::validation::template::validate_values(&template, &params.template_values);
 
                 // Merge results
                 issues.extend(template_validation.issues);
@@ -276,25 +278,6 @@ pub async fn validate_job_config(params: ValidateJobConfigParams) -> ValidationR
     }
 }
 
-/// Validate resource allocation against cluster limits (Tauri command wrapper)
-#[tauri::command(rename_all = "snake_case", rename = "validate_resource_allocation")]
-pub fn validate_resource_allocation_command(
-    cores: u32,
-    memory: String,
-    walltime: String,
-    partition_id: String,
-    qos_id: String,
-) -> ValidationResult {
-    let config = crate::types::SlurmConfig {
-        cores,
-        memory,
-        walltime,
-        partition: partition_id.clone(),
-        qos: qos_id.clone(),
-    };
-
-    validate_resource_allocation(&config, &partition_id, &qos_id)
-}
 
 #[cfg(test)]
 mod tests {

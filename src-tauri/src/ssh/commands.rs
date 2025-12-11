@@ -175,7 +175,7 @@ impl<'a> CommandExecutor<'a> {
 /// Generate a zip command for archiving output files
 /// Creates zip in /tmp/ and returns the temp file path
 pub fn zip_outputs_command(project_dir: &str, job_id: &str) -> Result<(String, String)> {
-    use crate::validation::shell;
+    use crate::security::shell;
 
     // Temp zip file path (use raw job_id, not escaped)
     let temp_zip = format!("/tmp/namdrunner_outputs_{}.zip", job_id);
@@ -198,7 +198,7 @@ pub fn zip_outputs_command(project_dir: &str, job_id: &str) -> Result<(String, S
 /// Generate a zip command for archiving input files
 /// Creates zip in /tmp/ and returns the temp file path
 pub fn zip_inputs_command(project_dir: &str, job_id: &str) -> Result<(String, String)> {
-    use crate::validation::shell;
+    use crate::security::shell;
 
     // Temp zip file path (use raw job_id, not escaped)
     let temp_zip = format!("/tmp/namdrunner_inputs_{}.zip", job_id);
@@ -220,7 +220,7 @@ pub fn zip_inputs_command(project_dir: &str, job_id: &str) -> Result<(String, St
 
 /// Generate a command to remove a temporary file
 pub fn remove_temp_file_command(file_path: &str) -> Result<String> {
-    use crate::validation::shell;
+    use crate::security::shell;
 
     let clean_path = shell::escape_parameter(file_path);
     Ok(format!("rm -f {}", clean_path))

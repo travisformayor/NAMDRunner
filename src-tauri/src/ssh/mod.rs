@@ -5,6 +5,7 @@ pub mod errors;
 pub mod manager;
 pub mod metadata;
 pub mod directory_structure;
+pub mod paths;
 
 #[cfg(test)]
 pub mod test_utils;
