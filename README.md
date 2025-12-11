@@ -42,6 +42,10 @@ npm install
 
 # Launch development app
 npm run tauri dev
+
+# Run tests
+npm run test:run              # Frontend unit tests
+cd src-tauri && cargo test    # Backend Rust tests
 ```
 
 ## Manual Server Management
