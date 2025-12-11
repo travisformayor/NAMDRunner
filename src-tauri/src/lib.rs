@@ -2,7 +2,7 @@ mod types;
 pub mod commands;
 pub mod ssh;
 mod security;
-mod validation;
+pub mod validation;
 mod database;
 mod slurm;
 mod logging;
@@ -37,6 +37,11 @@ pub fn run() {
                     e
                 })?;
 
+            log_info!(
+                category: "Startup",
+                message: "Database initialized"
+            );
+
             // Default templates are loaded on-demand when list_templates is first called
             // This ensures logs appear in frontend (setup hook runs before frontend connects)
 
@@ -45,16 +50,20 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // App initialization
             commands::app::initialize_app,
+            commands::app::get_recent_logs,
             // Connection lifecycle
             commands::connection::connect_to_cluster,
             commands::connection::disconnect,
             commands::connection::get_connection_status,
             // Cluster configuration
-            cluster::get_cluster_capabilities,
-            cluster::calculate_job_cost,
-            cluster::estimate_queue_time,
-            cluster::suggest_qos,
-            validation::job_validation::validate_resource_allocation_command,
+            commands::cluster::get_cluster_capabilities,
+            commands::cluster::save_cluster_config,
+            commands::cluster::reset_cluster_config,
+            commands::cluster::calculate_job_cost,
+            commands::cluster::estimate_queue_time,
+            commands::cluster::suggest_qos,
+            // Validation
+            commands::validation::validate_resource_allocation_command,
             // Job management
             commands::jobs::create_job,
             commands::jobs::submit_job,
@@ -88,4 +97,9 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+
+    log_info!(
+        category: "Startup",
+        message: "Tauri application shutdown"
+    );
 }

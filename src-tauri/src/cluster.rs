@@ -25,70 +25,33 @@ pub struct ClusterCapabilities {
 // Partition Configuration
 // ============================================================================
 
-/// Partition category classification
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum PartitionCategory {
-    Compute,
-    #[serde(rename = "GPU")]
-    Gpu,
-    HighMemory,
-    Development,
-    Compile,
-}
-
 /// Partition specification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartitionSpec {
-    pub id: String,
     pub name: String,
     pub title: String,
     pub description: String,
-    pub nodes: String,
-    pub cores_per_node: String,
-    pub ram_per_core: String,
-    pub max_walltime: String,
+    pub max_cores: u32,
+    pub max_memory_per_core_gb: f64,
     pub gpu_type: Option<String>,
     pub gpu_count: Option<u32>,
-    pub category: PartitionCategory,
-    pub use_cases: Vec<String>,
-    pub is_standard: bool,
     /// Indicates if this is the default/recommended partition for new users
     pub is_default: bool,
-}
-
-/// Resource limits for a partition
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PartitionLimits {
-    pub max_cores: u32,
-    pub max_memory_per_core: f64,
-    pub min_memory_for_qos: Option<u32>,
 }
 
 // ============================================================================
 // QoS Configuration
 // ============================================================================
 
-/// Quality of Service priority level
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum QosPriority {
-    Normal,
-    High,
-    Low,
-}
-
 /// Quality of Service specification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QosSpec {
-    pub id: String,
     pub name: String,
     pub title: String,
     pub description: String,
     pub max_walltime_hours: u32,
-    pub max_jobs: u32,
-    pub node_limit: u32,
     pub valid_partitions: Vec<String>,
-    pub requirements: Vec<String>,
-    pub priority: QosPriority,
+    pub min_memory_gb: Option<u32>,
     /// Indicates if this is the default QoS option
     pub is_default: bool,
 }
@@ -100,23 +63,11 @@ pub struct QosSpec {
 /// Job preset configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobPreset {
-    pub id: String,
     pub name: String,
     pub description: String,
-    pub icon: String,
-    pub category: String,
-    pub config: JobPresetConfig,
-    pub estimated_cost: String,
-    pub estimated_queue: String,
-    pub use_cases: Vec<String>,
-    pub requires_gpu: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobPresetConfig {
     pub cores: u32,
     pub memory: String,
-    pub wall_time: String,
+    pub walltime: String,
     pub partition: String,
     pub qos: String,
 }
@@ -158,489 +109,164 @@ pub mod timeouts {
 }
 
 // ============================================================================
-// Default Alpine Cluster Profile
+// Embedded Configuration - Parse alpine.json
 // ============================================================================
 
-/// Get the Alpine cluster capabilities (CU Research Computing)
-fn alpine_capabilities() -> ClusterCapabilities {
-    ClusterCapabilities {
-        partitions: get_alpine_partitions(),
-        qos_options: get_alpine_qos(),
-        job_presets: get_alpine_presets(),
-        billing_rates: BillingRates {
-            cpu_cost_per_core_hour: 1.0,
-            gpu_cost_per_gpu_hour: 108.2,
-        },
-        default_host: "login.rc.colorado.edu".to_string(),
-    }
-}
-
-/// Get all Alpine partitions (production + testing)
-fn get_alpine_partitions() -> Vec<PartitionSpec> {
-    vec![
-        // Production partitions
-        PartitionSpec {
-            id: "amilan".to_string(),
-            name: "amilan".to_string(),
-            title: "General Compute (Default)".to_string(),
-            description: "Standard CPU nodes for most NAMD simulations".to_string(),
-            nodes: "374+".to_string(),
-            cores_per_node: "32/48/64".to_string(),
-            ram_per_core: "3.75 GB".to_string(),
-            max_walltime: "24H (7D with long QoS)".to_string(),
-            gpu_type: None,
-            gpu_count: None,
-            category: PartitionCategory::Compute,
-            use_cases: vec![
-                "Production runs".to_string(),
-                "Standard simulations".to_string(),
-                "Most NAMD jobs".to_string(),
-            ],
-            is_standard: true,
-            is_default: true,
-        },
-        PartitionSpec {
-            id: "amilan128c".to_string(),
-            name: "amilan128c".to_string(),
-            title: "High-Core Compute".to_string(),
-            description: "High core count nodes for large parallel jobs".to_string(),
-            nodes: "16+".to_string(),
-            cores_per_node: "128".to_string(),
-            ram_per_core: "2.01 GB".to_string(),
-            max_walltime: "24H (7D with long QoS)".to_string(),
-            gpu_type: None,
-            gpu_count: None,
-            category: PartitionCategory::Compute,
-            use_cases: vec![
-                "Large simulations".to_string(),
-                "Highly parallel jobs".to_string(),
-                "100+ core jobs".to_string(),
-            ],
-            is_standard: false,
-            is_default: false,
-        },
-        PartitionSpec {
-            id: "amem".to_string(),
-            name: "amem".to_string(),
-            title: "High-Memory".to_string(),
-            description: "High memory nodes for memory-intensive simulations".to_string(),
-            nodes: "22+".to_string(),
-            cores_per_node: "48/64/128".to_string(),
-            ram_per_core: "16-21.5 GB".to_string(),
-            max_walltime: "4H (7D with mem QoS)".to_string(),
-            gpu_type: None,
-            gpu_count: None,
-            category: PartitionCategory::HighMemory,
-            use_cases: vec![
-                "Large systems".to_string(),
-                "Memory-intensive jobs".to_string(),
-                "Complex simulations".to_string(),
-            ],
-            is_standard: false,
-            is_default: false,
-        },
-        PartitionSpec {
-            id: "aa100".to_string(),
-            name: "aa100".to_string(),
-            title: "NVIDIA A100 GPU".to_string(),
-            description: "GPU-accelerated nodes with NVIDIA A100 for fast NAMD".to_string(),
-            nodes: "10+".to_string(),
-            cores_per_node: "64".to_string(),
-            ram_per_core: "3.75 GB".to_string(),
-            max_walltime: "24H (7D with long QoS)".to_string(),
-            gpu_type: Some("NVIDIA A100".to_string()),
-            gpu_count: Some(3),
-            category: PartitionCategory::Gpu,
-            use_cases: vec![
-                "GPU-accelerated NAMD".to_string(),
-                "Fast simulations".to_string(),
-                "CUDA workloads".to_string(),
-            ],
-            is_standard: false,
-            is_default: false,
-        },
-        PartitionSpec {
-            id: "ami100".to_string(),
-            name: "ami100".to_string(),
-            title: "AMD MI100 GPU".to_string(),
-            description: "GPU-accelerated nodes with AMD MI100 for HIP workloads".to_string(),
-            nodes: "8+".to_string(),
-            cores_per_node: "64".to_string(),
-            ram_per_core: "3.75 GB".to_string(),
-            max_walltime: "24H (7D with long QoS)".to_string(),
-            gpu_type: Some("AMD MI100".to_string()),
-            gpu_count: Some(3),
-            category: PartitionCategory::Gpu,
-            use_cases: vec![
-                "HIP-accelerated workloads".to_string(),
-                "AMD GPU computing".to_string(),
-                "Alternative GPU option".to_string(),
-            ],
-            is_standard: false,
-            is_default: false,
-        },
-        PartitionSpec {
-            id: "al40".to_string(),
-            name: "al40".to_string(),
-            title: "NVIDIA L40 GPU".to_string(),
-            description: "GPU-accelerated nodes with NVIDIA L40".to_string(),
-            nodes: "2+".to_string(),
-            cores_per_node: "64".to_string(),
-            ram_per_core: "3.75 GB".to_string(),
-            max_walltime: "24H (7D with long QoS)".to_string(),
-            gpu_type: Some("NVIDIA L40".to_string()),
-            gpu_count: Some(3),
-            category: PartitionCategory::Gpu,
-            use_cases: vec![
-                "GPU computing".to_string(),
-                "Graphics workloads".to_string(),
-                "AI/ML tasks".to_string(),
-            ],
-            is_standard: false,
-            is_default: false,
-        },
-        // Testing partitions
-        PartitionSpec {
-            id: "atesting".to_string(),
-            name: "atesting".to_string(),
-            title: "CPU Testing".to_string(),
-            description: "Quick CPU testing with limited resources".to_string(),
-            nodes: "2".to_string(),
-            cores_per_node: "16 total".to_string(),
-            ram_per_core: "Variable".to_string(),
-            max_walltime: "1 hour".to_string(),
-            gpu_type: None,
-            gpu_count: None,
-            category: PartitionCategory::Development,
-            use_cases: vec![
-                "Testing configurations".to_string(),
-                "Quick validation".to_string(),
-                "Development".to_string(),
-            ],
-            is_standard: false,
-            is_default: false,
-        },
-        PartitionSpec {
-            id: "atesting_a100".to_string(),
-            name: "atesting_a100".to_string(),
-            title: "GPU Testing (A100 MIG)".to_string(),
-            description: "GPU testing with A100 MIG instances".to_string(),
-            nodes: "1".to_string(),
-            cores_per_node: "10".to_string(),
-            ram_per_core: "Variable".to_string(),
-            max_walltime: "1 hour".to_string(),
-            gpu_type: Some("NVIDIA A100 MIG".to_string()),
-            gpu_count: Some(1),
-            category: PartitionCategory::Development,
-            use_cases: vec![
-                "GPU testing".to_string(),
-                "CUDA development".to_string(),
-                "Quick GPU validation".to_string(),
-            ],
-            is_standard: false,
-            is_default: false,
-        },
-        PartitionSpec {
-            id: "atesting_mi100".to_string(),
-            name: "atesting_mi100".to_string(),
-            title: "GPU Testing (MI100)".to_string(),
-            description: "GPU testing with AMD MI100".to_string(),
-            nodes: "1".to_string(),
-            cores_per_node: "64".to_string(),
-            ram_per_core: "3.75 GB".to_string(),
-            max_walltime: "1 hour".to_string(),
-            gpu_type: Some("AMD MI100".to_string()),
-            gpu_count: Some(3),
-            category: PartitionCategory::Development,
-            use_cases: vec![
-                "HIP testing".to_string(),
-                "AMD GPU development".to_string(),
-                "GPU validation".to_string(),
-            ],
-            is_standard: false,
-            is_default: false,
-        },
-        PartitionSpec {
-            id: "acompile".to_string(),
-            name: "acompile".to_string(),
-            title: "Code Compilation".to_string(),
-            description: "Dedicated nodes for compiling code".to_string(),
-            nodes: "1".to_string(),
-            cores_per_node: "4".to_string(),
-            ram_per_core: "Variable".to_string(),
-            max_walltime: "12 hours".to_string(),
-            gpu_type: None,
-            gpu_count: None,
-            category: PartitionCategory::Compile,
-            use_cases: vec![
-                "Code compilation".to_string(),
-                "Build processes".to_string(),
-                "Software development".to_string(),
-            ],
-            is_standard: false,
-            is_default: false,
-        },
-    ]
-}
-
-/// Get Alpine QoS options
-fn get_alpine_qos() -> Vec<QosSpec> {
-    vec![
-        QosSpec {
-            id: "normal".to_string(),
-            name: "normal".to_string(),
-            title: "Normal Priority (Default)".to_string(),
-            description: "Standard priority with good resource limits".to_string(),
-            max_walltime_hours: 24,
-            max_jobs: 1000,
-            node_limit: 128,
-            valid_partitions: vec![
-                "amilan".to_string(),
-                "amilan128c".to_string(),
-                "aa100".to_string(),
-                "ami100".to_string(),
-                "al40".to_string(),
-            ],
-            requirements: vec![],
-            priority: QosPriority::Normal,
-            is_default: true,
-        },
-        QosSpec {
-            id: "long".to_string(),
-            name: "long".to_string(),
-            title: "Extended Runtime".to_string(),
-            description: "Longer walltime for extended simulations".to_string(),
-            max_walltime_hours: 168, // 7 days
-            max_jobs: 200,
-            node_limit: 20,
-            valid_partitions: vec![
-                "amilan".to_string(),
-                "amilan128c".to_string(),
-                "aa100".to_string(),
-                "ami100".to_string(),
-                "al40".to_string(),
-            ],
-            requirements: vec![],
-            priority: QosPriority::Normal,
-            is_default: false,
-        },
-        QosSpec {
-            id: "mem".to_string(),
-            name: "mem".to_string(),
-            title: "High-Memory".to_string(),
-            description: "For high-memory jobs on amem partition".to_string(),
-            max_walltime_hours: 168, // 7 days
-            max_jobs: 1000,
-            node_limit: 12,
-            valid_partitions: vec!["amem".to_string()],
-            requirements: vec![
-                "256GB+ memory".to_string(),
-                "amem partition only".to_string(),
-            ],
-            priority: QosPriority::Normal,
-            is_default: false,
-        },
-        QosSpec {
-            id: "testing".to_string(),
-            name: "testing".to_string(),
-            title: "Testing & Development".to_string(),
-            description: "Quick testing with limited resources".to_string(),
-            max_walltime_hours: 1,
-            max_jobs: 5,
-            node_limit: 2,
-            valid_partitions: vec![
-                "atesting".to_string(),
-                "atesting_a100".to_string(),
-                "atesting_mi100".to_string(),
-            ],
-            requirements: vec![],
-            priority: QosPriority::High,
-            is_default: false,
-        },
-        QosSpec {
-            id: "compile".to_string(),
-            name: "compile".to_string(),
-            title: "Compilation".to_string(),
-            description: "For code compilation jobs".to_string(),
-            max_walltime_hours: 12,
-            max_jobs: 999,
-            node_limit: 1,
-            valid_partitions: vec!["acompile".to_string()],
-            requirements: vec![],
-            priority: QosPriority::Normal,
-            is_default: false,
-        },
-    ]
-}
-
-/// Get Alpine job presets
-fn get_alpine_presets() -> Vec<JobPreset> {
-    vec![
-        JobPreset {
-            id: "small-test".to_string(),
-            name: "Small Test".to_string(),
-            description: "Quick test for debugging and validation".to_string(),
-            icon: "🧪".to_string(),
-            category: "test".to_string(),
-            config: JobPresetConfig {
-                cores: 24,
-                memory: "16".to_string(),
-                wall_time: "04:00:00".to_string(),
-                partition: "amilan".to_string(),
-                qos: "normal".to_string(),
-            },
-            estimated_cost: "96 SU".to_string(),
-            estimated_queue: "< 30 min".to_string(),
-            use_cases: vec![
-                "Testing configurations".to_string(),
-                "Small systems".to_string(),
-                "Quick validation".to_string(),
-            ],
-            requires_gpu: false,
-        },
-        JobPreset {
-            id: "production".to_string(),
-            name: "Production Run".to_string(),
-            description: "Standard production simulation".to_string(),
-            icon: "⚡".to_string(),
-            category: "production".to_string(),
-            config: JobPresetConfig {
-                cores: 48,
-                memory: "32".to_string(),
-                wall_time: "24:00:00".to_string(),
-                partition: "amilan".to_string(),
-                qos: "normal".to_string(),
-            },
-            estimated_cost: "1,152 SU".to_string(),
-            estimated_queue: "< 2 hours".to_string(),
-            use_cases: vec![
-                "Standard simulations".to_string(),
-                "Production runs".to_string(),
-                "Most NAMD jobs".to_string(),
-            ],
-            requires_gpu: false,
-        },
-        JobPreset {
-            id: "large-scale".to_string(),
-            name: "Large Scale".to_string(),
-            description: "High-performance parallel simulation".to_string(),
-            icon: "🚀".to_string(),
-            category: "large".to_string(),
-            config: JobPresetConfig {
-                cores: 128,
-                memory: "64".to_string(),
-                wall_time: "168:00:00".to_string(),
-                partition: "amilan128c".to_string(),
-                qos: "long".to_string(),
-            },
-            estimated_cost: "21,504 SU".to_string(),
-            estimated_queue: "2-6 hours".to_string(),
-            use_cases: vec![
-                "Large systems".to_string(),
-                "Long simulations".to_string(),
-                "High-throughput jobs".to_string(),
-            ],
-            requires_gpu: false,
-        },
-        JobPreset {
-            id: "gpu-accelerated".to_string(),
-            name: "GPU Accelerated".to_string(),
-            description: "Fast GPU-powered simulation".to_string(),
-            icon: "🔥".to_string(),
-            category: "gpu".to_string(),
-            config: JobPresetConfig {
-                cores: 64,
-                memory: "48".to_string(),
-                wall_time: "24:00:00".to_string(),
-                partition: "aa100".to_string(),
-                qos: "normal".to_string(),
-            },
-            estimated_cost: "4,107 SU".to_string(),
-            estimated_queue: "1-4 hours".to_string(),
-            use_cases: vec![
-                "GPU-accelerated NAMD".to_string(),
-                "Fast simulations".to_string(),
-                "CUDA workloads".to_string(),
-            ],
-            requires_gpu: true,
-        },
-    ]
+#[cfg(test)]
+fn load_default_config_for_tests() -> ClusterCapabilities {
+    const ALPINE_JSON: &str = include_str!("../cluster/alpine.json");
+    serde_json::from_str(ALPINE_JSON).expect("Failed to parse alpine.json")
 }
 
 // ============================================================================
 // Active Cluster Management
 // ============================================================================
+// All cluster data loaded from database (seeded from alpine.json)
+// No hardcoded runtime data - fail fast if cache not populated
 
+use std::sync::RwLock;
+use lazy_static::lazy_static;
 
-// ============================================================================
-// Public API (used by Tauri commands)
-// ============================================================================
-
-/// Get cluster capabilities for frontend
-#[tauri::command(rename_all = "snake_case")]
-pub fn get_cluster_capabilities() -> ClusterCapabilities {
-    alpine_capabilities()
+lazy_static! {
+    /// Cached cluster capabilities loaded from database
+    /// Initialized on app startup, updated when config changes
+    static ref CLUSTER_CONFIG_CACHE: RwLock<Option<ClusterCapabilities>> = RwLock::new(None);
 }
 
-/// Get partition limits for validation
-pub fn get_partition_limits(partition_id: &str) -> Option<PartitionLimits> {
-    // Partition limits for Alpine cluster
-    match partition_id {
-        "amilan" => Some(PartitionLimits {
-            max_cores: 64,
-            max_memory_per_core: 3.75,
-            min_memory_for_qos: None,
-        }),
-        "amilan128c" => Some(PartitionLimits {
-            max_cores: 128,
-            max_memory_per_core: 2.01,
-            min_memory_for_qos: None,
-        }),
-        "amem" => Some(PartitionLimits {
-            max_cores: 128,
-            max_memory_per_core: 21.5,
-            min_memory_for_qos: Some(256),
-        }),
-        "aa100" | "ami100" | "al40" => Some(PartitionLimits {
-            max_cores: 64,
-            max_memory_per_core: 3.75,
-            min_memory_for_qos: None,
-        }),
-        "atesting" => Some(PartitionLimits {
-            max_cores: 16,
-            max_memory_per_core: 4.0,
-            min_memory_for_qos: None,
-        }),
-        "atesting_a100" => Some(PartitionLimits {
-            max_cores: 10,
-            max_memory_per_core: 4.0,
-            min_memory_for_qos: None,
-        }),
-        "atesting_mi100" => Some(PartitionLimits {
-            max_cores: 64,
-            max_memory_per_core: 3.75,
-            min_memory_for_qos: None,
-        }),
-        "acompile" => Some(PartitionLimits {
-            max_cores: 4,
-            max_memory_per_core: 4.0,
-            min_memory_for_qos: None,
-        }),
-        _ => None,
+/// Set cluster config in cache (called after loading from DB or saving changes)
+pub fn set_cluster_config_cache(config: ClusterCapabilities) {
+    let mut cache = CLUSTER_CONFIG_CACHE.write().unwrap();
+    *cache = Some(config);
+}
+
+/// Get partition by name from cached config
+pub fn get_partition_by_name(partition_name: &str) -> Option<PartitionSpec> {
+    let cache = CLUSTER_CONFIG_CACHE.read().unwrap();
+    cache.as_ref()
+        .and_then(|config| config.partitions.iter().find(|p| p.name == partition_name).cloned())
+}
+
+/// Get QoS options valid for a specific partition
+pub fn get_qos_for_partition(partition_name: &str) -> Vec<QosSpec> {
+    let cache = CLUSTER_CONFIG_CACHE.read().unwrap();
+    match cache.as_ref() {
+        Some(config) => config.qos_options.iter()
+            .filter(|qos| qos.valid_partitions.contains(&partition_name.to_string()))
+            .cloned()
+            .collect(),
+        None => vec![],
     }
 }
 
-/// Get QOS options valid for a specific partition
-pub fn get_qos_for_partition(partition_id: &str) -> Vec<QosSpec> {
-    alpine_capabilities()
-        .qos_options
-        .into_iter()
-        .filter(|qos| qos.valid_partitions.contains(&partition_id.to_string()))
-        .collect()
+/// Get QoS by name from cached config
+pub fn get_qos_by_name(qos_name: &str) -> Option<QosSpec> {
+    let cache = CLUSTER_CONFIG_CACHE.read().unwrap();
+    cache.as_ref()
+        .and_then(|config| config.qos_options.iter().find(|q| q.name == qos_name).cloned())
+}
+
+// ============================================================================
+// Public Business Logic (called by commands/cluster.rs)
+// ============================================================================
+
+/// Get cluster capabilities for frontend
+/// Panics if cache not initialized (call initialize_app first)
+pub fn get_cluster_capabilities() -> ClusterCapabilities {
+    CLUSTER_CONFIG_CACHE
+        .read()
+        .unwrap()
+        .as_ref()
+        .expect("Cluster config not initialized - initialize_app must be called first")
+        .clone()
+}
+
+/// Save cluster config to database and update cache
+pub fn save_cluster_config(config: ClusterCapabilities) -> crate::types::ApiResult<()> {
+    use crate::{log_info, log_error};
+    use crate::database::with_database;
+
+    // Save to database
+    match with_database(|db| db.save_cluster_config(&config)) {
+        Ok(_) => {
+            // Update cache
+            set_cluster_config_cache(config);
+
+            log_info!(
+                category: "ClusterConfig",
+                message: "Cluster config saved successfully",
+                show_toast: true
+            );
+
+            crate::types::ApiResult::success(())
+        }
+        Err(e) => {
+            log_error!(
+                category: "ClusterConfig",
+                message: "Failed to save cluster config",
+                details: "{}",e
+            );
+            crate::types::ApiResult::error(format!("Failed to save cluster config: {}", e))
+        }
+    }
+}
+
+/// Reset cluster config to defaults (clears DB, re-seeds from embedded JSON)
+pub fn reset_cluster_config() -> crate::types::ApiResult<ClusterCapabilities> {
+    use crate::{log_info, log_error};
+    use crate::database::with_database;
+
+    // Delete current config from database
+    match with_database(|db| db.delete_cluster_config()) {
+        Ok(_) => {},
+        Err(e) => {
+            log_error!(
+                category: "ClusterConfig",
+                message: "Failed to clear cluster config",
+                details: "{}", e
+            );
+            return crate::types::ApiResult::error(format!("Failed to clear cluster config: {}", e));
+        }
+    }
+
+    // Re-seed from embedded JSON
+    match crate::database::with_database(crate::database::load_default_cluster_config) {
+        Ok(_) => {},
+        Err(e) => {
+            log_error!(
+                category: "ClusterConfig",
+                message: "Failed to re-seed cluster config",
+                details: "{}", e
+            );
+            return crate::types::ApiResult::error(format!("Failed to re-seed cluster config: {}", e));
+        }
+    }
+
+    // Load fresh config and update cache
+    match with_database(|db| db.load_cluster_config()) {
+        Ok(Some(config)) => {
+            set_cluster_config_cache(config.clone());
+
+            log_info!(
+                category: "ClusterConfig",
+                message: "Cluster config reset to defaults",
+                show_toast: true
+            );
+
+            crate::types::ApiResult::success(config)
+        }
+        Ok(None) => {
+            // Shouldn't happen - we just seeded
+            log_error!(category: "ClusterConfig", message: "Config missing after reset");
+            crate::types::ApiResult::error("Config missing after reset".to_string())
+        }
+        Err(e) => {
+            log_error!(category: "ClusterConfig", message: "Failed to load after reset", details: "{}", e);
+            crate::types::ApiResult::error(format!("Failed to load after reset: {}", e))
+        }
+    }
 }
 
 /// Calculate estimated job cost
-#[tauri::command(rename_all = "snake_case")]
 pub fn calculate_job_cost(cores: u32, walltime: String, has_gpu: bool, gpu_count: u32) -> u32 {
     // Parse walltime string to hours
     let walltime_hours = match parse_walltime_to_hours(&walltime) {
@@ -648,7 +274,14 @@ pub fn calculate_job_cost(cores: u32, walltime: String, has_gpu: bool, gpu_count
         Err(_) => return 0, // Return 0 cost if walltime is invalid
     };
 
-    let billing = &alpine_capabilities().billing_rates;
+    // Get billing rates from cached config
+    let billing = {
+        let cache = CLUSTER_CONFIG_CACHE.read().unwrap();
+        cache.as_ref()
+            .map(|config| config.billing_rates.clone())
+            .expect("Cluster config not initialized")
+    };
+
     let core_cost = cores as f64 * walltime_hours * billing.cpu_cost_per_core_hour;
     let gpu_cost = if has_gpu {
         gpu_count as f64 * walltime_hours * billing.gpu_cost_per_gpu_hour
@@ -688,7 +321,6 @@ fn parse_walltime_to_hours(walltime: &str) -> anyhow::Result<f64> {
 }
 
 /// Estimate queue time based on resources and partition
-#[tauri::command(rename_all = "snake_case", rename = "estimate_queue_time_for_job")]
 pub fn estimate_queue_time(cores: u32, partition_id: String) -> String {
     let partition_id = partition_id.as_str();
     // GPU partitions generally have longer queues
@@ -715,7 +347,6 @@ pub fn estimate_queue_time(cores: u32, partition_id: String) -> String {
 }
 
 /// Suggest optimal QOS based on walltime and partition
-#[tauri::command(rename_all = "snake_case")]
 pub fn suggest_qos(walltime_hours: f64, partition_id: String) -> String {
     let partition_id = partition_id.as_str();
     if partition_id == "amem" {
@@ -726,7 +357,7 @@ pub fn suggest_qos(walltime_hours: f64, partition_id: String) -> String {
         "compile".to_string()
     } else if walltime_hours > 24.0 {
         let available_qos = get_qos_for_partition(partition_id);
-        if available_qos.iter().any(|q| q.id == "long") {
+        if available_qos.iter().any(|q| q.name == "long") {
             "long".to_string()
         } else {
             "normal".to_string()
@@ -743,78 +374,73 @@ mod tests {
 
     #[test]
     fn test_alpine_has_all_partitions() {
-        let capabilities = alpine_capabilities();
+        let capabilities = load_default_config_for_tests();
         let partitions = &capabilities.partitions;
 
-        assert!(partitions.iter().any(|p| p.id == "amilan"));
-        assert!(partitions.iter().any(|p| p.id == "amilan128c"));
-        assert!(partitions.iter().any(|p| p.id == "amem"));
-        assert!(partitions.iter().any(|p| p.id == "aa100"));
-        assert!(partitions.iter().any(|p| p.id == "ami100"));
-        assert!(partitions.iter().any(|p| p.id == "al40"));
-        assert!(partitions.iter().any(|p| p.id == "atesting"));
-        assert!(partitions.iter().any(|p| p.id == "atesting_a100"));
-        assert!(partitions.iter().any(|p| p.id == "atesting_mi100"));
-        assert!(partitions.iter().any(|p| p.id == "acompile"));
+        assert!(partitions.iter().any(|p| p.name == "amilan"));
+        assert!(partitions.iter().any(|p| p.name == "amilan128c"));
+        assert!(partitions.iter().any(|p| p.name == "amem"));
+        assert!(partitions.iter().any(|p| p.name == "aa100"));
+        assert!(partitions.iter().any(|p| p.name == "ami100"));
+        assert!(partitions.iter().any(|p| p.name == "al40"));
+        assert!(partitions.iter().any(|p| p.name == "atesting"));
+        assert!(partitions.iter().any(|p| p.name == "atesting_a100"));
+        assert!(partitions.iter().any(|p| p.name == "atesting_mi100"));
+        assert!(partitions.iter().any(|p| p.name == "acompile"));
     }
 
     #[test]
     fn test_alpine_has_default_partition() {
-        let capabilities = alpine_capabilities();
+        let capabilities = load_default_config_for_tests();
         let default_partition = capabilities.partitions.iter()
             .find(|p| p.is_default);
 
         assert!(default_partition.is_some());
-        assert_eq!(default_partition.unwrap().id, "amilan");
+        assert_eq!(default_partition.unwrap().name, "amilan");
     }
 
     #[test]
     fn test_alpine_has_all_qos() {
-        let capabilities = alpine_capabilities();
+        let capabilities = load_default_config_for_tests();
         let qos = &capabilities.qos_options;
 
-        assert!(qos.iter().any(|q| q.id == "normal"));
-        assert!(qos.iter().any(|q| q.id == "long"));
-        assert!(qos.iter().any(|q| q.id == "mem"));
-        assert!(qos.iter().any(|q| q.id == "testing"));
-        assert!(qos.iter().any(|q| q.id == "compile"));
+        assert!(qos.iter().any(|q| q.name == "normal"));
+        assert!(qos.iter().any(|q| q.name == "long"));
+        assert!(qos.iter().any(|q| q.name == "mem"));
+        assert!(qos.iter().any(|q| q.name == "testing"));
+        assert!(qos.iter().any(|q| q.name == "compile"));
     }
 
     #[test]
     fn test_alpine_has_default_qos() {
-        let capabilities = alpine_capabilities();
+        let capabilities = load_default_config_for_tests();
         let default_qos = capabilities.qos_options.iter()
             .find(|q| q.is_default);
 
         assert!(default_qos.is_some());
-        assert_eq!(default_qos.unwrap().id, "normal");
-    }
-
-    #[test]
-    fn test_get_partition_limits() {
-        assert!(get_partition_limits("amilan").is_some());
-        assert!(get_partition_limits("amem").is_some());
-        assert!(get_partition_limits("invalid").is_none());
-
-        let amilan_limits = get_partition_limits("amilan").unwrap();
-        assert_eq!(amilan_limits.max_cores, 64);
-        assert_eq!(amilan_limits.max_memory_per_core, 3.75);
+        assert_eq!(default_qos.unwrap().name, "normal");
     }
 
     #[test]
     fn test_get_qos_for_partition() {
+        // Setup: populate cache with test data
+        set_cluster_config_cache(load_default_config_for_tests());
+
         let amilan_qos = get_qos_for_partition("amilan");
-        assert!(amilan_qos.iter().any(|q| q.id == "normal"));
-        assert!(amilan_qos.iter().any(|q| q.id == "long"));
-        assert!(!amilan_qos.iter().any(|q| q.id == "mem"));
+        assert!(amilan_qos.iter().any(|q| q.name == "normal"));
+        assert!(amilan_qos.iter().any(|q| q.name == "long"));
+        assert!(!amilan_qos.iter().any(|q| q.name == "mem"));
 
         let amem_qos = get_qos_for_partition("amem");
-        assert!(amem_qos.iter().any(|q| q.id == "mem"));
-        assert!(!amem_qos.iter().any(|q| q.id == "normal"));
+        assert!(amem_qos.iter().any(|q| q.name == "mem"));
+        assert!(!amem_qos.iter().any(|q| q.name == "normal"));
     }
 
     #[test]
     fn test_calculate_job_cost() {
+        // Setup: populate cache with test data
+        set_cluster_config_cache(load_default_config_for_tests());
+
         // CPU only: 24 cores * 4 hours = 96 SU
         assert_eq!(calculate_job_cost(24, "04:00:00".to_string(), false, 0), 96);
 
@@ -834,6 +460,9 @@ mod tests {
 
     #[test]
     fn test_suggest_qos() {
+        // Setup: populate cache with test data
+        set_cluster_config_cache(load_default_config_for_tests());
+
         assert_eq!(suggest_qos(12.0, "amilan".to_string()), "normal");
         assert_eq!(suggest_qos(48.0, "amilan".to_string()), "long");
         assert_eq!(suggest_qos(24.0, "amem".to_string()), "mem");

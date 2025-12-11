@@ -70,26 +70,18 @@
     }
   }
 
-  function handleSave() {
-    const varDef: VariableDefinition = {
+  export function getVariableDefinition(): VariableDefinition {
+    return {
       key,
       label,
       var_type: buildVariableType(),
       help_text: helpText || null
     };
-
-    dispatch('save', varDef);
-  }
-
-  function handleCancel() {
-    dispatch('cancel');
   }
 </script>
 
-<div class="variable-editor">
-  <form on:submit|preventDefault={handleSave}>
-    <div class="form-group">
-      <label for="var-key">Variable Key <span class="required">*</span></label>
+<div class="namd-field-group">
+      <label class="namd-label" for="var-key">Variable Key <span class="required">*</span></label>
       <input
         id="var-key"
         type="text"
@@ -101,8 +93,8 @@
       <p class="help-text">Used in template as &#123;&#123;{key || 'variable_key'}&#125;&#125;</p>
     </div>
 
-    <div class="form-group">
-      <label for="var-label">Display Label <span class="required">*</span></label>
+    <div class="namd-field-group">
+      <label class="namd-label" for="var-label">Display Label <span class="required">*</span></label>
       <input
         id="var-label"
         type="text"
@@ -113,8 +105,8 @@
       />
     </div>
 
-    <div class="form-group">
-      <label for="var-type">Variable Type <span class="required">*</span></label>
+    <div class="namd-field-group">
+      <label class="namd-label" for="var-type">Variable Type <span class="required">*</span></label>
       <select id="var-type" bind:value={varType} class="namd-input">
         <option value="Number">Number</option>
         <option value="Text">Text</option>
@@ -126,35 +118,35 @@
     <!-- Type-specific fields -->
     {#if varType === 'Number'}
       <div class="form-row">
-        <div class="form-group">
-          <label for="num-min">Minimum <span class="required">*</span></label>
+        <div class="namd-field-group">
+          <label class="namd-label" for="num-min">Minimum <span class="required">*</span></label>
           <input id="num-min" type="number" bind:value={numMin} step="any" required class="namd-input" />
         </div>
-        <div class="form-group">
-          <label for="num-max">Maximum <span class="required">*</span></label>
+        <div class="namd-field-group">
+          <label class="namd-label" for="num-max">Maximum <span class="required">*</span></label>
           <input id="num-max" type="number" bind:value={numMax} step="any" required class="namd-input" />
         </div>
-        <div class="form-group">
-          <label for="num-default">Default Value <span class="required">*</span></label>
+        <div class="namd-field-group">
+          <label class="namd-label" for="num-default">Default Value <span class="required">*</span></label>
           <input id="num-default" type="number" bind:value={numDefault} step="any" required class="namd-input" />
         </div>
       </div>
     {:else if varType === 'Text'}
-      <div class="form-group">
-        <label for="text-default">Default Value <span class="required">*</span></label>
+      <div class="namd-field-group">
+        <label class="namd-label" for="text-default">Default Value <span class="required">*</span></label>
         <input id="text-default" type="text" bind:value={textDefault} required class="namd-input" />
       </div>
     {:else if varType === 'Boolean'}
-      <div class="form-group">
-        <label for="bool-default">Default Value <span class="required">*</span></label>
+      <div class="namd-field-group">
+        <label class="namd-label" for="bool-default">Default Value <span class="required">*</span></label>
         <select id="bool-default" bind:value={boolDefault} required class="namd-input">
           <option value={true}>True</option>
           <option value={false}>False</option>
         </select>
       </div>
     {:else if varType === 'FileUpload'}
-      <div class="form-group">
-        <label for="file-ext">Allowed Extensions</label>
+      <div class="namd-field-group">
+        <label class="namd-label" for="file-ext">Allowed Extensions</label>
         <input
           id="file-ext"
           type="text"
@@ -166,8 +158,8 @@
       </div>
     {/if}
 
-    <div class="form-group">
-      <label for="help-text">Help Text</label>
+    <div class="namd-field-group">
+      <label class="namd-label" for="help-text">Help Text</label>
       <textarea
         id="help-text"
         bind:value={helpText}
@@ -177,30 +169,7 @@
       ></textarea>
     </div>
 
-    <div class="form-actions">
-      <button type="button" class="namd-button namd-button--secondary" on:click={handleCancel}>Cancel</button>
-      <button type="submit" class="namd-button namd-button--primary">Save Variable</button>
-    </div>
-  </form>
-</div>
-
 <style>
-  .variable-editor {
-    max-width: 600px;
-  }
-
-  .form-group {
-    margin-bottom: var(--namd-spacing-lg);
-  }
-
-  .form-group label {
-    display: block;
-    margin-bottom: var(--namd-spacing-sm);
-    font-weight: var(--namd-font-weight-medium);
-    font-size: var(--namd-font-size-base);
-    color: var(--namd-text-primary);
-  }
-
   .required {
     color: var(--namd-error);
   }
@@ -215,14 +184,5 @@
     margin: var(--namd-spacing-xs) 0 0 0;
     font-size: var(--namd-font-size-xs);
     color: var(--namd-text-secondary);
-  }
-
-  .form-actions {
-    display: flex;
-    gap: var(--namd-spacing-md);
-    justify-content: flex-end;
-    margin-top: var(--namd-spacing-xl);
-    padding-top: var(--namd-spacing-lg);
-    border-top: 1px solid var(--namd-border);
   }
 </style>

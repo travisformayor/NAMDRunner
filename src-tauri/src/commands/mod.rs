@@ -4,4 +4,6 @@ pub mod jobs;
 pub mod files;
 pub mod templates;
 pub mod database;
+pub mod cluster;
+pub mod validation;
 pub mod helpers;

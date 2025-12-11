@@ -13,6 +13,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
+import { invokeWithErrorHandling } from './storeFactory';
 import type {
   ClusterCapabilities,
   PartitionSpec,
@@ -140,7 +141,7 @@ export async function validateResourceRequest(
 
   // Call backend validation - pass parameters as-is, no conversion
   try {
-    const result = await invoke<ValidationResult>('validate_resource_allocation', {
+    const result = await invoke<ValidationResult>('validate_resource_allocation_command', {
       cores,
       memory,
       walltime,
@@ -149,9 +150,10 @@ export async function validateResourceRequest(
     });
     return result;
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       is_valid: false,
-      issues: ['Validation failed: ' + (error instanceof Error ? error.message : 'Unknown error')],
+      issues: ['Validation failed: ' + errorMessage],
       warnings: [],
       suggestions: []
     };
@@ -167,11 +169,51 @@ export function setClusterCapabilities(capabilities: ClusterCapabilities): void 
   loadErrorStore.set(null);
 }
 
+/**
+ * Save cluster configuration to database
+ */
+export async function saveClusterConfig(config: ClusterCapabilities): Promise<boolean> {
+  // Optimistic update
+  clusterCapabilitiesStore.set(config);
+
+  const result = await invokeWithErrorHandling<void>('save_cluster_config', { config });
+
+  if (result.success) {
+    isLoadedStore.set(true);
+    loadErrorStore.set(null);
+    return true;
+  } else {
+    loadErrorStore.set(result.error || 'Failed to save cluster config');
+    // Reload to restore original state on failure
+    await initClusterConfig();
+    return false;
+  }
+}
+
+/**
+ * Reset cluster configuration to defaults
+ */
+export async function resetClusterConfig(): Promise<boolean> {
+  const result = await invokeWithErrorHandling<ClusterCapabilities>('reset_cluster_config');
+
+  if (result.success && result.data) {
+    clusterCapabilitiesStore.set(result.data);
+    isLoadedStore.set(true);
+    loadErrorStore.set(null);
+    return true;
+  } else {
+    loadErrorStore.set(result.error || 'Failed to reset cluster config');
+    return false;
+  }
+}
+
 // Export main store and utilities
 export const clusterConfig = {
   subscribe: clusterCapabilitiesStore.subscribe,
   init: initClusterConfig,
   refresh: initClusterConfig,
   set: setClusterCapabilities,
+  save: saveClusterConfig,
+  reset: resetClusterConfig,
 };
 

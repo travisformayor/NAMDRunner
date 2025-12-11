@@ -26,30 +26,24 @@
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="dialog-overlay" on:click={handleBackdropClick} on:keydown={handleKeydown}>
     <div class="dialog dialog--{size}" on:click|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
-      {#if $$slots.header || showCloseButton}
-        <div class="dialog-header">
-          <slot name="header" />
-          {#if showCloseButton}
-            <button class="dialog-close" on:click={onClose} type="button" aria-label="Close">×</button>
-          {/if}
-        </div>
-      {/if}
+      <div class="dialog-header">
+        <slot name="header" />
+        {#if showCloseButton}
+          <button class="dialog-close" on:click={onClose} type="button" aria-label="Close">×</button>
+        {/if}
+      </div>
 
-      {#if $$slots.body}
-        <div class="dialog-body">
+      <div class="dialog-body">
+        {#if $$slots.body}
           <slot name="body" />
-        </div>
-      {:else}
-        <div class="dialog-body">
+        {:else}
           <slot />
-        </div>
-      {/if}
+        {/if}
+      </div>
 
-      {#if $$slots.footer}
-        <div class="dialog-footer">
-          <slot name="footer" />
-        </div>
-      {/if}
+      <div class="dialog-footer">
+        <slot name="footer" />
+      </div>
     </div>
   </div>
 {/if}
@@ -96,7 +90,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--namd-spacing-lg);
+    padding: var(--namd-spacing-md) var(--namd-spacing-lg);
     border-bottom: 1px solid var(--namd-border);
     flex-shrink: 0;
   }
@@ -137,5 +131,9 @@
     padding: var(--namd-spacing-lg);
     border-top: 1px solid var(--namd-border);
     flex-shrink: 0;
+  }
+
+  .dialog-footer:empty {
+    display: none;
   }
 </style>
