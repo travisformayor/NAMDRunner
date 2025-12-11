@@ -82,7 +82,6 @@ Templates are JSON files with the following structure:
       "help_text": "Help text for user"
     }
   },
-  "is_builtin": true,
   "created_at": "ISO timestamp",
   "updated_at": "ISO timestamp"
 }
@@ -597,7 +596,6 @@ CREATE TABLE templates (
     description TEXT NOT NULL,
     namd_config_template TEXT NOT NULL,
     variables TEXT NOT NULL,  -- JSON serialized HashMap
-    is_builtin INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

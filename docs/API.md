@@ -184,8 +184,8 @@ interface IJobCommands {
   // Create new job (local only, not submitted yet)
   create_job(params: CreateJobParams): Promise<ApiResult<JobInfo>>;
 
-  // Submit job to SLURM cluster
-  submit_job(job_id: JobId): Promise<ApiResult<JobSubmissionData>>;
+  // Submit job to SLURM cluster (returns full JobInfo with updated status)
+  submit_job(job_id: JobId): Promise<ApiResult<JobInfo>>;
 
   // Get status of specific job
   get_job_status(job_id: JobId): Promise<ApiResult<JobInfo>>;
@@ -217,7 +217,7 @@ The `sync_jobs()` command automatically handles job discovery when the local dat
 **Workflow:**
 1. Query SLURM for active job status updates
 2. If database is empty, automatically discover jobs from `/projects/$USER/namdrunner_jobs/`
-3. Return complete job list (including discovered and synced jobs)
+3. Return complete job list with full JobInfo objects (including discovered and synced jobs)
 
 Frontend receives complete state in a single call. See [`AUTOMATIONS.md`](AUTOMATIONS.md#3-status-synchronization-automation-chain) for implementation details.
 
@@ -267,12 +267,6 @@ interface JobInfo {
   input_files: string[];                   // List of uploaded input files
   output_files: OutputFile[];
   remote_directory: string;
-}
-
-interface JobSubmissionData {
-  slurm_job_id: SlurmJobId;
-  submitted_at: Timestamp;
-  job_id: JobId;             // Local job ID
 }
 
 interface SyncJobsResult {
@@ -414,6 +408,12 @@ interface ITemplateCommands {
   // Delete template (blocked if jobs exist using it)
   delete_template(template_id: string): Promise<ApiResult<void>>;
 
+  // Export template to JSON file (shows OS save dialog)
+  export_template(template_id: string): Promise<ApiResult<string>>;
+
+  // Import template from JSON file (shows OS open dialog)
+  import_template(): Promise<ApiResult<Template>>;
+
   // Validate template values against template definition
   validate_template_values(
     template_id: string,
@@ -436,7 +436,6 @@ interface Template {
   description: string;
   namd_config_template: string;            // NAMD config with {{variables}}
   variables: Record<string, VariableDefinition>;
-  is_builtin: boolean;                     // True for embedded templates, false for user-created
   created_at: string;
   updated_at: string;
 }
@@ -458,7 +457,6 @@ interface TemplateSummary {
   id: string;
   name: string;
   description: string;
-  is_builtin: boolean;
 }
 ```
 
@@ -485,7 +483,7 @@ Templates use `{{variable}}` syntax for variable substitution. During job creati
 - `vacuum_optimization_v1` - Vacuum simulation with large periodic box
 - `explicit_solvent_npt_v1` - NPT ensemble with PME electrostatics
 
-Templates are stored in SQLite database after initial load. Embedded templates have `is_builtin: true` to communicate their origin to the user.
+Templates are stored in SQLite database after initial load.
 
 ## Error Handling Strategy
 
@@ -608,7 +606,6 @@ pub struct Template {
     pub description: String,
     pub namd_config_template: String,
     pub variables: HashMap<String, VariableDefinition>,
-    pub is_builtin: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -677,14 +674,6 @@ pub struct ConnectionStatus {
     pub session_info: Option<SessionInfo>,
 }
 
-// Job submission response (wrapped in ApiResult by submit_job)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobSubmissionData {
-    pub slurm_job_id: String,
-    pub submitted_at: String,
-    pub job_id: String,
-}
-
 // Job sync result (not wrapped - contains its own success field)
 #[derive(Debug, Serialize)]
 pub struct SyncJobsResult {
@@ -740,7 +729,7 @@ pub struct DatabaseOperationData {
 }
 ```
 
-**Location**: [src-tauri/src/types/core.rs](../src-tauri/src/types/core.rs), [src-tauri/src/types/commands.rs](../src-tauri/src/types/commands.rs), [src-tauri/src/types/response_data.rs](../src-tauri/src/types/response_data.rs), [src-tauri/src/validation/job_validation.rs](../src-tauri/src/validation/job_validation.rs)
+**Location**: [src-tauri/src/types/core.rs](../src-tauri/src/types/core.rs), [src-tauri/src/types/commands.rs](../src-tauri/src/types/commands.rs), [src-tauri/src/types/response_data.rs](../src-tauri/src/types/response_data.rs), [src-tauri/src/validation/job.rs](../src-tauri/src/validation/job.rs)
 
 ## SLURM Integration
 

@@ -559,7 +559,7 @@ const variables = [...templateText.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]);
 When implementing server operations, follow these guidelines for good cluster citizenship:
 
 - **Use standardized timeouts** - Import timeout constants from `crate::config::timeouts`
-- **Validate all inputs** - Use `crate::validation::input::sanitize_job_id()` and path validation before server operations
+- **Validate all inputs** - Use `crate::security::input::sanitize_job_id()` and path validation before server operations
 - **Don't spam the cluster** - Batch operations when possible, respect rate limits in retry logic
 - **Handle connection failures gracefully** - Always check `connection_manager.is_connected()` before operations
 - **Clean up resources** - Use retry functions: `crate::retry::retry_quick()` for quick operations, `crate::retry::retry_files()` for file transfers
@@ -573,7 +573,7 @@ When implementing server operations, follow these guidelines for good cluster ci
 
 ```rust
 // ✅ Correct: Use safe command builder
-use crate::validation::shell;
+use crate::security::shell;
 let cmd = shell::build_command_safely("mkdir {} && cd {}", &[dir_name, dir_name])?;
 
 // ✅ Correct: Escape individual parameters
@@ -620,7 +620,7 @@ log_info!(category: "Jobs", message: "Job created successfully", details: "Job I
 > **For SSH/SFTP service patterns and testing approaches**, see [`docs/SSH.md#testing--development`](SSH.md#testing--development)
 
 ### Path Management
-Use centralized path validation functions from `validation::paths` module. Never construct paths directly. See `src-tauri/src/validation.rs` for safe path utilities like `project_directory()` and `scratch_directory()`. For job directory structure, use `ssh::JobDirectoryStructure` constants.
+Use centralized path generation functions from `ssh::paths` module. Never construct paths directly. See `src-tauri/src/ssh/paths.rs` for safe path utilities like `project_directory()` and `scratch_directory()`. For job directory structure, use `ssh::JobDirectoryStructure` constants.
 
 ### State Management
 Use state machines for complex state management with validated transitions.

@@ -85,7 +85,6 @@ CREATE TABLE IF NOT EXISTS templates (
     description TEXT,
     namd_config_template TEXT NOT NULL,  -- NAMD config with {{variable}} placeholders
     variables TEXT NOT NULL,               -- JSON: HashMap<String, VariableDefinition>
-    is_builtin INTEGER NOT NULL DEFAULT 0, -- True for embedded templates, false for user-created
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -109,7 +108,7 @@ db.delete_job("job_001")?;                  // Delete job
 // Template operations
 db.save_template(&template)?;                                   // Save/update template
 let template = db.load_template("vacuum_optimization_v1")?;     // Load full template
-let summaries = db.list_templates()?;                           // List all (id, name, description, is_builtin)
+let summaries = db.list_templates()?;                           // List all (id, name, description)
 db.delete_template("custom_template_v1")?;                      // Delete template
 let count = db.count_jobs_using_template("vacuum_optimization_v1")?;  // Count jobs using template
 
@@ -281,7 +280,6 @@ interface Template {
   variables: {                   // Variable definitions (serialized HashMap)
     [key: string]: VariableDefinition;
   };
-  is_builtin: boolean;           // True for embedded templates, false for user-created
   created_at: string;            // RFC3339 timestamp
   updated_at: string;            // RFC3339 timestamp
 }
@@ -303,7 +301,6 @@ interface TemplateSummary {
   id: string;                    // Unique template identifier
   name: string;                  // Display name
   description: string;           // User-facing description
-  is_builtin: boolean;           // True for embedded templates, false for user-created
 }
 ```
 
@@ -312,7 +309,6 @@ interface TemplateSummary {
 - Located in `src-tauri/templates/` directory (JSON files)
 - Loaded automatically on first `list_templates()` call
 - Current defaults: `vacuum_optimization_v1`, `explicit_solvent_npt_v1`
-- Embedded templates have `is_builtin: true`
 
 ### Template Values Schema
 

@@ -187,7 +187,8 @@ The create job page uses a 3-tab interface for organizing job configuration:
 ```
 [Page Header]
 - Title: "Simulation Templates"
-- [+ Create Template] button
+- [Import Template] button (secondary)
+- [+ Create Template] button (primary)
 
 [Template Grid]
 - Card-based grid layout (auto-fill, min 300px width)
@@ -195,7 +196,7 @@ The create job page uses a 3-tab interface for organizing job configuration:
   - Template name (header)
   - Badge: "Built-in" (blue) or "Custom" (green)
   - Description text
-  - Action buttons: [Edit] [Duplicate] [Delete]
+  - Action buttons: [Edit] [Duplicate] [Export] [Delete]
 ```
 
 #### Template Cards
@@ -208,6 +209,8 @@ The create job page uses a 3-tab interface for organizing job configuration:
 - **Create**: Opens template editor in create mode
 - **Edit**: Opens template editor in edit mode with template data
 - **Duplicate**: Creates copy with "_copy_timestamp" ID and "(Copy)" name suffix
+- **Export**: Shows OS save dialog, exports template as JSON file (same format as built-in templates)
+- **Import**: Shows OS open dialog, imports template from JSON file, auto-resolves ID conflicts
 - **Delete**: Shows confirmation dialog (unified ConfirmDialog component)
 
 ---
@@ -746,7 +749,6 @@ export const jobPresets = writable<JobPreset[]>([]);       // Resource presets
 validateResourceRequest(cores, memory, walltime, partition, qos)
 calculateJobCost(cores, walltimeHours, hasGpu, gpuCount)
 estimateQueueTime(cores, partition)
-walltimeToHours(walltime)  // Parse HH:MM:SS to hours
 ```
 
 **`stores/settings.ts`** - Settings and database management
@@ -1022,6 +1024,11 @@ NAMDRunner uses a composition-based modal architecture with a single primitive:
 **Wrappers:**
 - `ConfirmDialog.svelte` - Confirmations and alerts (with variant icons and optional cancel button)
 - `PreviewModal.svelte` - Code/text preview with monospace display
+
+**Unified Dialog Styles (app.css):**
+- `.dialog-title` - Modal header titles (h2 with consistent spacing/sizing)
+- `.dialog-icon` - Variant icons for modal headers (success/error/warning/info)
+- `.dialog-message` - Modal body content with relaxed line-height
 
 All modals use Dialog internally via composition. No duplicate modal code exists.
 

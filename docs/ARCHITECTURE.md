@@ -345,7 +345,7 @@ NAMDRunner updates server metadata (`job_info.json`) only at job lifecycle bound
   - **Automations layer** (`automations/`): Business logic for job lifecycle workflows with progress tracking
   - **Core services**: Cluster capabilities (`cluster.rs`), validation (`validation/`), templates (`templates/`), SSH/SFTP (`ssh/`)
   - Cluster capabilities (partitions, QOS, billing) in `cluster.rs`
-  - Resource validation in `validation/job_validation.rs`
+  - Resource validation in `validation/job.rs`
   - Input sanitization and security validation in `validation.rs`
   - Template rendering and validation in `templates/` module
   - SSH/SFTP operations with full console logging
@@ -437,7 +437,7 @@ src-tauri/
 │   │   ├── cluster.rs          # Cluster configuration and validation commands
 │   │   ├── jobs.rs             # Job lifecycle commands (create/submit/sync/delete/complete)
 │   │   ├── files.rs            # File management commands
-│   │   ├── templates.rs        # Template management commands (list/get/create/update/delete/validate)
+│   │   ├── templates.rs        # Template management commands (list/get/create/update/delete/export/import/validate)
 │   │   ├── database.rs         # Database management commands (info/backup/restore/reset)
 │   │   └── helpers.rs          # Reusable command helpers (4 functions: require_connection, load_job_or_fail, get_cluster_username, load_template_or_fail)
 │   ├── automations/            # Job lifecycle automation system
@@ -500,7 +500,7 @@ NAMDRunner implements a backend-first architecture where all business logic, val
 
 **Key Architecture Principles:**
 - **Stores as pure caches** - No business logic, workflow orchestration, or validation. Stores receive complete state from backend and reactively update UI.
-- **Store factory pattern** - Stores use factory functions (e.g., `createJobsStore()`) for encapsulation and testability
+- **Unified store factory** - All stores use `createStore<T>()` from `storeFactory.ts` for consistent loading/error/data state management
 - **Backend is source of truth** - All validation, calculations, and workflow orchestration happen in Rust. Frontend makes single backend calls.
 - **Type-safe IPC boundary** - Consistent snake_case contracts between TypeScript and Rust
 - **Single backend calls** - No multi-step orchestration (e.g., sync returns complete job list including discovered jobs)
@@ -602,7 +602,6 @@ interface Template {
   description: string;                     // User-facing description
   namd_config_template: string;            // NAMD config with {{variables}}
   variables: Record<string, VariableDefinition>;
-  is_builtin: boolean;                     // Embedded default templates
   created_at: Timestamp;
   updated_at: Timestamp;
 }
@@ -641,7 +640,7 @@ NAMDRunner uses a **template-based configuration system** where NAMD simulation 
 **Implementation:**
 - Backend: `src-tauri/src/templates/` module (types, renderer, validation)
 - Database: Templates table with JSON variable definitions
-- Commands: 7 IPC commands for template management (list/get/create/update/delete/validate/preview)
+- Commands: 9 IPC commands for template management (list/get/create/update/delete/export/import/validate/preview)
 
 #### Rust Type System
 
@@ -706,7 +705,7 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
 - **Template System** - Template-based NAMD configuration with database storage
   - Template types: `src-tauri/src/templates/types.rs` (Template, VariableDefinition, VariableType)
   - Template rendering: `src-tauri/src/templates/renderer.rs::render_template()` (regex-based variable substitution)
-  - Template validation: `src-tauri/src/templates/validation.rs::validate_values()` (type checking, required fields)
+  - Template validation: `src-tauri/src/validation/template.rs::validate_values()` (type checking, required fields)
   - Template commands: `src-tauri/src/commands/templates.rs` (7 IPC commands)
   - Default templates: Embedded JSON files loaded via `include_str!` macro on first `list_templates` call
   - Variable types: Number (min/max/default), Text (default), Boolean (default, rendered as "yes"/"no"), FileUpload (extensions, prepends "input_files/")
@@ -740,8 +739,8 @@ NAMDRunner follows **direct code patterns** and **progressive enhancement** prin
   - Input validation: `src-tauri/src/validation/mod.rs::input` module (sanitization, path traversal prevention)
   - Path safety: `src-tauri/src/validation/mod.rs::paths` module
   - Shell escaping: `src-tauri/src/validation/mod.rs::shell` module
-  - Resource validation: `src-tauri/src/validation/job_validation.rs::validate_resource_allocation()` (cluster limits, QoS rules)
-  - Template validation: `src-tauri/src/templates/validation.rs` (variable type checking)
+  - Resource validation: `src-tauri/src/validation/job.rs::validate_resource_allocation()` (cluster limits, QoS rules)
+  - Template validation: `src-tauri/src/validation/template.rs` (variable type checking)
 
 **Frontend (TypeScript/Svelte):**
 - **IPC Communication** - Direct Tauri invoke with strongly-typed commands

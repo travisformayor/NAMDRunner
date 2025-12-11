@@ -133,7 +133,7 @@ All automation steps follow NAMDRunner security principles:
 The `execute_job_creation_with_progress` function handles the complete job creation workflow:
 
 1. **Validate Inputs**
-   - Sanitize job name using `crate::validation::input::sanitize_job_id()`
+   - Sanitize job name using `crate::security::input::sanitize_job_id()`
    - Validate SSH connection is active
    - Get cluster username
 
@@ -285,7 +285,7 @@ The `sync_all_jobs()` function handles complete synchronization workflow, includ
      - Download `job_info.json` from each directory
      - Parse and import to database
      - Returns `DiscoveryReport` struct containing:
-       - `imported_jobs: Vec<JobSummary>` - Successfully imported jobs with key details
+       - `imported_jobs: Vec<JobInfo>` - Successfully imported jobs with complete details
        - `failed_imports: Vec<FailedImport>` - Jobs that failed with specific error reasons
      - Logs detailed results: which jobs imported successfully, which failed and why
      - For jobs with status=PENDING/RUNNING, they'll sync on next cycle
@@ -560,7 +560,7 @@ NAMDRunner implements automatic connection failure detection without additional 
 
 The automation system includes verification at multiple stages:
 
-**Template Validation** (`src-tauri/src/templates/validation.rs`):
+**Template Validation** (`src-tauri/src/validation/template.rs`):
 - All variables required: Every variable defined in template must have a value provided
 - Type checking: Ensures template values match variable definitions
 - Range validation: Number variables respect min/max constraints
