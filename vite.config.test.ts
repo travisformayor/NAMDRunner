@@ -4,20 +4,18 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 export default defineConfig({
   plugins: [svelte({ hot: !process.env.VITEST } as any)],
   test: {
-    environment: 'jsdom',
+    environment: 'node',
     globals: true,
     setupFiles: ['./src/lib/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{js,ts}'],
     // Timeout configuration
     testTimeout: 10000,
     hookTimeout: 10000,
-    // Use forks pool for better isolation and potentially faster startup
-    pool: 'forks',
+    // Use threads pool for faster execution
+    pool: 'threads',
     poolOptions: {
-      forks: {
-        singleFork: true,
-        minForks: 1,
-        maxForks: 1,
+      threads: {
+        singleThread: true,
       },
     },
     // Disable coverage to speed up tests
