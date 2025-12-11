@@ -1,12 +1,14 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import type { ApiResult } from '$lib/types/api';
+  import type { Template } from '$lib/types/template';
   import DynamicJobForm from './DynamicJobForm.svelte';
   import PreviewModal from '../ui/PreviewModal.svelte';
 
   export let jobName: string;
   export let templateId: string;
   export let templateValues: Record<string, any>;
+  export let template: Template | null = null;
   export let errors: Record<string, string>;
 
   let showPreview = false;
@@ -40,7 +42,7 @@
     <div class="namd-section-header">
       <h3 class="namd-section-title">Job Information</h3>
     </div>
-    <div class="field-group">
+    <div class="namd-field-group">
       <label class="namd-label" for="job-name">Job Name <span class="required">*</span></label>
       <input
         class="namd-input"
@@ -59,7 +61,7 @@
   </div>
 
   <!-- Template-Based Configuration -->
-  <DynamicJobForm bind:templateId bind:templateValues />
+  <DynamicJobForm bind:templateId bind:templateValues bind:selectedTemplate={template} />
 
   <!-- Preview Button -->
   {#if templateId}
@@ -85,12 +87,6 @@
 />
 
 <style>
-  .field-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--namd-spacing-xs);
-  }
-
   .help-text {
     margin: 0;
     font-size: var(--namd-font-size-xs);

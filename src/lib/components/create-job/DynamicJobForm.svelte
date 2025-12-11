@@ -2,20 +2,14 @@
   import { invoke } from '@tauri-apps/api/core';
   import { extractVariablesFromTemplate } from '$lib/utils/template-utils';
   import { onMount } from 'svelte';
-  import { templates, templateStore, validateTemplateValues } from '$lib/stores/templateStore';
+  import { templates, templateStore } from '$lib/stores/templateStore';
   import type { Template, VariableDefinition } from '$lib/types/template';
   import { getVariableTypeName } from '$lib/types/template';
-  import type { ValidationResult } from '$lib/types/api';
-  import ValidationDisplay from '../ui/ValidationDisplay.svelte';
 
   // Props
   export let templateId: string = '';
   export let templateValues: Record<string, any> = {};
-
-  let selectedTemplate: Template | null = null;
-  let validation: ValidationResult = { is_valid: true, issues: [], warnings: [], suggestions: [] };
-  let fieldErrors: Record<string, string> = {};
-  let isValidating = false;
+  export let selectedTemplate: Template | null = null;
   let lastLoadedTemplateId = '';
 
   // Separate variables by type, preserving template text order
@@ -92,7 +86,6 @@
       name: string;
       path: string;
       size: number;
-      file_type: string;
     } | null;
 
     if (selected) {
@@ -101,33 +94,6 @@
     }
   }
 
-  async function handleValidate() {
-    if (!selectedTemplate) return;
-
-    isValidating = true;
-    validation = await validateTemplateValues(selectedTemplate.id, templateValues);
-
-    // Parse issues to extract field-specific errors
-    fieldErrors = {};
-    for (const error of validation.issues) {
-      // Try to extract field name from error message (format: "FieldLabel: error message")
-      const colonIndex = error.indexOf(':');
-      if (colonIndex > 0) {
-        const fieldLabel = error.substring(0, colonIndex).trim();
-        const errorMsg = error.substring(colonIndex + 1).trim();
-
-        // Find the variable key by label
-        for (const [key, varDef] of Object.entries(selectedTemplate.variables)) {
-          if (varDef.label === fieldLabel) {
-            fieldErrors[key] = errorMsg;
-            break;
-          }
-        }
-      }
-    }
-
-    isValidating = false;
-  }
 
   function getVariableConfig(varDef: VariableDefinition) {
     const typeName = getVariableTypeName(varDef.var_type);
@@ -149,7 +115,7 @@
   <!-- Template Selection -->
   <div class="form-section">
     <h3>Simulation Template</h3>
-    <div class="form-group">
+    <div class="namd-field-group">
       <label for="template-select">Choose Template</label>
       <select
         id="template-select"
@@ -176,8 +142,7 @@
 
         {#each fileVariables as [key, varDef]}
           {@const config = getVariableConfig(varDef)}
-          {@const hasError = fieldErrors[key]}
-          <div class="form-group" class:required={varDef.required} class:has-error={hasError}>
+          <div class="namd-field-group" class:required={varDef.required}>
             <label for={key}>
               {varDef.label}
               {#if varDef.required}<span class="required-mark">*</span>{/if}
@@ -191,7 +156,6 @@
                 placeholder="No file selected"
                 readonly
                 class="namd-input file-display"
-                class:error={hasError}
               />
               <button
                 type="button"
@@ -201,10 +165,6 @@
                 Browse...
               </button>
             </div>
-
-            {#if hasError}
-              <p class="error-text">{hasError}</p>
-            {/if}
             {#if config && 'extensions' in config}
               <p class="help-text">
                 Allowed extensions: {config.extensions.join(', ')}
@@ -228,9 +188,8 @@
           {#each parameterVariables as [key, varDef]}
             {@const typeName = getVariableTypeName(varDef.var_type)}
             {@const config = getVariableConfig(varDef)}
-            {@const hasError = fieldErrors[key]}
 
-            <div class="form-group" class:required={varDef.required} class:has-error={hasError}>
+            <div class="namd-field-group" class:required={varDef.required}>
               <label for={key}>
                 {varDef.label}
                 {#if varDef.required}<span class="required-mark">*</span>{/if}
@@ -245,7 +204,6 @@
                   max={config.max ?? undefined}
                   step="any"
                   class="namd-input"
-                  class:error={hasError}
                   required={varDef.required}
                 />
               {:else if typeName === 'Text'}
@@ -254,7 +212,6 @@
                   id={key}
                   bind:value={templateValues[key]}
                   class="namd-input"
-                  class:error={hasError}
                   required={varDef.required}
                 />
               {:else if typeName === 'Boolean' && config && 'default' in config}
@@ -267,10 +224,6 @@
                   <span>Enable</span>
                 </label>
               {/if}
-
-              {#if hasError}
-                <p class="error-text">{hasError}</p>
-              {/if}
               {#if varDef.help_text}
                 <p class="help-text">{varDef.help_text}</p>
               {/if}
@@ -280,20 +233,6 @@
       </div>
     {/if}
 
-    <!-- Validation Results -->
-    <ValidationDisplay {validation} />
-
-    <!-- Validate Button -->
-    <div class="form-actions">
-      <button
-        type="button"
-        class="btn btn-secondary"
-        on:click={handleValidate}
-        disabled={isValidating}
-      >
-        {isValidating ? 'Validating...' : 'Validate Configuration'}
-      </button>
-    </div>
   {:else}
     <div class="empty-state">
       <p>Select a template to begin configuring your simulation.</p>
@@ -303,13 +242,13 @@
 
 <style>
   .dynamic-job-form {
-    max-width: 900px;
+    max-width: var(--namd-max-width-form);
   }
 
   .form-section {
-    margin-bottom: 2rem;
-    padding-bottom: 2rem;
-    border-bottom: 1px solid var(--border-color, #e0e0e0);
+    margin-bottom: var(--namd-spacing-xl);
+    padding-bottom: var(--namd-spacing-xl);
+    border-bottom: 1px solid var(--namd-border);
   }
 
   .form-section:last-child {
@@ -319,33 +258,33 @@
   .form-section h3 {
     margin: 0 0 0.5rem 0;
     font-size: 1.25rem;
-    color: var(--text-primary, #333);
+    color: var(--namd-text-primary);
   }
 
   .section-description {
-    color: var(--text-secondary, #666);
-    margin-bottom: 1.5rem;
+    color: var(--namd-text-secondary);
+    margin-bottom: var(--namd-spacing-lg);
     font-size: 0.875rem;
   }
 
-  .form-group {
-    margin-bottom: 1.5rem;
+  .namd-field-group {
+    margin-bottom: var(--namd-spacing-lg);
   }
 
-  .form-group.required label {
+  .namd-field-group.required label {
     font-weight: 500;
   }
 
-  .form-group label {
+  .namd-field-group label {
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--namd-spacing-sm);
     font-size: 0.875rem;
-    color: var(--text-primary, #333);
+    color: var(--namd-text-primary);
   }
 
   .required-mark {
-    color: var(--error, #d32f2f);
-    margin-left: 0.25rem;
+    color: var(--namd-error);
+    margin-left: var(--namd-spacing-xs);
   }
 
 
@@ -362,13 +301,13 @@
   .parameters-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
+    gap: var(--namd-spacing-lg);
   }
 
   .checkbox-label {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--namd-spacing-sm);
     cursor: pointer;
   }
 
@@ -377,43 +316,14 @@
   }
 
   .help-text {
-    margin: 0.25rem 0 0 0;
+    margin: var(--namd-spacing-xs) 0 0 0;
     font-size: 0.75rem;
-    color: var(--text-secondary, #666);
+    color: var(--namd-text-secondary);
   }
 
   .empty-state {
     text-align: center;
-    padding: 3rem;
-    color: var(--text-secondary, #666);
-  }
-
-  .form-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: flex-end;
-    margin-top: 2rem;
-  }
-
-  /* Error States */
-  .has-error label {
-    color: var(--namd-error);
-  }
-
-  .namd-input.error {
-    border-color: var(--namd-error);
-    background: var(--namd-error-bg);
-  }
-
-  .namd-input.error:focus {
-    border-color: var(--namd-error);
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
-  }
-
-  .error-text {
-    margin: var(--namd-spacing-xs) 0 0 0;
-    font-size: var(--namd-font-size-xs);
-    color: var(--namd-error);
-    font-weight: var(--namd-font-weight-medium);
+    padding: var(--namd-spacing-2xl);
+    color: var(--namd-text-secondary);
   }
 </style>

@@ -91,7 +91,7 @@
         class:disabled={item.disabled}
         disabled={item.disabled}
         on:click={() => handleNavClick(item.view)}
-        title={item.disabled ? (item.id === 'create' ? 'Connect to cluster first' : 'Coming soon') : item.label}
+        title={item.disabled && item.id === 'create' ? 'Connect to cluster first' : item.label}
       >
         <span class="nav-icon">{@html renderIcon(item.icon)}</span>
         <span class="nav-label">{item.label}</span>
@@ -147,13 +147,13 @@
     border-radius: var(--namd-border-radius-sm);
     color: var(--namd-sidebar-fg);
     cursor: pointer;
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     font-weight: var(--namd-font-weight-normal);
     text-align: left;
-    transition: all 0.15s ease;
+    transition: all var(--namd-transition-fast);
     width: 100%;
     position: relative;
-    margin-bottom: 4px; /* mb-1 */
+    margin-bottom: 4px;
     justify-content: flex-start;
   }
 
@@ -192,7 +192,7 @@
     background-color: var(--namd-primary);
     color: var(--namd-primary-fg);
     border-radius: 9999px;
-    padding: 0.125rem 0.375rem;
+    padding: var(--namd-spacing-xs) 0.375rem;
     font-size: var(--namd-font-size-xs);
     font-weight: var(--namd-font-weight-medium);
     min-width: 1.25rem;

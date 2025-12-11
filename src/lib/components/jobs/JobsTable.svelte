@@ -66,7 +66,7 @@
 
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
 
   function formatWallTime(job: JobInfo): string {
@@ -81,7 +81,7 @@
       <tr>
         <th>
           <button
-            class="sort-header"
+            class="namd-button namd-button--ghost sort-header"
             class:active={sortField === 'job_name'}
             on:click={() => handleSort('job_name')}
           >
@@ -93,7 +93,7 @@
         </th>
         <th>
           <button
-            class="sort-header"
+            class="namd-button namd-button--ghost sort-header"
             class:active={sortField === 'status'}
             on:click={() => handleSort('status')}
           >
@@ -106,7 +106,7 @@
         <th>Wall Time</th>
         <th>
           <button
-            class="sort-header"
+            class="namd-button namd-button--ghost sort-header"
             class:active={sortField === 'created_at'}
             on:click={() => handleSort('created_at')}
           >
@@ -118,7 +118,7 @@
         </th>
         <th>
           <button
-            class="sort-header"
+            class="namd-button namd-button--ghost sort-header"
             class:active={sortField === 'slurm_job_id'}
             on:click={() => handleSort('slurm_job_id')}
           >
@@ -172,7 +172,7 @@
   .jobs-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
   }
 
   .jobs-table thead {
@@ -187,22 +187,9 @@
   }
 
   .sort-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     width: 100%;
     padding: var(--namd-spacing-md);
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: var(--namd-font-size-sm);
-    font-weight: var(--namd-font-weight-medium);
-    color: var(--namd-text-secondary);
-    transition: all 0.15s ease;
-  }
-
-  .sort-header:hover {
-    background-color: rgba(243, 244, 246, 0.5); /* hover:bg-muted/50 */
+    justify-content: space-between;
   }
 
   .sort-header.active {
@@ -210,7 +197,7 @@
   }
 
   .sort-indicator {
-    transition: transform 0.15s ease;
+    transition: transform var(--namd-transition-fast);
     font-size: var(--namd-font-size-xs);
     color: var(--namd-primary);
   }
@@ -221,7 +208,7 @@
 
   .jobs-table tbody tr {
     border-bottom: 1px solid var(--namd-border-muted);
-    transition: background-color 0.15s ease;
+    transition: background-color var(--namd-transition-fast);
   }
 
   .job-row {
@@ -249,20 +236,17 @@
   .id-text {
     font-family: var(--namd-font-mono);
     color: var(--namd-text-secondary);
+    font-size: var(--namd-font-size-xs);
   }
 
   .walltime-text {
     color: var(--namd-text-secondary);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
   }
 
   .date-text {
     color: var(--namd-text-secondary);
-    font-size: var(--namd-font-size-sm);
-  }
-
-  .id-text {
-    font-size: var(--namd-font-size-xs);
+    font-size: var(--namd-font-size-base);
   }
 
   .empty-table {
@@ -282,8 +266,8 @@
 
   .empty-text {
     margin: 0;
-    color: var(--namd-text-muted);
-    font-size: var(--namd-font-size-sm);
+    color: var(--namd-text-secondary);
+    font-size: var(--namd-font-size-base);
   }
 
   /* Responsive adjustments */

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { onDestroy } from 'svelte';
   import type { ValidationResult } from '$lib/types/api';
+  import type { Template } from '$lib/types/template';
   import ResourcesTab from './ResourcesTab.svelte';
   import ConfigureTab from './ConfigureTab.svelte';
   import ReviewTab from './ReviewTab.svelte';
@@ -9,6 +11,7 @@
   // Props from parent
   export let jobName: string;
   export let templateId: string;
+  export let template: Template | null = null;
   export let templateValues: Record<string, any>;
   export let resourceConfig: {
     cores: number;
@@ -22,7 +25,6 @@
   export let onCancel: () => void;
   export let isSubmitting: boolean = false;
   export let uploadProgress: Map<string, { percentage: number }>;
-  export let uploadFileList: string[] = [];
 
   type TabId = 'resources' | 'configure' | 'review';
 
@@ -62,8 +64,8 @@
         cores: resourceConfig.cores,
         memory: resourceConfig.memory,
         walltime: resourceConfig.walltime,
-        partition: resourceConfig.partition || null,
-        qos: resourceConfig.qos || null,
+        partition: resourceConfig.partition,
+        qos: resourceConfig.qos,
       },
     });
 
@@ -72,28 +74,16 @@
     if (result.is_valid) {
       errors = {};
     } else {
-      // Parse issues to extract field-specific errors
-      const newErrors: Record<string, string> = {};
-      for (const error of result.issues) {
-        if (error.toLowerCase().includes('job name')) {
-          newErrors.job_name = error;
-        } else if (error.toLowerCase().includes('template')) {
-          newErrors.template = error;
-        } else if (error.toLowerCase().includes('cores')) {
-          newErrors.cores = error;
-        } else if (error.toLowerCase().includes('memory')) {
-          newErrors.memory = error;
-        } else if (error.toLowerCase().includes('wall time')) {
-          newErrors.walltime = error;
-        } else {
-          if (!newErrors.general) {
-            newErrors.general = error;
-          }
-        }
-      }
-      errors = newErrors;
+      // Use structured field_errors directly from backend
+      errors = result.field_errors || {};
     }
   }
+
+  onDestroy(() => {
+    if (validationTimer) {
+      clearTimeout(validationTimer);
+    }
+  });
 </script>
 
 <div class="namd-tabs-container namd-card">
@@ -115,23 +105,24 @@
     {#if activeTab === 'resources'}
       <ResourcesTab bind:resourceConfig {errors} />
     {:else if activeTab === 'configure'}
-      <ConfigureTab bind:jobName bind:templateId bind:templateValues {errors} />
+      <ConfigureTab bind:jobName bind:templateId bind:templateValues bind:template {errors} />
+      <!-- Configuration validation feedback (job name, template fields) -->
+      <div class="namd-section">
+        <ValidationDisplay validation={validationResult} />
+      </div>
     {:else if activeTab === 'review'}
       <ReviewTab
         {jobName}
         {templateId}
+        {template}
         {templateValues}
         {resourceConfig}
         {errors}
         {uploadProgress}
-        {uploadFileList}
         {onSubmit}
         {onCancel}
         {isSubmitting}
       />
     {/if}
   </div>
-
-  <!-- General validation feedback -->
-  <ValidationDisplay validation={validationResult} />
 </div>

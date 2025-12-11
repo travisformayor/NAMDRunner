@@ -78,50 +78,6 @@ pub enum JobStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum FileType {
-    #[serde(rename = "input")]
-    Input,
-    #[serde(rename = "output")]
-    Output,
-    #[serde(rename = "config")]
-    Config,
-    #[serde(rename = "log")]
-    Log,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum NAMDFileType {
-    #[serde(rename = "pdb")]
-    Pdb,
-    #[serde(rename = "psf")]
-    Psf,
-    #[serde(rename = "prm")]
-    Prm,
-    #[serde(rename = "exb")]
-    Exb,
-    #[serde(rename = "other")]
-    Other,
-}
-
-impl NAMDFileType {
-    /// Detect file type from filename (source of truth for type detection)
-    pub fn from_filename(filename: &str) -> Self {
-        let lower = filename.to_lowercase();
-        let ext = lower.split('.').next_back().unwrap_or("");
-
-        match ext {
-            "pdb" => Self::Pdb,
-            "psf" => Self::Psf,
-            "prm" => Self::Prm,
-            "exb" => Self::Exb,
-            _ if lower.ends_with(".enm.extra") => Self::Exb,
-            _ if lower.contains("extrabonds") => Self::Exb,
-            _ => Self::Other,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputFile {
     pub name: String,
@@ -152,7 +108,6 @@ pub struct JobInfo {
     pub slurm_config: SlurmConfig,
     pub input_files: Vec<String>,
     pub output_files: Vec<OutputFile>,
-    pub remote_directory: String,
 }
 
 // JobInfo has no custom constructor - construct directly using struct literal syntax
@@ -164,8 +119,8 @@ pub struct SlurmConfig {
     pub cores: u32,
     pub memory: String,
     pub walltime: String,
-    pub partition: Option<String>,
-    pub qos: Option<String>,
+    pub partition: String,
+    pub qos: String,
 }
 
 impl SlurmConfig {
@@ -235,8 +190,8 @@ impl Default for SlurmConfig {
             cores: 4,
             memory: "4GB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: Some("compute".to_string()),
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         }
     }
 }
@@ -259,81 +214,11 @@ pub struct SelectedFile {
     pub name: String,
     pub path: String,
     pub size: u64,
-    pub file_type: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemoteFile {
-    pub name: String,           // Display name (just filename)
-    pub path: String,           // Full relative path from job root (e.g., "outputs/sim.dcd")
-    pub size: u64,
-    pub modified_at: String,
-    pub file_type: FileType,
-}
-
-/// Connection status response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConnectionStatusResponse {
-    pub state: ConnectionState,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_info: Option<SessionInfo>,
-}
-
-/// File information for SFTP operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileInfo {
-    pub name: String,
-    pub path: String,
-    pub size: u64,
-    pub modified_at: String,
-    pub is_directory: bool,
-}
-
-/// File upload progress information for real-time progress tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileUploadProgress {
-    pub file_name: String,
-    pub bytes_transferred: u64,
-    pub total_bytes: u64,
-    pub percentage: f32,
-    pub transfer_rate_mbps: f64,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_namd_file_type_detection() {
-        // Standard extensions
-        assert_eq!(NAMDFileType::from_filename("structure.pdb"), NAMDFileType::Pdb);
-        assert_eq!(NAMDFileType::from_filename("structure.psf"), NAMDFileType::Psf);
-        assert_eq!(NAMDFileType::from_filename("parameters.prm"), NAMDFileType::Prm);
-        assert_eq!(NAMDFileType::from_filename("restraints.exb"), NAMDFileType::Exb);
-
-        // Case insensitive
-        assert_eq!(NAMDFileType::from_filename("STRUCTURE.PDB"), NAMDFileType::Pdb);
-        assert_eq!(NAMDFileType::from_filename("Structure.Psf"), NAMDFileType::Psf);
-
-        // Special extrabonds patterns
-        assert_eq!(
-            NAMDFileType::from_filename("hextube_MGHH_WI_k0.5.enm.extra"),
-            NAMDFileType::Exb
-        );
-        assert_eq!(
-            NAMDFileType::from_filename("mghh_extrabonds"),
-            NAMDFileType::Exb
-        );
-        assert_eq!(
-            NAMDFileType::from_filename("my_extrabonds_file.txt"),
-            NAMDFileType::Exb
-        );
-
-        // Unknown extensions
-        assert_eq!(NAMDFileType::from_filename("data.txt"), NAMDFileType::Other);
-        assert_eq!(NAMDFileType::from_filename("config.conf"), NAMDFileType::Other);
-        assert_eq!(NAMDFileType::from_filename("noextension"), NAMDFileType::Other);
-    }
 
     #[test]
     fn test_parse_memory_gb_standard_formats() {
@@ -342,8 +227,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
 
@@ -351,8 +236,8 @@ mod tests {
             cores: 1,
             memory: "16G".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
 
@@ -361,8 +246,8 @@ mod tests {
             cores: 1,
             memory: "32".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 32.0);
 
@@ -371,8 +256,8 @@ mod tests {
             cores: 1,
             memory: "2048MB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 2.0);
 
@@ -380,8 +265,8 @@ mod tests {
             cores: 1,
             memory: "512M".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 0.5);
     }
@@ -392,8 +277,8 @@ mod tests {
             cores: 1,
             memory: "1.5GB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 1.5);
 
@@ -401,8 +286,8 @@ mod tests {
             cores: 1,
             memory: "0.5G".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 0.5);
     }
@@ -413,8 +298,8 @@ mod tests {
             cores: 1,
             memory: "  16GB  ".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
 
@@ -422,8 +307,8 @@ mod tests {
             cores: 1,
             memory: "16 GB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
     }
@@ -434,8 +319,8 @@ mod tests {
             cores: 1,
             memory: "16gb".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 16.0);
 
@@ -443,8 +328,8 @@ mod tests {
             cores: 1,
             memory: "2048mb".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_memory_gb().unwrap(), 2.0);
     }
@@ -456,8 +341,8 @@ mod tests {
             cores: 1,
             memory: "".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_memory_gb().is_err());
 
@@ -466,8 +351,8 @@ mod tests {
             cores: 1,
             memory: "invalid".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_memory_gb().is_err());
 
@@ -476,8 +361,8 @@ mod tests {
             cores: 1,
             memory: "16TB".to_string(),
             walltime: "01:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_memory_gb().is_err());
     }
@@ -489,8 +374,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "24:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_walltime_hours().unwrap(), 24.0);
 
@@ -499,8 +384,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "04:30:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_walltime_hours().unwrap(), 4.5);
 
@@ -509,8 +394,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "01:30:30".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         // 1 hour + 30 minutes (0.5) + 30 seconds (0.00833...)
         let result = config.parse_walltime_hours().unwrap();
@@ -524,8 +409,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "00:00:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert_eq!(config.parse_walltime_hours().unwrap(), 0.0);
 
@@ -534,8 +419,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "99:59:59".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         let result = config.parse_walltime_hours().unwrap();
         assert!(result > 99.9 && result < 100.0);
@@ -548,8 +433,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -558,8 +443,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "24".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -568,8 +453,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "24:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -578,8 +463,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "01:60:00".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -588,8 +473,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "01:00:60".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
 
@@ -598,8 +483,8 @@ mod tests {
             cores: 1,
             memory: "16GB".to_string(),
             walltime: "aa:bb:cc".to_string(),
-            partition: None,
-            qos: None,
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
         };
         assert!(config.parse_walltime_hours().is_err());
     }
@@ -628,15 +513,14 @@ mod tests {
                 cores: 4,
                 memory: "16GB".to_string(),
                 walltime: "24:00:00".to_string(),
-                partition: Some("amilan".to_string()),
-                qos: Some("normal".to_string()),
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
             },
             input_files: vec![
                 "structure.pdb".to_string(),
                 "structure.psf".to_string(),
             ],
             output_files: vec![],
-            remote_directory: "/projects/user/new_job_456".to_string(),
         };
 
         // Should serialize successfully

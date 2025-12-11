@@ -6,19 +6,15 @@ pub mod job_submission;
 pub mod job_completion;
 pub mod job_deletion;
 pub mod job_sync;
-pub mod errors;
-pub mod progress;
+pub mod file_operations;
 pub mod common;
 
 // Re-export simplified automation functions with progress reporting
 pub use job_creation::execute_job_creation_with_progress;
 pub use job_submission::execute_job_submission_with_progress;
-pub use job_completion::execute_job_completion_internal;  // Internal automatic completion
+pub use job_completion::execute_job_completion;  // Internal automatic completion
 pub use job_deletion::execute_job_deletion;
-pub use job_sync::{sync_all_jobs, fetch_slurm_logs_if_needed, refetch_slurm_logs, JobSyncResult};
-
-// Re-export error types for structured error handling
-pub use errors::{AutomationError, AutomationResult};
-
-// Re-export progress types for structured progress reporting
-pub use progress::{ProgressInfo, ProgressCallback, ProgressTracker};
+pub use job_sync::{sync_all_jobs, load_slurm_logs, JobSyncResult};
+pub use file_operations::{
+    download_job_file, download_files_zip, validate_upload_file
+};

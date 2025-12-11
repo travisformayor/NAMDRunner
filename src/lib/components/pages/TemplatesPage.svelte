@@ -33,8 +33,7 @@
         id: `${template.id}_copy_${Date.now()}`,
         name: `${template.name} (Copy)`,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        is_builtin: false
+        updated_at: new Date().toISOString()
       };
 
       const success = await templateStore.createTemplate(duplicatedTemplate);
@@ -65,15 +64,33 @@
     deleteTargetId = null;
     deleteTargetName = null;
   }
+
+  async function handleImport() {
+    await templateStore.importTemplate();
+  }
+
+  async function handleExport(templateId: string) {
+    await templateStore.exportTemplate(templateId);
+  }
 </script>
 
-<div class="templates-page">
-  <div class="page-header">
+<div class="templates-page namd-page">
+  <div class="page-header namd-page-header">
     <h1>Simulation Templates</h1>
-    <button class="namd-button namd-button--primary" on:click={handleCreateNew}>
-      <span class="icon">+</span>
-      Create Template
-    </button>
+    <div class="header-actions">
+      <button class="namd-button namd-button--secondary" on:click={handleImport}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7,10 12,15 17,10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Import Template
+      </button>
+      <button class="namd-button namd-button--primary" on:click={handleCreateNew}>
+        <span class="icon">+</span>
+        Create Template
+      </button>
+    </div>
   </div>
 
   {#if $templatesLoading}
@@ -91,13 +108,9 @@
     <!-- All Templates in Single List -->
     <div class="template-grid">
       {#each $templates as template}
-        {@const isBuiltIn = template.is_builtin}
-        <div class="template-card" class:built-in={isBuiltIn}>
+        <div class="template-card">
           <div class="template-header">
             <h3>{template.name}</h3>
-            <span class="badge" class:badge-builtin={isBuiltIn} class:badge-custom={!isBuiltIn}>
-              {isBuiltIn ? 'Built-in' : 'Custom'}
-            </span>
           </div>
           <p class="template-description">{template.description}</p>
           <div class="template-actions">
@@ -106,6 +119,14 @@
             </button>
             <button class="namd-button namd-button--secondary namd-button--sm" on:click={() => handleDuplicate(template)}>
               Duplicate
+            </button>
+            <button class="namd-button namd-button--secondary namd-button--sm" on:click={() => handleExport(template.id)} title="Export template to JSON file">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17,8 12,3 7,8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Export
             </button>
             <button class="namd-button namd-button--destructive namd-button--sm" on:click={() => confirmDelete(template)}>
               Delete
@@ -131,8 +152,8 @@
 
 <style>
   .templates-page {
-    padding: 2rem;
-    max-width: 1200px;
+    padding: var(--namd-spacing-xl);
+    max-width: var(--namd-max-width-content);
     margin: 0 auto;
   }
 
@@ -140,7 +161,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
+    margin-bottom: var(--namd-spacing-xl);
   }
 
   .page-header h1 {
@@ -149,10 +170,15 @@
     color: var(--namd-text-primary);
   }
 
+  .header-actions {
+    display: flex;
+    gap: var(--namd-spacing-sm);
+  }
+
   .template-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1.5rem;
+    gap: var(--namd-spacing-lg);
   }
 
   .template-card {
@@ -161,7 +187,7 @@
     border: 1px solid var(--namd-border);
     border-radius: var(--namd-border-radius);
     padding: var(--namd-spacing-lg);
-    background: var(--namd-bg-secondary);
+    background: var(--namd-bg-primary);
     box-shadow: var(--namd-shadow-sm);
     transition: box-shadow 0.2s;
   }
@@ -174,31 +200,13 @@
     display: flex;
     justify-content: space-between;
     align-items: start;
-    margin-bottom: 1rem;
+    margin-bottom: var(--namd-spacing-md);
   }
 
   .template-header h3 {
     margin: 0;
     font-size: var(--namd-font-size-xl);
     color: var(--namd-text-primary);
-  }
-
-  .badge {
-    padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
-    border-radius: var(--namd-border-radius-sm);
-    font-size: var(--namd-font-size-xs);
-    font-weight: var(--namd-font-weight-semibold);
-    text-transform: uppercase;
-  }
-
-  .badge-builtin {
-    background: var(--namd-info-bg);
-    color: var(--namd-info-fg);
-  }
-
-  .badge-custom {
-    background: var(--namd-success-bg);
-    color: var(--namd-success-fg);
   }
 
   .template-description {
@@ -209,7 +217,7 @@
 
   .template-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: var(--namd-spacing-sm);
     flex-wrap: wrap;
     margin-top: auto;
   }

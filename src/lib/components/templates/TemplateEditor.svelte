@@ -1,14 +1,15 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { onDestroy } from 'svelte';
   import { templateStore, templatesError } from '$lib/stores/templateStore';
   import type { Template } from '$lib/types/template';
   import type { ApiResult } from '$lib/types/api';
   import { getVariableTypeName } from '$lib/types/template';
   import { extractVariablesFromTemplate, generateLabel } from '$lib/utils/template-utils';
-  import VariableEditor from './VariableEditor.svelte';
+  import VariableForm from './VariableForm.svelte';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import PreviewModal from '../ui/PreviewModal.svelte';
-  import Dialog from '../ui/Dialog.svelte';
+  import EditDialog from '../ui/EditDialog.svelte';
 
   // Props
   export let template: Template | null = null;
@@ -68,6 +69,7 @@
   let showVariableEditor = false;
   let editingVariable: any = null;
   let editingVariableKey: string | null = null;
+  let variableFormRef: VariableForm;
 
   // Test template state
   let showTestPreview = false;
@@ -94,8 +96,7 @@
       namd_config_template: namdConfigTemplate,
       variables,
       created_at: template?.created_at ?? now,
-      updated_at: now,
-      is_builtin: false  // User-created or edited templates are always custom
+      updated_at: now
     };
 
     let success = false;
@@ -146,8 +147,10 @@
     showVariableEditor = true;
   }
 
-  function handleVariableSaved(event: CustomEvent) {
-    const varDef = event.detail;
+  function handleVariableSave() {
+    if (!variableFormRef) return;
+
+    const varDef = variableFormRef.getVariableDefinition();
 
     // If editing existing variable and key changed, delete old key
     if (editingVariableKey && editingVariableKey !== varDef.key) {
@@ -190,6 +193,12 @@
 
     isGeneratingPreview = false;
   }
+
+  onDestroy(() => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+  });
 </script>
 
 <div class="template-editor">
@@ -308,15 +317,16 @@
 </div>
 
 <!-- Variable Editor Modal -->
-<Dialog open={showVariableEditor} size="md" onClose={handleVariableCancel}>
-  <svelte:fragment slot="body">
-    <VariableEditor
-      variable={editingVariable}
-      on:save={handleVariableSaved}
-      on:cancel={handleVariableCancel}
-    />
+<EditDialog
+  isOpen={showVariableEditor}
+  title="Variable Editor"
+  onSave={handleVariableSave}
+  onClose={handleVariableCancel}
+>
+  <svelte:fragment slot="form">
+    <VariableForm bind:this={variableFormRef} bind:variable={editingVariable} />
   </svelte:fragment>
-</Dialog>
+</EditDialog>
 
 <!-- Test Template Preview -->
 <PreviewModal
@@ -340,7 +350,7 @@
 
 <style>
   .template-editor {
-    max-width: 900px;
+    max-width: var(--namd-max-width-form);
     margin: 0 auto;
   }
 
@@ -358,7 +368,7 @@
     display: block;
     margin-bottom: var(--namd-spacing-sm);
     font-weight: var(--namd-font-weight-medium);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-primary);
   }
 
@@ -379,7 +389,7 @@
 
   .help-text code {
     background: var(--namd-bg-muted);
-    padding: 0.125rem 0.25rem;
+    padding: var(--namd-spacing-xs) var(--namd-spacing-xs);
     border-radius: var(--namd-border-radius-sm);
     font-size: 0.875em;
     color: var(--namd-text-primary);
@@ -411,12 +421,12 @@
 
   .form-actions-left {
     display: flex;
-    gap: 1rem;
+    gap: var(--namd-spacing-md);
   }
 
   .form-actions-right {
     display: flex;
-    gap: 1rem;
+    gap: var(--namd-spacing-md);
   }
 
   /* Variable Management */
@@ -429,7 +439,7 @@
 
   .variables-header .section-label {
     font-weight: var(--namd-font-weight-medium);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     margin-bottom: 0;
     color: var(--namd-text-primary);
   }
@@ -467,7 +477,7 @@
     font-family: var(--namd-font-mono);
     font-size: var(--namd-font-size-xs);
     background: var(--namd-bg-muted);
-    padding: 0.125rem var(--namd-spacing-xs);
+    padding: var(--namd-spacing-xs) var(--namd-spacing-xs);
     border-radius: var(--namd-border-radius-sm);
     color: var(--namd-text-secondary);
   }

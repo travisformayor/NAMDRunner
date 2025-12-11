@@ -1,0 +1,214 @@
+{
+  "partitions": [
+    {
+      "name": "amilan",
+      "title": "General Compute",
+      "description": "Standard CPU nodes for most NAMD simulations",
+      "max_cores": 64,
+      "max_memory_per_core_gb": 3.75,
+      "gpu_type": null,
+      "gpu_count": null,
+      "is_default": true
+    },
+    {
+      "name": "amilan128c",
+      "title": "High-Core Compute",
+      "description": "High core count nodes for large parallel jobs",
+      "max_cores": 128,
+      "max_memory_per_core_gb": 2.01,
+      "gpu_type": null,
+      "gpu_count": null,
+      "is_default": false
+    },
+    {
+      "name": "amem",
+      "title": "High-Memory",
+      "description": "High memory nodes for memory-intensive simulations",
+      "max_cores": 128,
+      "max_memory_per_core_gb": 21.5,
+      "gpu_type": null,
+      "gpu_count": null,
+      "is_default": false
+    },
+    {
+      "name": "aa100",
+      "title": "NVIDIA A100 GPU",
+      "description": "GPU-accelerated nodes with NVIDIA A100 for fast NAMD",
+      "max_cores": 64,
+      "max_memory_per_core_gb": 3.75,
+      "gpu_type": "NVIDIA A100",
+      "gpu_count": 3,
+      "is_default": false
+    },
+    {
+      "name": "ami100",
+      "title": "AMD MI100 GPU",
+      "description": "GPU-accelerated nodes with AMD MI100 for HIP workloads",
+      "max_cores": 64,
+      "max_memory_per_core_gb": 3.75,
+      "gpu_type": "AMD MI100",
+      "gpu_count": 3,
+      "is_default": false
+    },
+    {
+      "name": "al40",
+      "title": "NVIDIA L40 GPU",
+      "description": "GPU-accelerated nodes with NVIDIA L40",
+      "max_cores": 64,
+      "max_memory_per_core_gb": 3.75,
+      "gpu_type": "NVIDIA L40",
+      "gpu_count": 3,
+      "is_default": false
+    },
+    {
+      "name": "atesting",
+      "title": "CPU Testing",
+      "description": "Quick CPU testing with limited resources",
+      "max_cores": 16,
+      "max_memory_per_core_gb": 4.0,
+      "gpu_type": null,
+      "gpu_count": null,
+      "is_default": false
+    },
+    {
+      "name": "atesting_a100",
+      "title": "GPU Testing (A100 MIG)",
+      "description": "GPU testing with A100 MIG instances",
+      "max_cores": 10,
+      "max_memory_per_core_gb": 4.0,
+      "gpu_type": "NVIDIA A100 MIG",
+      "gpu_count": 1,
+      "is_default": false
+    },
+    {
+      "name": "atesting_mi100",
+      "title": "GPU Testing (MI100)",
+      "description": "GPU testing with AMD MI100",
+      "max_cores": 64,
+      "max_memory_per_core_gb": 3.75,
+      "gpu_type": "AMD MI100",
+      "gpu_count": 3,
+      "is_default": false
+    },
+    {
+      "name": "acompile",
+      "title": "Code Compilation",
+      "description": "Dedicated nodes for compiling code",
+      "max_cores": 4,
+      "max_memory_per_core_gb": 4.0,
+      "gpu_type": null,
+      "gpu_count": null,
+      "is_default": false
+    }
+  ],
+  "qos_options": [
+    {
+      "name": "normal",
+      "title": "Normal Priority",
+      "description": "Standard priority with good resource limits",
+      "max_walltime_hours": 24,
+      "valid_partitions": [
+        "amilan",
+        "amilan128c",
+        "aa100",
+        "ami100",
+        "al40"
+      ],
+      "min_memory_gb": null,
+      "is_default": true
+    },
+    {
+      "name": "long",
+      "title": "Extended Runtime",
+      "description": "Longer walltime for extended simulations",
+      "max_walltime_hours": 168,
+      "valid_partitions": [
+        "amilan",
+        "amilan128c",
+        "aa100",
+        "ami100",
+        "al40"
+      ],
+      "min_memory_gb": null,
+      "is_default": false
+    },
+    {
+      "name": "mem",
+      "title": "High-Memory",
+      "description": "For high-memory jobs on amem partition",
+      "max_walltime_hours": 168,
+      "valid_partitions": [
+        "amem"
+      ],
+      "min_memory_gb": 256,
+      "is_default": false
+    },
+    {
+      "name": "testing",
+      "title": "Testing & Development",
+      "description": "Quick testing with limited resources",
+      "max_walltime_hours": 1,
+      "valid_partitions": [
+        "atesting",
+        "atesting_a100",
+        "atesting_mi100"
+      ],
+      "min_memory_gb": null,
+      "is_default": false
+    },
+    {
+      "name": "compile",
+      "title": "Compilation",
+      "description": "For code compilation jobs",
+      "max_walltime_hours": 12,
+      "valid_partitions": [
+        "acompile"
+      ],
+      "min_memory_gb": null,
+      "is_default": false
+    }
+  ],
+  "job_presets": [
+    {
+      "name": "Small Test",
+      "description": "Quick test for debugging and validation",
+      "cores": 24,
+      "memory": "16",
+      "walltime": "04:00:00",
+      "partition": "amilan",
+      "qos": "normal"
+    },
+    {
+      "name": "Production Run",
+      "description": "Standard production simulation",
+      "cores": 48,
+      "memory": "32",
+      "walltime": "24:00:00",
+      "partition": "amilan",
+      "qos": "normal"
+    },
+    {
+      "name": "Large Scale",
+      "description": "High-performance parallel simulation",
+      "cores": 128,
+      "memory": "64",
+      "walltime": "168:00:00",
+      "partition": "amilan128c",
+      "qos": "long"
+    },
+    {
+      "name": "GPU Accelerated",
+      "description": "Fast GPU-powered simulation",
+      "cores": 64,
+      "memory": "48",
+      "walltime": "24:00:00",
+      "partition": "aa100",
+      "qos": "normal"
+    }
+  ],
+  "billing_rates": {
+    "cpu_cost_per_core_hour": 1.0,
+    "gpu_cost_per_gpu_hour": 108.2
+  },
+  "default_host": "login.rc.colorado.edu"
+}

@@ -16,48 +16,10 @@
   $: steps = job.template_values?.steps || 0;
   $: temperature = job.template_values?.temperature || 0;
   $: timestep = job.template_values?.timestep || 0;
-
-  function getSimulationProgress(): number {
-    if (job.status === 'CREATED' || job.status === 'PENDING') return 0;
-    if (job.status === 'COMPLETED') return 100;
-    // Real-time progress tracking not implemented yet
-    return 0;
-  }
-
-  function getCompletedSteps(): number {
-    const total = typeof steps === 'number' ? steps : 0;
-    return Math.floor(total * (getSimulationProgress() / 100));
-  }
-
-  function getEstimatedTimeRemaining(): string {
-    if (job.status === 'COMPLETED') return 'Completed';
-    if (job.status === 'FAILED') return 'Failed';
-    if (job.status === 'CREATED' || job.status === 'PENDING') return 'Not started';
-    if (job.status === 'RUNNING') return 'Real-time tracking not yet available';
-    return '--';
-  }
 </script>
 
 <div class="namd-tab-panel">
   <div class="overview-content">
-    <!-- Simulation Progress -->
-    <div class="overview-section">
-      <h3>Simulation Progress</h3>
-      <div class="progress-card">
-        <div class="progress-header">
-          <span class="progress-label">MD Steps Completed</span>
-          <span class="progress-value">{getSimulationProgress().toFixed(1)}%</span>
-        </div>
-        <div class="progress-bar">
-          <div class="progress-fill" style="width: {getSimulationProgress()}%"></div>
-        </div>
-        <div class="progress-details">
-          <span class="namd-text-sm">{getCompletedSteps().toLocaleString()} / {typeof steps === 'number' ? steps.toLocaleString() : '0'} steps</span>
-          <span class="namd-text-sm">{getEstimatedTimeRemaining()}</span>
-        </div>
-      </div>
-    </div>
-
     <!-- Resource Allocation -->
     <div class="overview-section">
       <h3>Resource Allocation</h3>
@@ -141,7 +103,7 @@
   }
 
   .overview-content {
-    max-width: 800px;
+    max-width: var(--namd-max-width-form);
   }
 
   .overview-section {
@@ -156,8 +118,8 @@
 
   .progress-card {
     background: var(--namd-bg-primary);
-    border: 1px solid var(--namd-border-color);
-    border-radius: var(--namd-border-radius-md);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius);
     padding: var(--namd-spacing-md);
   }
 
@@ -169,8 +131,8 @@
 
   .progress-bar {
     height: 8px;
-    background: var(--namd-bg-secondary);
-    border-radius: 4px;
+    background: var(--namd-bg-primary);
+    border-radius: var(--namd-border-radius-sm);
     overflow: hidden;
     margin-bottom: var(--namd-spacing-sm);
   }
@@ -200,20 +162,24 @@
   }
 
   .info-label {
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-secondary);
     font-weight: var(--namd-font-weight-medium);
   }
 
   .info-value {
-    font-size: var(--namd-font-size-md);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .template-values {
     background: var(--namd-bg-primary);
-    border: 1px solid var(--namd-border-color);
-    border-radius: var(--namd-border-radius-md);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius);
     padding: var(--namd-spacing-md);
   }
 </style>

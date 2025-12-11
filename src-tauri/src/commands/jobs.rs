@@ -1,8 +1,7 @@
 use crate::types::*;
 use crate::types::commands::ValidateJobConfigParams;
-use crate::types::response_data;
-use crate::validation::input;
-use crate::validation::job_validation::ValidationResult;
+use crate::security::input;
+use crate::validation::job::ValidationResult;
 use crate::database::with_database;
 use crate::commands::helpers;
 use crate::automations;
@@ -44,19 +43,17 @@ pub async fn create_job(app_handle: tauri::AppHandle, params: CreateJobParams) -
 
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn submit_job(job_id: String, app_handle: tauri::AppHandle) -> ApiResult<response_data::JobSubmissionData> {
-    let clean_job_id = match input::sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(error) => {
-            return ApiResult::error(error.to_string());
-        }
-    };
+pub async fn submit_job(job_id: String, app_handle: tauri::AppHandle) -> ApiResult<JobInfo> {
+    let sanitize_result = helpers::sanitize_command_job_id(&job_id);
+    if !sanitize_result.success {
+        return ApiResult::error(sanitize_result.error.unwrap_or_else(|| "Invalid job ID".to_string()));
+    }
+    let clean_job_id = sanitize_result.data.unwrap();
 
     // Call automation with progress tracking
-    let handle_clone = app_handle.clone();
+    let handle_clone = app_handle;
 
     match automations::execute_job_submission_with_progress(
-        app_handle,
         clean_job_id,
         move |msg| {
             let _ = handle_clone.emit("job-submission-progress", msg);
@@ -115,12 +112,11 @@ pub async fn sync_jobs() -> SyncJobsResult {
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn delete_job(job_id: String, delete_remote: bool, app_handle: tauri::AppHandle) -> ApiResult<()> {
-    let clean_job_id = match input::sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(error) => {
-            return ApiResult::error(error.to_string());
-        }
-    };
+    let sanitize_result = helpers::sanitize_command_job_id(&job_id);
+    if !sanitize_result.success {
+        return ApiResult::error(sanitize_result.error.unwrap_or_else(|| "Invalid job ID".to_string()));
+    }
+    let clean_job_id = sanitize_result.data.unwrap();
 
     let handle_clone = app_handle.clone();
 
@@ -140,12 +136,11 @@ pub async fn delete_job(job_id: String, delete_remote: bool, app_handle: tauri::
 /// Used when user explicitly clicks "Refetch Logs" button
 #[tauri::command(rename_all = "snake_case")]
 pub async fn refetch_slurm_logs(job_id: String) -> ApiResult<JobInfo> {
-    let clean_job_id = match input::sanitize_job_id(&job_id) {
-        Ok(id) => id,
-        Err(e) => {
-            return ApiResult::error(format!("Invalid job ID: {}", e));
-        }
-    };
+    let sanitize_result = helpers::sanitize_command_job_id(&job_id);
+    if !sanitize_result.success {
+        return ApiResult::error(sanitize_result.error.unwrap_or_else(|| "Invalid job ID".to_string()));
+    }
+    let clean_job_id = sanitize_result.data.unwrap();
 
     // Get job from database
     let mut job_info = match helpers::load_job_or_fail(&clean_job_id, "Refetch Logs") {
@@ -154,7 +149,7 @@ pub async fn refetch_slurm_logs(job_id: String) -> ApiResult<JobInfo> {
     };
 
     // Refetch logs from server
-    if let Err(e) = automations::refetch_slurm_logs(&mut job_info).await {
+    if let Err(e) = automations::load_slurm_logs(&mut job_info, true).await {
         return ApiResult::error(format!("Failed to refetch logs: {}", e));
     }
 
@@ -177,8 +172,8 @@ pub async fn preview_slurm_script(
     cores: u32,
     memory: String,
     walltime: String,
-    partition: Option<String>,
-    qos: Option<String>
+    partition: String,
+    qos: String
 ) -> ApiResult<String> {
     log_info!(category: "Jobs", message: "Generating SLURM script preview");
 
@@ -206,5 +201,5 @@ pub async fn preview_slurm_script(
 /// Checks job name, template selection, template values, and resource configuration
 #[tauri::command(rename_all = "snake_case")]
 pub async fn validate_job_config(params: ValidateJobConfigParams) -> ValidationResult {
-    crate::validation::job_validation::validate_complete_job_config(params).await
+    crate::validation::job::validate_job_config(params).await
 }

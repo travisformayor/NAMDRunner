@@ -15,11 +15,7 @@
     }
 
     // Use cached logs from database
-    if (job.slurm_stdout !== undefined && job.slurm_stdout !== null) {
-      return job.slurm_stdout || '(No output)';
-    }
-
-    return 'Logs are being fetched from the server automatically...';
+    return job.slurm_stdout ?? 'Logs are being fetched from the server automatically...';
   }
 
   function getStderrContent(): string {
@@ -28,11 +24,7 @@
     }
 
     // Use cached logs from database
-    if (job.slurm_stderr !== undefined && job.slurm_stderr !== null) {
-      return job.slurm_stderr || '(No errors)';
-    }
-
-    return 'Logs are being fetched from the server automatically...';
+    return job.slurm_stderr ?? 'Logs are being fetched from the server automatically...';
   }
 
   function copyLogs() {
@@ -109,7 +101,7 @@
 
       <div class="log-content">
         {#if refetchError}
-          <div class="namd-error-message" style="margin-bottom: 1rem;">
+          <div class="namd-error-message" style="margin-bottom: var(--namd-spacing-md);">
             {refetchError}
           </div>
         {/if}
@@ -126,3 +118,53 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .logs-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .logs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--namd-spacing-md);
+    border-bottom: 1px solid var(--namd-border);
+  }
+
+  .log-actions {
+    display: flex;
+    gap: var(--namd-spacing-sm);
+  }
+
+  .log-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--namd-spacing-md);
+  }
+
+  .log-viewer {
+    background-color: var(--namd-code-bg);
+    border: 1px solid var(--namd-border);
+    border-radius: var(--namd-border-radius-sm);
+    padding: var(--namd-spacing-md);
+    overflow-x: auto;
+  }
+
+  .log-text {
+    font-family: var(--namd-font-mono);
+    font-size: var(--namd-font-size-xs);
+    white-space: pre;
+    margin: 0;
+    color: var(--namd-text-primary);
+  }
+
+  .empty-logs {
+    text-align: center;
+    padding: var(--namd-spacing-2xl);
+    color: var(--namd-text-secondary);
+    font-style: italic;
+  }
+</style>

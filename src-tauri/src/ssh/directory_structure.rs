@@ -60,7 +60,7 @@ impl JobDirectoryStructure {
         vec!["/scratch/"]
     }
 
-    /// Subdirectory for user-uploaded input files (PSF, PDB, PRM files)
+    /// Subdirectory for user-uploaded input files
     pub const INPUT_FILES: &'static str = "input_files";
 
     /// Subdirectory for NAMD output files (coordinates, velocities, trajectories)

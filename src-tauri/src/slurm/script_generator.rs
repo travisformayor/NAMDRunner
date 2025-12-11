@@ -39,9 +39,6 @@ impl SlurmScriptGenerator {
     /// Generate a preview SLURM script with minimal parameters
     /// Used for UI preview without needing complete JobInfo
     pub fn preview_script(job_name: String, slurm_config: SlurmConfig) -> Result<String> {
-        // Validate configuration
-        Self::validate_slurm_config(&slurm_config)?;
-
         // Sanitize job name for SLURM
         let safe_job_name = Self::sanitize_slurm_job_name(&job_name);
 
@@ -76,12 +73,6 @@ impl SlurmScriptGenerator {
     }
 
     fn build_slurm_directives(job_name: &str, config: &SlurmConfig, memory: &str) -> Result<String> {
-        let partition = config.partition.as_deref()
-            .unwrap_or("amilan");
-
-        let qos = config.qos.as_deref()
-            .unwrap_or("normal");
-
         Ok(format!(
             "#SBATCH --job-name={}\n\
              #SBATCH --output={}_%j.out\n\
@@ -93,8 +84,8 @@ impl SlurmScriptGenerator {
              #SBATCH --mem={}\n\
              #SBATCH --qos={}\n\
              #SBATCH --constraint=ib",
-            job_name, job_name, job_name, partition,
-            config.cores, config.walltime, memory, qos
+            job_name, job_name, job_name, config.partition,
+            config.cores, config.walltime, memory, config.qos
         ))
     }
 
@@ -154,30 +145,250 @@ impl SlurmScriptGenerator {
             return Err(anyhow!("Job name cannot be empty"));
         }
 
-        Self::validate_slurm_config(&job_info.slurm_config)
-    }
-
-    fn validate_slurm_config(slurm_config: &SlurmConfig) -> Result<()> {
-        if slurm_config.cores < 1 {
-            return Err(anyhow!("Core count must be at least 1"));
-        }
-
-        if slurm_config.cores > 64 {
-            return Err(anyhow!("Core count cannot exceed 64 (single node limit for amilan partition)"));
-        }
-
-        if slurm_config.walltime.is_empty() {
-            return Err(anyhow!("Walltime cannot be empty"));
-        }
-
-        if slurm_config.memory.is_empty() {
-            return Err(anyhow!("Memory specification cannot be empty"));
-        }
-
         Ok(())
     }
 
-    // See crate::templates::validation for template-based validation
+    // See crate::validation::template for template-based validation
 }
 
-// Tests will validate SLURM script generation only (NAMD config is handled by templates)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_job_info(job_name: &str) -> JobInfo {
+        JobInfo {
+            job_id: "test_job_123".to_string(),
+            job_name: job_name.to_string(),
+            status: JobStatus::Created,
+            slurm_job_id: None,
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            updated_at: Some("2025-01-01T00:00:00Z".to_string()),
+            submitted_at: None,
+            completed_at: None,
+            project_dir: Some("/projects/user/namdrunner_jobs/test_job_123".to_string()),
+            scratch_dir: None,
+            error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
+            template_id: "test_template".to_string(),
+            template_values: std::collections::HashMap::new(),
+            slurm_config: SlurmConfig {
+                cores: 16,
+                memory: "32GB".to_string(),
+                walltime: "24:00:00".to_string(),
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
+            },
+            input_files: vec![],
+            output_files: vec![],
+        }
+    }
+
+    #[test]
+    fn test_sanitize_slurm_job_name() {
+        // Alphanumeric and hyphens should pass through
+        assert_eq!(SlurmScriptGenerator::sanitize_slurm_job_name("test-job-123"), "test-job-123");
+
+        // Special characters should be replaced with underscores
+        assert_eq!(SlurmScriptGenerator::sanitize_slurm_job_name("my job!"), "my_job_");
+        assert_eq!(SlurmScriptGenerator::sanitize_slurm_job_name("test@#$%job"), "test____job");
+        assert_eq!(SlurmScriptGenerator::sanitize_slurm_job_name("job.with.dots"), "job_with_dots");
+        assert_eq!(SlurmScriptGenerator::sanitize_slurm_job_name("job/with/slashes"), "job_with_slashes");
+
+        // Mixed valid and invalid characters
+        assert_eq!(SlurmScriptGenerator::sanitize_slurm_job_name("test-job_2024!"), "test-job_2024_");
+    }
+
+    #[test]
+    fn test_validate_job_info_empty_name() {
+        let mut job = create_test_job_info("");
+        let result = SlurmScriptGenerator::validate_job_info(&job);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Job name cannot be empty"));
+
+        // Whitespace-only should also fail
+        job.job_name = "   ".to_string();
+        let result = SlurmScriptGenerator::validate_job_info(&job);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_job_info_valid() {
+        let job = create_test_job_info("valid_job");
+        let result = SlurmScriptGenerator::validate_job_info(&job);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_build_shebang() {
+        let shebang = SlurmScriptGenerator::build_shebang();
+        assert_eq!(shebang, "#!/bin/bash");
+    }
+
+    #[test]
+    fn test_build_slurm_directives() {
+        let config = SlurmConfig {
+            cores: 16,
+            memory: "32GB".to_string(),
+            walltime: "24:00:00".to_string(),
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
+        };
+
+        let directives = SlurmScriptGenerator::build_slurm_directives("test_job", &config, "32GB").unwrap();
+
+        // Verify required SLURM directives are present
+        assert!(directives.contains("#SBATCH --job-name=test_job"));
+        assert!(directives.contains("#SBATCH --output=test_job_%j.out"));
+        assert!(directives.contains("#SBATCH --error=test_job_%j.err"));
+        assert!(directives.contains("#SBATCH --partition=amilan"));
+        assert!(directives.contains("#SBATCH --nodes=1"));
+        assert!(directives.contains("#SBATCH --ntasks=16"));
+        assert!(directives.contains("#SBATCH --time=24:00:00"));
+        assert!(directives.contains("#SBATCH --mem=32GB"));
+        assert!(directives.contains("#SBATCH --qos=normal"));
+        assert!(directives.contains("#SBATCH --constraint=ib"));
+    }
+
+    #[test]
+    fn test_build_job_metadata() {
+        let job = create_test_job_info("test_job");
+        let metadata = SlurmScriptGenerator::build_job_metadata(&job);
+
+        // Verify metadata includes job ID and name
+        assert!(metadata.contains("# Job ID: test_job_123"));
+        assert!(metadata.contains("# Job Name: test_job"));
+        assert!(metadata.contains("# Generated by NAMDRunner"));
+    }
+
+    #[test]
+    fn test_build_environment_setup() {
+        let env = SlurmScriptGenerator::build_environment_setup();
+        assert!(env.contains("source /etc/profile"));
+        assert!(env.contains("export SLURM_EXPORT_ENV=ALL"));
+    }
+
+    #[test]
+    fn test_build_module_loads() {
+        let modules = SlurmScriptGenerator::build_module_loads();
+        assert!(modules.contains("module purge"));
+        assert!(modules.contains("module load gcc/14.2.0"));
+        assert!(modules.contains("module load openmpi/5.0.6"));
+        assert!(modules.contains("module load namd/3.0.1_cpu"));
+    }
+
+    #[test]
+    fn test_build_working_directory() {
+        let dir = SlurmScriptGenerator::build_working_directory("/scratch/alpine/user/job_123");
+        assert!(dir.contains("cd /scratch/alpine/user/job_123"));
+    }
+
+    #[test]
+    fn test_build_namd_execution() {
+        let exec = SlurmScriptGenerator::build_namd_execution(16);
+        assert!(exec.contains("mpirun -np $SLURM_NTASKS namd3 config.namd"));
+        assert!(exec.contains("> namd_output.log"));
+    }
+
+    #[test]
+    fn test_preview_script_structure() {
+        let config = SlurmConfig {
+            cores: 8,
+            memory: "16GB".to_string(),
+            walltime: "12:00:00".to_string(),
+            partition: "amilan".to_string(),
+            qos: "normal".to_string(),
+        };
+
+        let script = SlurmScriptGenerator::preview_script("preview_test".to_string(), config).unwrap();
+
+        // Verify script has required sections
+        assert!(script.starts_with("#!/bin/bash"));
+        assert!(script.contains("#SBATCH"));
+        assert!(script.contains("module load"));
+        assert!(script.contains("mpirun"));
+        assert!(script.contains("PREVIEW"));
+    }
+
+    #[test]
+    fn test_generate_namd_script_complete() {
+        let job = create_test_job_info("production_job");
+        let scratch_dir = "/scratch/alpine/user/namdrunner_jobs/test_job_123";
+
+        let script = SlurmScriptGenerator::generate_namd_script(&job, scratch_dir).unwrap();
+
+        // Verify shebang
+        assert!(script.starts_with("#!/bin/bash"));
+
+        // Verify SLURM directives
+        assert!(script.contains("#SBATCH --job-name=production_job"));
+        assert!(script.contains("#SBATCH --ntasks=16"));
+        assert!(script.contains("#SBATCH --mem=32GB"));
+        assert!(script.contains("#SBATCH --partition=amilan"));
+
+        // Verify job metadata
+        assert!(script.contains("# Job ID: test_job_123"));
+
+        // Verify environment setup
+        assert!(script.contains("source /etc/profile"));
+
+        // Verify module loads
+        assert!(script.contains("module load gcc/14.2.0"));
+        assert!(script.contains("module load namd/3.0.1_cpu"));
+
+        // Verify working directory
+        assert!(script.contains(&format!("cd {}", scratch_dir)));
+
+        // Verify NAMD execution
+        assert!(script.contains("mpirun -np $SLURM_NTASKS namd3 config.namd"));
+    }
+
+    #[test]
+    fn test_generate_namd_script_sanitizes_job_name() {
+        let job = create_test_job_info("my job with spaces!");
+        let scratch_dir = "/scratch/test";
+
+        let script = SlurmScriptGenerator::generate_namd_script(&job, scratch_dir).unwrap();
+
+        // Job name should be sanitized in SLURM directives
+        assert!(script.contains("#SBATCH --job-name=my_job_with_spaces_"));
+        // Note: Original job name appears in metadata comments, which is fine
+    }
+
+    #[test]
+    fn test_generate_namd_script_empty_job_name_fails() {
+        let job = create_test_job_info("");
+        let result = SlurmScriptGenerator::generate_namd_script(&job, "/scratch/test");
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Job name cannot be empty"));
+    }
+
+    #[test]
+    fn test_generate_namd_script_memory_conversion() {
+        let mut job = create_test_job_info("test");
+
+        // Test different memory formats
+        job.slurm_config.memory = "64GB".to_string();
+        let script = SlurmScriptGenerator::generate_namd_script(&job, "/scratch/test").unwrap();
+        assert!(script.contains("#SBATCH --mem=64GB"));
+
+        job.slurm_config.memory = "32gb".to_string(); // lowercase
+        let script = SlurmScriptGenerator::generate_namd_script(&job, "/scratch/test").unwrap();
+        assert!(script.contains("#SBATCH --mem=32GB"));
+
+        job.slurm_config.memory = "128".to_string(); // no unit
+        let script = SlurmScriptGenerator::generate_namd_script(&job, "/scratch/test").unwrap();
+        assert!(script.contains("#SBATCH --mem=128GB"));
+    }
+
+    #[test]
+    fn test_generate_namd_script_invalid_memory_fails() {
+        let mut job = create_test_job_info("test");
+        job.slurm_config.memory = "invalid".to_string();
+
+        let result = SlurmScriptGenerator::generate_namd_script(&job, "/scratch/test");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid memory specification"));
+    }
+}

@@ -127,7 +127,6 @@ mod tests {
             variables,
             created_at: "2025-01-01".to_string(),
             updated_at: "2025-01-01".to_string(),
-            is_builtin: false,
         };
 
         let mut values = HashMap::new();
@@ -159,7 +158,6 @@ mod tests {
             variables,
             created_at: "2025-01-01".to_string(),
             updated_at: "2025-01-01".to_string(),
-            is_builtin: false,
         };
 
         let mut values_true = HashMap::new();
@@ -198,7 +196,6 @@ mod tests {
             variables,
             created_at: "2025-01-01".to_string(),
             updated_at: "2025-01-01".to_string(),
-            is_builtin: false,
         };
 
         let values = HashMap::new(); // Empty - missing temperature
@@ -220,7 +217,6 @@ mod tests {
             variables,
             created_at: "2025-01-01".to_string(),
             updated_at: "2025-01-01".to_string(),
-            is_builtin: false,
         };
 
         let values = HashMap::new();
@@ -255,7 +251,6 @@ mod tests {
             variables,
             created_at: "2025-01-01".to_string(),
             updated_at: "2025-01-01".to_string(),
-            is_builtin: false,
         };
 
         let mut values = HashMap::new();

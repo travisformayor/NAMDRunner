@@ -5,15 +5,16 @@ pub mod errors;
 pub mod manager;
 pub mod metadata;
 pub mod directory_structure;
+pub mod paths;
 
 #[cfg(test)]
 pub mod test_utils;
 
 pub use connection::{SSHConnection, ConnectionConfig, ConnectionInfo};
-pub use sftp::{SFTPOperations, FileTransferProgress, RemoteFileInfo, ProgressCallback};
+pub use sftp::{SFTPOperations, FileTransferProgress, SftpFileEntry, ProgressCallback};
 pub use commands::{CommandExecutor, CommandResult};
 pub use errors::{SSHError, map_ssh_error, ConnectionError};
-pub use manager::ConnectionManager;
+pub use manager::{ConnectionManager, retry_quick};
 pub use directory_structure::JobDirectoryStructure;
 
 lazy_static::lazy_static! {

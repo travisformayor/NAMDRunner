@@ -7,10 +7,12 @@
   import { partitions, allQosOptions } from '../../stores/clusterConfig';
   import CreateJobTabs from '../create-job/CreateJobTabs.svelte';
   import type { CreateJobParams } from '../../types/api';
+  import type { Template } from '$lib/types/template';
 
   // Job configuration
   let jobName = '';
   let templateId = '';
+  let template: Template | null = null;
   let templateValues: Record<string, any> = {};
 
   // Resource configuration
@@ -26,9 +28,7 @@
   let errors: Record<string, string> = {};
   let isSubmitting = false;
   let uploadProgress: Map<string, { percentage: number }> = new Map();
-  let uploadFileList: string[] = [];
   let unlistenUpload: (() => void) | undefined;
-  let unlistenFileList: (() => void) | undefined;
 
   // Get defaults from cluster config
   $: defaultPartition = $partitions.find(p => p.is_default) || $partitions[0];
@@ -37,15 +37,9 @@
   onMount(async () => {
     // Set defaults from backend
     if (defaultPartition && defaultQos) {
-      resourceConfig.partition = defaultPartition.id;
-      resourceConfig.qos = defaultQos.id;
+      resourceConfig.partition = defaultPartition.name;
+      resourceConfig.qos = defaultQos.name;
     }
-
-    // Listen for file upload list (emitted before uploads start)
-    unlistenFileList = await listen('file-upload-list', (event) => {
-      const fileList = event.payload as string[];
-      uploadFileList = fileList;
-    });
 
     // Listen for file upload progress
     unlistenUpload = await listen('file-upload-progress', (event) => {
@@ -59,9 +53,6 @@
   onDestroy(() => {
     if (unlistenUpload) {
       unlistenUpload();
-    }
-    if (unlistenFileList) {
-      unlistenFileList();
     }
   });
 
@@ -96,7 +87,7 @@
   }
 </script>
 
-<div class="create-job-page">
+<div class="create-job-page namd-page">
   {#if !$isConnected}
     <div class="warning-banner">
       <strong>Not Connected:</strong> Please connect to the cluster before creating jobs.
@@ -105,11 +96,11 @@
     <CreateJobTabs
       bind:jobName
       bind:templateId
+      bind:template
       bind:templateValues
       bind:resourceConfig
       bind:errors
       {uploadProgress}
-      {uploadFileList}
       onSubmit={handleSubmit}
       onCancel={handleCancel}
       {isSubmitting}
@@ -119,17 +110,17 @@
 
 <style>
   .create-job-page {
-    padding: 2rem;
-    max-width: 1200px;
+    padding: var(--namd-spacing-xl);
+    max-width: var(--namd-max-width-content);
     margin: 0 auto;
   }
 
   .warning-banner {
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
-    background: var(--warning-light, #fff3cd);
-    border: 1px solid var(--warning, #ffc107);
-    color: var(--warning-dark, #856404);
+    padding: var(--namd-spacing-md);
+    border-radius: var(--namd-border-radius-sm);
+    margin-bottom: var(--namd-spacing-lg);
+    background: var(--namd-warning-bg);
+    border: 1px solid var(--namd-warning-border);
+    color: var(--namd-warning-fg);
   }
 </style>

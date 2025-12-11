@@ -1,23 +1,9 @@
 use anyhow::{Result, anyhow};
-use crate::types::JobInfo;
+use crate::types::{JobInfo, ApiResult};
 use crate::templates::Template;
-use crate::ssh::ConnectionManager;
-use crate::database::with_database;
+use crate::database::{with_database, get_current_database_path};
+use crate::security::input;
 use crate::log_error;
-
-/// Require active SSH connection
-/// Returns ConnectionManager or error if not connected
-/// Used by commands that need SSH access
-pub async fn require_connection(context: &str) -> Result<&'static ConnectionManager> {
-    let connection_manager = crate::ssh::get_connection_manager();
-
-    if !connection_manager.is_connected().await {
-        log_error!(category: context, message: "SSH connection not active");
-        return Err(anyhow!("Not connected to cluster"));
-    }
-
-    Ok(connection_manager)
-}
 
 /// Load job from database or return error
 /// Validates job ID and handles database errors
@@ -33,18 +19,6 @@ pub fn load_job_or_fail(job_id: &str, context: &str) -> Result<JobInfo> {
         .ok_or_else(|| {
             log_error!(category: context, message: "Job not found", details: "Job ID: {}", job_id);
             anyhow!("Job '{}' not found", job_id)
-        })
-}
-
-/// Get cluster username from active connection
-/// Requires connection to be established first
-pub async fn get_cluster_username(context: &str) -> Result<String> {
-    let connection_manager = require_connection(context).await?;
-
-    connection_manager.get_username().await
-        .map_err(|e| {
-            log_error!(category: context, message: "Failed to get username", details: "{}", e);
-            anyhow!("Failed to get cluster username: {}", e)
         })
 }
 
@@ -64,17 +38,27 @@ pub fn load_template_or_fail(template_id: &str, context: &str) -> Result<Templat
         })
 }
 
+/// Sanitize and validate job_id from command input
+/// Returns ApiResult with sanitized job_id on success, error on validation failure
+pub fn sanitize_command_job_id(job_id: &str) -> ApiResult<String> {
+    match input::sanitize_job_id(job_id) {
+        Ok(clean_id) => ApiResult::success(clean_id),
+        Err(error) => ApiResult::error(error.to_string()),
+    }
+}
+
+/// Get database path or return ApiResult error
+/// Used by commands that need to return database path
+pub fn get_database_path_or_fail() -> ApiResult<String> {
+    match get_current_database_path() {
+        Some(path) => ApiResult::success(path.to_string_lossy().to_string()),
+        None => ApiResult::error("Database not initialized".to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[tokio::test]
-    async fn test_require_connection_when_disconnected() {
-        // Connection manager should be disconnected by default
-        let result = require_connection("Test").await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Not connected"));
-    }
 
     #[test]
     fn test_load_job_or_fail_with_nonexistent_job() {

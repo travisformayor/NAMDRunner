@@ -1,8 +1,17 @@
 use log::{Level, Log, Metadata, Record};
-use std::sync::Once;
+use std::sync::{Arc, Mutex, Once};
+use std::collections::VecDeque;
 use tauri::AppHandle;
+use crate::types::core::AppLogMessage;
 
 static LOGGER_INIT: Once = Once::new();
+
+// Thread-safe log buffer for event sourcing
+lazy_static::lazy_static! {
+    static ref LOG_BUFFER: Arc<Mutex<VecDeque<AppLogMessage>>> = Arc::new(Mutex::new(VecDeque::new()));
+}
+
+const MAX_LOG_BUFFER_SIZE: usize = 500;
 
 pub struct TauriLogger {
     app_handle: Option<AppHandle>,
@@ -75,35 +84,6 @@ pub fn set_app_handle(app_handle: AppHandle) {
 /// Unified logging macro with named parameters
 #[macro_export]
 macro_rules! app_log {
-    // Full form: level, category, message, details, toast
-    (level: $level:ident, category: $category:expr, message: $message:expr, details: $details:expr, toast: $toast:expr) => {{
-        let details_str = $details.to_string();
-        let log_msg = $crate::types::core::AppLogMessage {
-            level: stringify!($level).to_lowercase(),
-            category: $category.to_string(),
-            message: $message.to_string(),
-            details: Some(details_str.clone()),
-            show_toast: $toast,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        };
-
-        // Log with details for console
-        match stringify!($level) {
-            "info" => log::info!("[{}] {}", $category, details_str),
-            "error" => log::error!("[{}] {}", $category, details_str),
-            "warn" => log::warn!("[{}] {}", $category, details_str),
-            "debug" => log::debug!("[{}] {}", $category, details_str),
-            _ => log::info!("[{}] {}", $category, details_str),
-        }
-
-        // Emit to frontend
-        if let Some(app_handle) = $crate::logging::get_app_handle() {
-            use tauri::Emitter;
-            let _ = app_handle.emit("app-log", &log_msg);
-        }
-    }};
-
-
     // With pre-formatted details and toast
     (level: $level:ident, category: $category:expr, message: $message:expr, details: $details:expr, toast: $toast:expr) => {{
         let log_msg = $crate::types::core::AppLogMessage {
@@ -114,6 +94,9 @@ macro_rules! app_log {
             show_toast: $toast,
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
+
+        // Store in buffer for event sourcing
+        $crate::logging::store_log_in_buffer(log_msg.clone());
 
         // Log with details for console
         match stringify!($level) {
@@ -141,6 +124,9 @@ macro_rules! app_log {
             show_toast: $toast,
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
+
+        // Store in buffer for event sourcing
+        $crate::logging::store_log_in_buffer(log_msg.clone());
 
         // Log with message for console
         match stringify!($level) {
@@ -314,4 +300,23 @@ pub fn get_app_handle() -> Option<AppHandle> {
         #[allow(static_mut_refs)]
         LOGGER.app_handle.clone()
     }
+}
+
+/// Store a log message in the buffer (for event sourcing)
+pub fn store_log_in_buffer(log_msg: AppLogMessage) {
+    if let Ok(mut buffer) = LOG_BUFFER.lock() {
+        buffer.push_back(log_msg);
+        // Keep buffer size limited (FIFO)
+        while buffer.len() > MAX_LOG_BUFFER_SIZE {
+            buffer.pop_front();
+        }
+    }
+}
+
+/// Get recent logs from the buffer (for frontend consumption)
+pub fn get_recent_logs() -> Vec<AppLogMessage> {
+    LOG_BUFFER
+        .lock()
+        .map(|buffer| buffer.iter().cloned().collect())
+        .unwrap_or_default()
 }

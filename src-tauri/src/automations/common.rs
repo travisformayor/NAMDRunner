@@ -85,6 +85,7 @@ pub fn ensure_trailing_slash(path: &str) -> String {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,12 +122,11 @@ mod tests {
                 cores: 1,
                 memory: "1GB".to_string(),
                 walltime: "01:00:00".to_string(),
-                partition: Some("amilan".to_string()),
-                qos: Some("normal".to_string()),
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
             },
             input_files: vec![],
             output_files: vec![],
-            remote_directory: "/test/dir".to_string(),
         };
 
         update_job_status(&mut job, JobStatus::Running);
@@ -161,12 +161,11 @@ mod tests {
                 cores: 4,
                 memory: "16GB".to_string(),
                 walltime: "04:00:00".to_string(),
-                partition: Some("amilan".to_string()),
-                qos: Some("normal".to_string()),
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
             },
             input_files: vec![],
             output_files: vec![],
-            remote_directory: "/test/dir".to_string(),
         };
 
         // Record original state
@@ -204,12 +203,11 @@ mod tests {
                 cores: 4,
                 memory: "16GB".to_string(),
                 walltime: "04:00:00".to_string(),
-                partition: Some("amilan".to_string()),
-                qos: Some("normal".to_string()),
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
             },
             input_files: vec![],
             output_files: vec![],
-            remote_directory: "/test/dir".to_string(),
         };
 
         // Record original state

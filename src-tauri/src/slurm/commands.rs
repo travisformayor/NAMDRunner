@@ -5,7 +5,8 @@
 /// - Use input sanitization to prevent command injection
 /// - Return Result for error handling
 /// - Generate commands only (no execution)
-use crate::validation::input;
+use crate::security::input;
+use crate::security::shell;
 use anyhow::Result;
 
 
@@ -15,7 +16,7 @@ use anyhow::Result;
 /// the specified script in that directory.
 pub fn submit_job_command(scratch_dir: &str, script_name: &str) -> Result<String> {
     // Use safe shell escaping for directory
-    Ok(crate::validation::shell::safe_cd_and_run(scratch_dir, &format!("sbatch {}", script_name)))
+    Ok(shell::safe_cd_and_run(scratch_dir, &format!("sbatch {}", script_name)))
 }
 
 /// Parse sbatch output to extract SLURM job ID
@@ -30,17 +31,11 @@ pub fn parse_sbatch_output(output: &str) -> Option<String> {
         .map(String::from)
 }
 
-// Helper functions for slurm/status.rs compatibility
-// These wrap the simple functions above to match what status.rs expects
+// SLURM job status query commands
 
-/// Get job status command - single job
-pub fn job_status_command(job_id: &str) -> Result<String> {
-    let clean_id = input::sanitize_job_id(job_id)?;
-    Ok(format!("squeue -j {} --format='%i|%T|%M|%l|%S|%e' --noheader", clean_id))
-}
-
-/// Get job status command - multiple jobs
-pub fn batch_job_status_command(job_ids: &[String]) -> Result<String> {
+/// Get active job status using squeue
+/// Always uses consistent job_id|status format for reliable parsing
+pub fn squeue_command(job_ids: &[String]) -> Result<String> {
     let sanitized_ids: Result<Vec<_>> = job_ids.iter()
         .map(|id| input::sanitize_job_id(id))
         .collect();
@@ -48,22 +43,14 @@ pub fn batch_job_status_command(job_ids: &[String]) -> Result<String> {
     Ok(format!("squeue -j {} --format='%i|%T' --noheader", job_list))
 }
 
-/// Get completed job status command
-pub fn completed_job_status_command(job_id: &str) -> Result<String> {
-    let clean_id = input::sanitize_job_id(job_id)?;
-    Ok(format!("sacct -j {} --format=State --parsable2 --noheader", clean_id))
-}
-
-/// Get completed job status command - multiple jobs
-pub fn batch_completed_job_status_command(job_ids: &[String]) -> Result<String> {
+/// Get completed job status using sacct
+/// Always uses consistent job_id|status format for reliable parsing
+pub fn sacct_command(job_ids: &[String]) -> Result<String> {
     let sanitized_ids: Result<Vec<_>> = job_ids.iter()
         .map(|id| input::sanitize_job_id(id))
         .collect();
     let job_list = sanitized_ids?.join(",");
-    Ok(format!(
-        "sacct -j {} --format=JobID,State --parsable2 --noheader",
-        job_list
-    ))
+    Ok(format!("sacct -j {} --format=JobID,State --parsable2 --noheader", job_list))
 }
 
 /// Cancel job command - single job
@@ -104,31 +91,44 @@ mod tests {
     #[test]
     fn test_input_sanitization() {
         // Malicious inputs should be rejected
-        assert!(job_status_command("12345; rm -rf /").is_err());
+        assert!(squeue_command(&["12345; rm -rf /".to_string()]).is_err());
         assert!(cancel_job_command("../../etc/passwd").is_err());
 
         // Valid inputs should work
-        assert!(job_status_command("12345").is_ok());
+        assert!(squeue_command(&["12345".to_string()]).is_ok());
         assert!(cancel_job_command("12345").is_ok());
     }
 
     #[test]
-    fn test_batch_job_status_command() {
-        let job_ids = vec!["12345".to_string(), "67890".to_string()];
-        let cmd = batch_job_status_command(&job_ids).unwrap();
-        assert!(cmd.contains("squeue -j 12345,67890"));
-        assert!(cmd.contains("--format='%i|%T'"));
+    fn test_squeue_consistent_format() {
+        // Single and batch queries use identical format for reliable parsing
+        let single = squeue_command(&["12345".to_string()]).unwrap();
+        let batch = squeue_command(&["12345".to_string(), "67890".to_string()]).unwrap();
+
+        // Both use job_id|status format
+        assert!(single.contains("--format='%i|%T'"));
+        assert!(batch.contains("--format='%i|%T'"));
+        assert!(single.contains("squeue -j 12345"));
+        assert!(batch.contains("squeue -j 12345,67890"));
     }
 
     #[test]
-    fn test_compatibility_functions() {
-        // Test that compatibility functions work correctly
-        assert!(job_status_command("12345").is_ok());
-        assert!(completed_job_status_command("12345").is_ok());
-        assert!(cancel_job_command("12345").is_ok());
+    fn test_sacct_consistent_format() {
+        // Single and batch queries use identical format for reliable parsing
+        let single = sacct_command(&["12345".to_string()]).unwrap();
+        let batch = sacct_command(&["12345".to_string(), "67890".to_string()]).unwrap();
 
-        let job_ids = vec!["12345".to_string()];
-        assert!(batch_job_status_command(&job_ids).is_ok());
-        assert!(batch_completed_job_status_command(&job_ids).is_ok());
+        // Both use JobID,State format with parsable2 delimiter
+        assert!(single.contains("--format=JobID,State"));
+        assert!(batch.contains("--format=JobID,State"));
+        assert!(single.contains("--parsable2"));
+        assert!(batch.contains("--parsable2"));
+    }
+
+    #[test]
+    fn test_cancel_job_command() {
+        assert!(cancel_job_command("12345").is_ok());
+        let cmd = cancel_job_command("12345").unwrap();
+        assert!(cmd.contains("scancel 12345"));
     }
 }

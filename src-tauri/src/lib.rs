@@ -2,8 +2,7 @@ mod types;
 pub mod commands;
 pub mod ssh;
 mod security;
-mod validation;
-mod retry;
+pub mod validation;
 mod database;
 mod slurm;
 mod logging;
@@ -38,6 +37,11 @@ pub fn run() {
                     e
                 })?;
 
+            log_info!(
+                category: "Startup",
+                message: "Database initialized"
+            );
+
             // Default templates are loaded on-demand when list_templates is first called
             // This ensures logs appear in frontend (setup hook runs before frontend connects)
 
@@ -46,16 +50,20 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // App initialization
             commands::app::initialize_app,
+            commands::app::get_recent_logs,
             // Connection lifecycle
             commands::connection::connect_to_cluster,
             commands::connection::disconnect,
             commands::connection::get_connection_status,
             // Cluster configuration
             commands::cluster::get_cluster_capabilities,
-            commands::cluster::suggest_qos_for_partition,
-            commands::cluster::estimate_queue_time_for_job,
+            commands::cluster::save_cluster_config,
+            commands::cluster::reset_cluster_config,
             commands::cluster::calculate_job_cost,
-            commands::cluster::validate_resource_allocation,
+            commands::cluster::estimate_queue_time,
+            commands::cluster::suggest_qos,
+            // Validation
+            commands::validation::validate_resource_allocation_command,
             // Job management
             commands::jobs::create_job,
             commands::jobs::submit_job,
@@ -65,20 +73,17 @@ pub fn run() {
             commands::jobs::delete_job,
             commands::jobs::refetch_slurm_logs,
             // File management
-            commands::files::detect_file_type,
             commands::files::select_input_file,
-            commands::files::upload_job_files,
-            commands::files::download_job_output,
-            commands::files::download_all_outputs,
-            commands::files::download_job_input,
-            commands::files::download_all_inputs,
-            commands::files::list_job_files,
+            commands::files::download_file,
+            commands::files::download_all_files,
             // Template management
             commands::templates::list_templates,
             commands::templates::get_template,
             commands::templates::create_template,
             commands::templates::update_template,
             commands::templates::delete_template,
+            commands::templates::export_template,
+            commands::templates::import_template,
             commands::templates::validate_template_values,
             commands::templates::preview_namd_config,
             commands::templates::preview_template_with_defaults,
@@ -92,4 +97,9 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+
+    log_info!(
+        category: "Startup",
+        message: "Tauri application shutdown"
+    );
 }

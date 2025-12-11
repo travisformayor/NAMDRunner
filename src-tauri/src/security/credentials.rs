@@ -23,7 +23,8 @@ impl SecurePassword {
         F: FnOnce(&str) -> R,
     {
         let bytes = self.0.unsecure();
-        let password_str = std::str::from_utf8(bytes).unwrap_or("");
+        let password_str = std::str::from_utf8(bytes)
+            .expect("Password must be valid UTF-8");
         f(password_str)
     }
 
@@ -31,7 +32,9 @@ impl SecurePassword {
     /// This is only for compatibility with libraries that require &str
     pub fn expose(&self) -> String {
         let bytes = self.0.unsecure();
-        std::str::from_utf8(bytes).unwrap_or("").to_string()
+        std::str::from_utf8(bytes)
+            .expect("Password must be valid UTF-8")
+            .to_string()
     }
 
     /// Check if the password is empty

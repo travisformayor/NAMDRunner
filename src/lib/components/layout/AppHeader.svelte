@@ -102,11 +102,11 @@
     border: none;
     color: var(--namd-text-secondary);
     cursor: pointer;
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     font-weight: var(--namd-font-weight-medium);
     padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
     border-radius: var(--namd-border-radius-sm);
-    transition: all 0.15s ease;
+    transition: all var(--namd-transition-fast);
   }
 
   .breadcrumb-link:hover {
@@ -116,14 +116,14 @@
 
   .breadcrumb-current {
     color: var(--namd-text-primary);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     font-weight: var(--namd-font-weight-medium);
     padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
   }
 
   .breadcrumb-separator {
-    color: var(--namd-text-muted);
-    font-size: var(--namd-font-size-sm);
+    color: var(--namd-text-secondary);
+    font-size: var(--namd-font-size-base);
     margin: 0 var(--namd-spacing-xs);
   }
 
@@ -134,7 +134,7 @@
     cursor: pointer;
     padding: var(--namd-spacing-sm);
     border-radius: var(--namd-border-radius-sm);
-    transition: background-color 0.15s ease;
+    transition: background-color var(--namd-transition-fast);
     display: flex;
     align-items: center;
     justify-content: center;

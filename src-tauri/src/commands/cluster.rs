@@ -1,67 +1,41 @@
-use crate::types::*;
-use crate::log_debug;
+/// Cluster configuration command wrappers
+/// All cluster-related Tauri commands that call business logic in cluster.rs
 
-/// Get cluster capabilities (partitions, QOS, job presets)
+use crate::cluster;
+use crate::types::ApiResult;
+
+/// Get cluster capabilities for frontend
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_cluster_capabilities() -> ApiResult<crate::cluster::ClusterCapabilities> {
-    log_debug!(category: "Cluster", message: "get_cluster_capabilities command called");
-
-    let capabilities = crate::cluster::get_cluster_capabilities();
-
-    log_debug!(
-        category: "Cluster",
-        message: "Returning cluster capabilities",
-        details: "{} partitions, {} QOS options, {} presets",
-            capabilities.partitions.len(),
-            capabilities.qos_options.len(),
-            capabilities.job_presets.len()
-    );
-
-    ApiResult {
-        success: true,
-        data: Some(capabilities),
-        error: None,
-    }
+pub fn get_cluster_capabilities() -> cluster::ClusterCapabilities {
+    cluster::get_cluster_capabilities()
 }
 
-/// Suggest optimal QoS for given walltime and partition
+/// Save cluster config to database and update cache
 #[tauri::command(rename_all = "snake_case")]
-pub fn suggest_qos_for_partition(walltime_hours: f64, partition_id: String) -> String {
-    crate::cluster::suggest_qos(walltime_hours, &partition_id)
+pub fn save_cluster_config(config: cluster::ClusterCapabilities) -> ApiResult<()> {
+    cluster::save_cluster_config(config)
 }
 
-/// Estimate queue time for given resources and partition
+/// Reset cluster config to defaults (clears DB, re-seeds from embedded JSON)
 #[tauri::command(rename_all = "snake_case")]
-pub fn estimate_queue_time_for_job(cores: u32, partition_id: String) -> String {
-    crate::cluster::estimate_queue_time(cores, &partition_id)
+pub fn reset_cluster_config() -> ApiResult<cluster::ClusterCapabilities> {
+    cluster::reset_cluster_config()
 }
 
-/// Calculate estimated job cost in Service Units (SU)
+/// Calculate estimated job cost
 #[tauri::command(rename_all = "snake_case")]
-pub fn calculate_job_cost(cores: u32, walltime_hours: f64, has_gpu: bool, gpu_count: u32) -> u32 {
-    crate::cluster::calculate_job_cost(cores, walltime_hours, has_gpu, gpu_count)
+pub fn calculate_job_cost(cores: u32, walltime: String, has_gpu: bool, gpu_count: u32) -> u32 {
+    cluster::calculate_job_cost(cores, walltime, has_gpu, gpu_count)
 }
 
-/// Validate resource allocation against cluster limits
-#[tauri::command(rename_all = "snake_case")]
-pub fn validate_resource_allocation(
-    cores: u32,
-    memory: String,
-    walltime: String,
-    partition_id: String,
-    qos_id: String,
-) -> crate::validation::job_validation::ValidationResult {
-    let config = crate::types::core::SlurmConfig {
-        cores,
-        memory,
-        walltime,
-        partition: Some(partition_id.clone()),
-        qos: Some(qos_id.clone()),
-    };
+/// Estimate queue time based on resources and partition
+#[tauri::command(rename_all = "snake_case", rename = "estimate_queue_time_for_job")]
+pub fn estimate_queue_time(cores: u32, partition_id: String) -> String {
+    cluster::estimate_queue_time(cores, partition_id)
+}
 
-    crate::validation::job_validation::validate_resource_allocation(
-        &config,
-        &partition_id,
-        &qos_id,
-    )
+/// Suggest optimal QOS based on walltime and partition
+#[tauri::command(rename_all = "snake_case")]
+pub fn suggest_qos(walltime_hours: f64, partition_id: String) -> String {
+    cluster::suggest_qos(walltime_hours, partition_id)
 }

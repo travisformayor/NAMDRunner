@@ -4,11 +4,9 @@
 :root {
   /* Core Colors */
   --namd-bg-primary: #ffffff;
-  --namd-bg-secondary: #ffffff;
   --namd-bg-muted: #f9fafb;
   --namd-text-primary: #1f2937;
   --namd-text-secondary: #6b7280;
-  --namd-text-muted: #9ca3af;
 
   /* Interactive Elements */
   --namd-primary: #2563eb;
@@ -32,11 +30,11 @@
   --namd-warning-bg: #fffbeb;
   --namd-warning-fg: #92400e;
   --namd-warning-border: #fbbf24;
-  --namd-error: #ef4444;
-  --namd-error-hover: #dc2626;
+  --namd-error: #f87171;
+  --namd-error-hover: #ef4444;
   --namd-error-bg: #fef2f2;
   --namd-error-fg: #991b1b;
-  --namd-error-border: #f87171;
+  --namd-error-border: #fca5a5;
   --namd-info: #3b82f6;
   --namd-info-bg: #eff6ff;
   --namd-info-fg: #1e40af;
@@ -66,7 +64,6 @@
   /* Layout */
   --namd-border-radius: 0.5rem;
   --namd-border-radius-sm: 0.375rem;
-  --namd-border-radius-lg: 0.625rem;
   --namd-sidebar-width: 12rem;
   --namd-header-height: 4rem;
 
@@ -74,11 +71,10 @@
   --namd-font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --namd-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --namd-font-size-xs: 0.875rem;
-  --namd-font-size-sm: 1rem;
   --namd-font-size-base: 1rem;
   --namd-font-size-lg: 1.125rem;
   --namd-font-size-xl: 1.25rem;
-  --namd-font-size-2xl: 1.375rem;
+  --namd-font-size-2xl: 1.5rem;
   --namd-font-weight-normal: 400;
   --namd-font-weight-medium: 500;
   --namd-font-weight-semibold: 600;
@@ -92,6 +88,16 @@
   --namd-spacing-xl: 2rem;
   --namd-spacing-2xl: 3rem;
 
+  /* Max-width constraints */
+  --namd-max-width-content: 1200px;
+  --namd-max-width-form: 900px;
+
+  /* Transitions */
+  --namd-transition-fast: 0.15s ease;
+
+  /* Line heights */
+  --namd-line-height-relaxed: 1.6;
+
   /* Z-index layers */
   --namd-z-dropdown: 1000;
   --namd-z-modal: 1050;
@@ -103,11 +109,11 @@
 [data-theme="dark"] {
   /* Core Colors - Refined dark palette */
   --namd-bg-primary: #111827;    /* Main content areas - slightly lighter than before */
-  --namd-bg-secondary: #0f172a;  /* Page backgrounds - darkest */
+  /* Use --namd-bg-primary */
   --namd-bg-muted: #374151;      /* Inactive elements - much lighter for contrast */
   --namd-text-primary: #f9fafb;  /* High contrast white text */
   --namd-text-secondary: #d1d5db; /* Medium contrast text */
-  --namd-text-muted: #9ca3af;    /* Low contrast text */
+  /* Use --namd-text-secondary */
 
   /* Interactive Elements */
   --namd-primary: #3b82f6;       /* Blue accent for primary actions */
@@ -131,11 +137,11 @@
   --namd-warning-bg: #451a03;     /* Dark amber background */
   --namd-warning-fg: #fbbf24;     /* Light amber text */
   --namd-warning-border: #d97706;  /* Amber border */
-  --namd-error: #ef4444;
-  --namd-error-hover: #dc2626;
+  --namd-error: #f87171;
+  --namd-error-hover: #ef4444;
   --namd-error-bg: #7f1d1d;       /* Dark red background */
-  --namd-error-fg: #fca5a5;       /* Light red text */
-  --namd-error-border: #dc2626;   /* Bright red border */
+  --namd-error-fg: #fecaca;       /* Light red text */
+  --namd-error-border: #fca5a5;   /* Lighter red border */
   --namd-info: #3b82f6;
   --namd-info-bg: #1e3a8a;        /* Dark blue background */
   --namd-info-fg: #93c5fd;        /* Light blue text */
@@ -185,8 +191,8 @@ html, body {
   font-family: var(--namd-font-mono);
 }
 
-.namd-text-muted {
-  color: var(--namd-text-muted);
+.namd-text-secondary {
+  color: var(--namd-text-secondary);
 }
 
 .namd-text-secondary {
@@ -253,7 +259,7 @@ html, body {
 }
 
 .namd-rounded-lg {
-  border-radius: var(--namd-border-radius-lg);
+  border-radius: var(--namd-border-radius);
 }
 
 .namd-shadow {
@@ -264,6 +270,56 @@ html, body {
   box-shadow: var(--namd-shadow-md);
 }
 
+/* Dialog Styles */
+.dialog-title {
+  display: flex;
+  align-items: center;
+  gap: var(--namd-spacing-sm);
+  margin: 0;
+  font-size: var(--namd-font-size-lg);
+  font-weight: var(--namd-font-weight-semibold);
+  color: var(--namd-text-primary);
+  line-height: 1.2;
+}
+
+.dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-weight: var(--namd-font-weight-bold);
+  font-size: var(--namd-font-size-base);
+  flex-shrink: 0;
+}
+
+.dialog-icon--success {
+  background-color: var(--namd-success-bg);
+  color: var(--namd-success-fg);
+}
+
+.dialog-icon--error {
+  background-color: var(--namd-error-bg);
+  color: var(--namd-error-fg);
+}
+
+.dialog-icon--warning {
+  background-color: var(--namd-warning-bg);
+  color: var(--namd-warning-fg);
+}
+
+.dialog-icon--info {
+  background-color: var(--namd-info-bg);
+  color: var(--namd-info-fg);
+}
+
+.dialog-message {
+  line-height: var(--namd-line-height-relaxed);
+  color: var(--namd-text-primary);
+  white-space: pre-line;
+}
+
 /* Button Base Styles */
 .namd-button {
   display: inline-flex;
@@ -272,7 +328,7 @@ html, body {
   gap: var(--namd-spacing-sm);
   padding: var(--namd-spacing-sm) var(--namd-spacing-md);
   font-family: var(--namd-font-sans);
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
   font-weight: var(--namd-font-weight-medium);
   border-radius: var(--namd-border-radius-sm);
   border: none;
@@ -354,7 +410,8 @@ html, body {
 .namd-status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.125rem 0.5rem;
+  gap: var(--namd-spacing-xs);
+  padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
   border-radius: 9999px;
   font-size: var(--namd-font-size-xs);
   font-weight: var(--namd-font-weight-medium);
@@ -394,7 +451,7 @@ html, body {
 
 .namd-status-badge--unknown {
   background-color: var(--namd-bg-muted);
-  color: var(--namd-text-muted);
+  color: var(--namd-text-secondary);
 }
 
 /* Card Styles */
@@ -419,7 +476,7 @@ html, body {
   width: 100%;
   padding: var(--namd-spacing-sm);
   font-family: var(--namd-font-sans);
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
   color: var(--namd-text-primary);
   background-color: transparent;
   border: 1px solid var(--namd-border);
@@ -438,14 +495,14 @@ html, body {
 }
 
 .namd-input::placeholder {
-  color: var(--namd-text-muted);
+  color: var(--namd-text-secondary);
 }
 
 /* Label Styles */
 .namd-label {
   display: block;
   margin-bottom: var(--namd-spacing-xs);
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
   font-weight: var(--namd-font-weight-medium);
   color: var(--namd-text-primary);
 }
@@ -485,7 +542,7 @@ html, body {
 
 /* Text Utilities */
 .namd-text-sm {
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
 }
 
 .namd-text-xs {
@@ -545,7 +602,7 @@ html, body {
   border: none;
   border-radius: var(--namd-border-radius-sm);
   cursor: pointer;
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
   font-weight: var(--namd-font-weight-medium);
   color: var(--namd-text-secondary);
   transition: all 0.15s ease;
@@ -595,6 +652,14 @@ html, body {
   margin-bottom: 0;
 }
 
+/* Text Truncation Utility */
+.namd-text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 /* Form Field Utilities */
 .namd-field-group {
   display: flex;
@@ -622,7 +687,7 @@ html, body {
 }
 
 .namd-connection-expired {
-  color: var(--namd-text-muted);
+  color: var(--namd-text-secondary);
 }
 
 .namd-connection-dot-connected {
@@ -638,60 +703,9 @@ html, body {
 }
 
 .namd-connection-dot-expired {
-  fill: var(--namd-text-muted);
+  fill: var(--namd-text-secondary);
 }
 
-/* File Type System */
-.namd-file-type-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: var(--namd-border-radius-sm);
-  font-size: var(--namd-font-size-xs);
-  font-weight: var(--namd-font-weight-semibold);
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.namd-file-type-structure {
-  background-color: var(--namd-info-bg);
-  color: var(--namd-info-fg);
-}
-
-.namd-file-type-parameters {
-  background-color: var(--namd-success-bg);
-  color: var(--namd-success-fg);
-}
-
-.namd-file-type-configuration {
-  background-color: var(--namd-warning-bg);
-  color: var(--namd-warning-fg);
-}
-
-.namd-file-type-trajectory {
-  background-color: var(--namd-info-bg);
-  color: var(--namd-info-fg);
-}
-
-.namd-file-type-log {
-  background-color: var(--namd-success-bg);
-  color: var(--namd-success-fg);
-}
-
-.namd-file-type-analysis {
-  background-color: var(--namd-warning-bg);
-  color: var(--namd-warning-fg);
-}
-
-.namd-file-type-checkpoint {
-  background-color: var(--namd-error-bg);
-  color: var(--namd-error-fg);
-}
-
-.namd-file-type-default {
-  background-color: var(--namd-bg-muted);
-  color: var(--namd-text-primary);
-}
 
 /* ===== File List Components ===== */
 
@@ -751,7 +765,7 @@ html, body {
 
 /* File metadata (size, date, etc.) */
 .namd-file-metadata {
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
   color: var(--namd-text-secondary);
   margin-left: var(--namd-spacing-md);
 }
@@ -767,13 +781,13 @@ html, body {
   margin-left: auto;
   font-weight: var(--namd-font-weight-semibold);
   color: var(--namd-primary);
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
 }
 
 /* Error message below file item */
 .namd-file-error {
   margin-top: var(--namd-spacing-xs);
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
   color: var(--namd-error);
   padding: var(--namd-spacing-xs) var(--namd-spacing-sm);
   background-color: var(--namd-error-bg);
@@ -807,7 +821,7 @@ html, body {
   border-radius: var(--namd-border-radius-sm);
   border: 1px solid var(--namd-error);
   margin-bottom: var(--namd-spacing-md);
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
 }
 
 /* Toast Notification System */
@@ -849,7 +863,7 @@ html, body {
 
 .namd-toast-message {
   flex: 1;
-  font-size: var(--namd-font-size-sm);
+  font-size: var(--namd-font-size-base);
   font-weight: var(--namd-font-weight-medium);
   line-height: 1.4;
 }
@@ -899,6 +913,20 @@ html, body {
   border: 1px solid var(--namd-info);
 }
 
+/* Page Layout */
+.namd-page {
+  padding: var(--namd-spacing-xl);
+  max-width: var(--namd-max-width-content);
+  margin: 0 auto;
+}
+
+.namd-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--namd-spacing-xl);
+}
+
 /* Scrollbar Styles */
 ::-webkit-scrollbar {
   width: 8px;
@@ -910,7 +938,7 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--namd-text-muted);
+  background: var(--namd-text-secondary);
   border-radius: 4px;
 }
 

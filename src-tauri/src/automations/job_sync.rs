@@ -43,7 +43,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         log_info!(category: "Job Sync", message: "Database empty - triggering automatic job discovery");
 
         // Attempt discovery (don't fail sync if discovery fails)
-        match discover_jobs_from_server_internal(&username).await {
+        match discover_jobs(&username).await {
             Ok(report) => {
                 if !report.imported_jobs.is_empty() {
                     log_info!(
@@ -124,10 +124,10 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         });
     }
 
-    log_debug!(category: "Job Sync", message: "Batch querying SLURM jobs", details: "{} jobs", job_ids.len());
+    log_debug!(category: "Job Sync", message: "Querying SLURM job statuses", details: "{} jobs", job_ids.len());
 
-    // Use centralized batch query method (1 SSH command instead of N)
-    let batch_results = slurm_sync.sync_all_jobs(&job_ids).await
+    // Query all job statuses in batch (squeue for active, sacct for completed)
+    let batch_results = slurm_sync.query_job_statuses(&job_ids).await
         .map_err(|e| {
             log_error!(category: "Job Sync", message: "Batch SLURM query failed", details: "{}", e);
             anyhow!("Failed to query SLURM job status: {}", e)
@@ -151,7 +151,7 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
         if let Some(job) = job_map.get(&slurm_job_id) {
             match status_result {
                 Ok(new_status) => {
-                    match sync_single_job_with_status(&slurm_sync, job.clone(), new_status).await {
+                    match update_job_with_status(job.clone(), new_status).await {
                         Ok(result) => {
                             if result.updated {
                                 log_info!(
@@ -198,8 +198,8 @@ pub async fn sync_all_jobs() -> Result<crate::types::SyncJobsResult> {
     })
 }
 
-/// Sync a single job with already-fetched SLURM status (from batch query)
-async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: JobInfo, new_status: JobStatus) -> Result<JobSyncResult> {
+/// Update a single job with fetched SLURM status
+async fn update_job_with_status(mut job: JobInfo, new_status: JobStatus) -> Result<JobSyncResult> {
     let job_id = job.job_id.clone();
     let old_status = job.status.clone();
 
@@ -225,7 +225,7 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
         log_info!(category: "Job Sync", message: "Job reached terminal state", details: "{}: {:?}", job_id, new_status);
 
         // Trigger automatic job completion (rsync scratch→project, fetch logs, update metadata)
-        if let Err(e) = crate::automations::execute_job_completion_internal(&mut job).await {
+        if let Err(e) = crate::automations::execute_job_completion(&mut job).await {
             log_error!(category: "Job Sync", message: "Automatic completion failed", details: "{}: {}", job_id, e);
             // Don't fail sync - completion will retry on next sync
         } else {
@@ -255,136 +255,96 @@ async fn sync_single_job_with_status(_slurm_sync: &SlurmStatusSync, mut job: Job
     })
 }
 
-/// Fetch and cache SLURM logs (.out/.err) if not already cached
-/// Only fetches when logs are None - implements "fetch once, cache forever" pattern
-/// This function is public to allow other automations (job_completion, job_discovery) to use it
+/// Fetch SLURM logs from server
+///
+/// - force=false: Only fetch if not already cached, silently skip if missing dirs
+/// - force=true: Always fetch, error if missing dirs, set to empty on read failure
 ///
 /// NOTE: Logs are fetched from project_dir (after rsync in job completion)
-pub async fn fetch_slurm_logs_if_needed(job: &mut JobInfo) -> Result<()> {
-    log_debug!(category: "Log Fetch", message: "ENTRY", details: "job_id={}, status={:?}, project_dir={:?}, slurm_job_id={:?}",
-        job.job_id, job.status, job.project_dir, job.slurm_job_id);
+pub async fn load_slurm_logs(job: &mut JobInfo, force: bool) -> Result<()> {
+    let category = if force { "Log Refetch" } else { "Log Fetch" };
+    log_debug!(category: category, message: "ENTRY", details: "job_id={}, status={:?}, force={}", job.job_id, job.status, force);
 
-    // Use project_dir instead of scratch_dir (rsync happens first in job completion)
+    // Get project_dir - behavior differs based on force flag
     let project_dir = match &job.project_dir {
-        Some(dir) => dir,
+        Some(dir) => dir.clone(),
         None => {
-            log_debug!(category: "Log Fetch", message: "No project directory, skipping", details: "{}", job.job_id);
+            if force {
+                return Err(anyhow!("No project directory for job {}", job.job_id));
+            }
+            log_debug!(category: category, message: "No project directory, skipping", details: "{}", job.job_id);
             return Ok(());
         }
     };
 
+    // Get slurm_job_id - behavior differs based on force flag
     let slurm_job_id = match &job.slurm_job_id {
-        Some(id) => id,
+        Some(id) => id.clone(),
         None => {
-            log_debug!(category: "Log Fetch", message: "No SLURM job ID, skipping", details: "{}", job.job_id);
+            if force {
+                return Err(anyhow!("No SLURM job ID for job {}", job.job_id));
+            }
+            log_debug!(category: category, message: "No SLURM job ID, skipping", details: "{}", job.job_id);
             return Ok(());
         }
     };
 
     let connection_manager = get_connection_manager();
 
-    // Fetch stdout if not cached (from project directory after rsync)
-    if job.slurm_stdout.is_none() {
+    // Fetch stdout
+    let should_fetch_stdout = force || job.slurm_stdout.is_none();
+    if should_fetch_stdout {
         let stdout_path = format!("{}/{}_{}.out", project_dir, job.job_name, slurm_job_id);
-        log_debug!(category: "Log Fetch", message: "Stdout not cached, constructing path", details: "{}", stdout_path);
-        log_debug!(category: "Log Fetch", message: "Attempting to read stdout file from remote");
+        log_debug!(category: category, message: "Fetching stdout", details: "{}", stdout_path);
 
         match connection_manager.read_remote_file(&stdout_path).await {
             Ok(content) => {
                 let content_len = content.len();
                 job.slurm_stdout = Some(content);
-                log_info!(category: "Log Fetch", message: "Cached stdout for job", details: "{} ({} bytes)", job.job_id, content_len);
+                log_info!(category: category, message: "Fetched stdout for job", details: "{} ({} bytes)", job.job_id, content_len);
             }
             Err(e) => {
-                log_debug!(category: "Log Fetch", message: "Could not read stdout (file may not exist yet)", details: "{}: {}", job.job_id, e);
-                // Gracefully handle - log file might not exist yet or job produced no output
+                log_debug!(category: category, message: "Could not read stdout", details: "{}: {}", job.job_id, e);
+                if force {
+                    job.slurm_stdout = Some(String::new());
+                }
             }
         }
     } else {
-        log_debug!(category: "Log Fetch", message: "Stdout already cached, skipping", details: "{}", job.job_id);
+        log_debug!(category: category, message: "Stdout already cached, skipping", details: "{}", job.job_id);
     }
 
-    // Fetch stderr if not cached (from project directory after rsync)
-    if job.slurm_stderr.is_none() {
+    // Fetch stderr
+    let should_fetch_stderr = force || job.slurm_stderr.is_none();
+    if should_fetch_stderr {
         let stderr_path = format!("{}/{}_{}.err", project_dir, job.job_name, slurm_job_id);
-        log_debug!(category: "Log Fetch", message: "Stderr not cached, constructing path", details: "{}", stderr_path);
-        log_debug!(category: "Log Fetch", message: "Attempting to read stderr file from remote");
+        log_debug!(category: category, message: "Fetching stderr", details: "{}", stderr_path);
 
         match connection_manager.read_remote_file(&stderr_path).await {
             Ok(content) => {
                 let content_len = content.len();
                 job.slurm_stderr = Some(content);
-                log_info!(category: "Log Fetch", message: "Cached stderr for job", details: "{} ({} bytes)", job.job_id, content_len);
+                log_info!(category: category, message: "Fetched stderr for job", details: "{} ({} bytes)", job.job_id, content_len);
             }
             Err(e) => {
-                log_debug!(category: "Log Fetch", message: "Could not read stderr (file may not exist yet)", details: "{}: {}", job.job_id, e);
+                log_debug!(category: category, message: "Could not read stderr", details: "{}: {}", job.job_id, e);
+                if force {
+                    job.slurm_stderr = Some(String::new());
+                }
             }
         }
     } else {
-        log_debug!(category: "Log Fetch", message: "Stderr already cached, skipping", details: "{}", job.job_id);
+        log_debug!(category: category, message: "Stderr already cached, skipping", details: "{}", job.job_id);
     }
 
-    log_debug!(category: "Log Fetch", message: "EXIT: Successfully completed", details: "{}", job.job_id);
-    Ok(())
-}
-
-/// Force refetch SLURM logs from server, overwriting any cached logs
-/// Used when user explicitly requests fresh logs via "Refetch Logs" button
-///
-/// NOTE: Logs are fetched from project_dir (after rsync in job completion)
-pub async fn refetch_slurm_logs(job: &mut JobInfo) -> Result<()> {
-    log_debug!(category: "Log Refetch", message: "ENTRY", details: "job_id={}, status={:?}", job.job_id, job.status);
-
-    // Use project_dir instead of scratch_dir (logs have been rsynced to project)
-    let project_dir = job.project_dir.as_ref()
-        .ok_or_else(|| anyhow!("No project directory for job {}", job.job_id))?;
-
-    let slurm_job_id = job.slurm_job_id.as_ref()
-        .ok_or_else(|| anyhow!("No SLURM job ID for job {}", job.job_id))?;
-
-    let connection_manager = get_connection_manager();
-
-    // Force fetch stdout (overwrite cache) from project directory
-    let stdout_path = format!("{}/{}_{}.out", project_dir, job.job_name, slurm_job_id);
-    log_debug!(category: "Log Refetch", message: "Fetching stdout", details: "{}", stdout_path);
-
-    match connection_manager.read_remote_file(&stdout_path).await {
-        Ok(content) => {
-            let content_len = content.len();
-            job.slurm_stdout = Some(content);
-            log_info!(category: "Log Refetch", message: "Refetched stdout for job", details: "{} ({} bytes)", job.job_id, content_len);
-        }
-        Err(e) => {
-            log_debug!(category: "Log Refetch", message: "Could not read stdout", details: "{}: {}", job.job_id, e);
-            // Set to empty if file doesn't exist
-            job.slurm_stdout = Some(String::new());
-        }
-    }
-
-    // Force fetch stderr (overwrite cache) from project directory
-    let stderr_path = format!("{}/{}_{}.err", project_dir, job.job_name, slurm_job_id);
-    log_debug!(category: "Log Refetch", message: "Fetching stderr", details: "{}", stderr_path);
-
-    match connection_manager.read_remote_file(&stderr_path).await {
-        Ok(content) => {
-            let content_len = content.len();
-            job.slurm_stderr = Some(content);
-            log_info!(category: "Log Refetch", message: "Refetched stderr for job", details: "{} ({} bytes)", job.job_id, content_len);
-        }
-        Err(e) => {
-            log_debug!(category: "Log Refetch", message: "Could not read stderr", details: "{}: {}", job.job_id, e);
-            job.slurm_stderr = Some(String::new());
-        }
-    }
-
-    log_debug!(category: "Log Refetch", message: "EXIT: Successfully completed", details: "{}", job.job_id);
+    log_debug!(category: category, message: "EXIT: Successfully completed", details: "{}", job.job_id);
     Ok(())
 }
 
 /// Internal helper to discover jobs from server
 /// Returns detailed report of imported jobs and failures
-async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::types::response_data::DiscoveryReport> {
-    use crate::types::response_data::{DiscoveryReport, JobSummary, FailedImport};
+async fn discover_jobs(username: &str) -> Result<crate::types::response_data::DiscoveryReport> {
+    use crate::types::response_data::{DiscoveryReport, FailedImport};
 
     log_info!(category: "Job Discovery", message: "Starting automatic discovery", details: "user: {}", username);
 
@@ -396,7 +356,7 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
     log_debug!(category: "Job Discovery", message: "Scanning directory", details: "{}", remote_jobs_dir);
 
     // List directories in the jobs folder
-    let job_dirs = connection_manager.list_files(&remote_jobs_dir).await
+    let job_dirs = connection_manager.list_files(&remote_jobs_dir, true).await
         .map_err(|e| {
             log_error!(category: "Job Discovery", message: "Failed to list directories", details: "{}", e);
             anyhow!("Failed to list job directories: {}", e)
@@ -446,7 +406,6 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
         // Check if job already exists in database
         let job_id = job_info.job_id.clone();
         let job_name = job_info.job_name.clone();
-        let job_status = job_info.status.clone();
         let job_info_clone = job_info.clone();
 
         // Clone for closure to avoid move issues
@@ -469,11 +428,7 @@ async fn discover_jobs_from_server_internal(username: &str) -> Result<crate::typ
         })?;
 
         if imported {
-            imported_jobs.push(JobSummary {
-                job_id,
-                job_name,
-                status: job_status,
-            });
+            imported_jobs.push(job_info);
         }
     }
 

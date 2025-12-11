@@ -13,6 +13,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
+import { invokeWithErrorHandling } from './storeFactory';
 import type {
   ClusterCapabilities,
   PartitionSpec,
@@ -49,13 +50,6 @@ export async function initClusterConfig(): Promise<void> {
   }
 }
 
-/**
- * Refresh cluster configuration from backend
- * Useful if config changes (future user-editable settings)
- */
-export async function refreshClusterConfig(): Promise<void> {
-  return initClusterConfig();
-}
 
 // Derived store: all partitions (for dropdowns)
 export const partitions = derived(
@@ -81,48 +75,6 @@ export const billingRates = derived(
   $config => $config?.billing_rates
 );
 
-/**
- * Get QOS options valid for a specific partition (reactive store)
- */
-export function getQosForPartitionStore(partitionId: string) {
-  return derived(
-    clusterCapabilitiesStore,
-    $config => {
-      if (!$config) return [];
-      return $config.qos_options.filter(qos =>
-        qos.valid_partitions.includes(partitionId)
-      );
-}
-  );
-}
-
-/**
- * Get QOS options valid for a specific partition (non-reactive)
- */
-export function getQosForPartition(partitionId: string): QosSpec[] {
-  const config = get(clusterCapabilitiesStore);
-  if (!config) return [];
-  return config.qos_options.filter(qos =>
-    qos.valid_partitions.includes(partitionId)
-  );
-}
-
-/**
- * Get a specific partition by ID
- */
-export function getPartition(partitionId: string): PartitionSpec | null {
-  const config = get(clusterCapabilitiesStore);
-  if (!config) return null;
-  return config.partitions.find(p => p.id === partitionId) ?? null;
-}
-
-/**
- * Get all partitions (non-reactive helper)
- */
-export function getAllPartitions(): PartitionSpec[] {
-  const config = get(clusterCapabilitiesStore);
-  return config?.partitions ?? [];
-}
 
 /**
  * Calculate estimated job cost via backend
@@ -130,14 +82,14 @@ export function getAllPartitions(): PartitionSpec[] {
  */
 export async function calculateJobCost(
   cores: number,
-  walltimeHours: number,
+  walltime: string,
   hasGpu: boolean = false,
   gpuCount: number = 1
 ): Promise<number> {
   try {
     return await invoke<number>('calculate_job_cost', {
       cores,
-      walltime_hours: walltimeHours,
+      walltime,
       has_gpu: hasGpu,
       gpu_count: gpuCount
     });
@@ -146,39 +98,6 @@ export async function calculateJobCost(
   }
 }
 
-/**
- * Convert walltime string (HH:MM:SS) to hours
- */
-export function walltimeToHours(walltime: string): number {
-  if (!walltime) return 0;
-  const parts = walltime.split(':');
-  if (parts.length !== 3) return 0;
-
-  const hours = parseInt(parts[0] || '0') || 0;
-  const minutes = parseInt(parts[1] || '0') || 0;
-  const seconds = parseInt(parts[2] || '0') || 0;
-
-  return hours + minutes / 60 + seconds / 3600;
-}
-
-/**
- * Suggest optimal QOS based on walltime and partition via backend
- * Backend is the single source of truth for QoS selection rules
- */
-export async function suggestQos(walltimeHours: number, partitionId: string): Promise<string> {
-  try {
-    return await invoke<string>('suggest_qos_for_partition', {
-      walltime_hours: walltimeHours,
-      partition_id: partitionId
-    });
-  } catch (error) {
-    // Fallback to default QoS
-    const config = get(clusterCapabilitiesStore);
-    const validQos = getQosForPartition(partitionId);
-    const defaultQos = validQos.find(q => q.is_default);
-    return defaultQos?.id || validQos[0]?.id || (partitionId ? 'normal' : 'normal');
-  }
-}
 
 /**
  * Estimate queue time based on resources and partition via backend
@@ -222,7 +141,7 @@ export async function validateResourceRequest(
 
   // Call backend validation - pass parameters as-is, no conversion
   try {
-    const result = await invoke<ValidationResult>('validate_resource_allocation', {
+    const result = await invoke<ValidationResult>('validate_resource_allocation_command', {
       cores,
       memory,
       walltime,
@@ -231,9 +150,10 @@ export async function validateResourceRequest(
     });
     return result;
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       is_valid: false,
-      issues: ['Validation failed: ' + (error instanceof Error ? error.message : 'Unknown error')],
+      issues: ['Validation failed: ' + errorMessage],
       warnings: [],
       suggestions: []
     };
@@ -249,18 +169,51 @@ export function setClusterCapabilities(capabilities: ClusterCapabilities): void 
   loadErrorStore.set(null);
 }
 
+/**
+ * Save cluster configuration to database
+ */
+export async function saveClusterConfig(config: ClusterCapabilities): Promise<boolean> {
+  // Optimistic update
+  clusterCapabilitiesStore.set(config);
+
+  const result = await invokeWithErrorHandling<void>('save_cluster_config', { config });
+
+  if (result.success) {
+    isLoadedStore.set(true);
+    loadErrorStore.set(null);
+    return true;
+  } else {
+    loadErrorStore.set(result.error || 'Failed to save cluster config');
+    // Reload to restore original state on failure
+    await initClusterConfig();
+    return false;
+  }
+}
+
+/**
+ * Reset cluster configuration to defaults
+ */
+export async function resetClusterConfig(): Promise<boolean> {
+  const result = await invokeWithErrorHandling<ClusterCapabilities>('reset_cluster_config');
+
+  if (result.success && result.data) {
+    clusterCapabilitiesStore.set(result.data);
+    isLoadedStore.set(true);
+    loadErrorStore.set(null);
+    return true;
+  } else {
+    loadErrorStore.set(result.error || 'Failed to reset cluster config');
+    return false;
+  }
+}
+
 // Export main store and utilities
 export const clusterConfig = {
   subscribe: clusterCapabilitiesStore.subscribe,
   init: initClusterConfig,
-  refresh: refreshClusterConfig,
+  refresh: initClusterConfig,
   set: setClusterCapabilities,
+  save: saveClusterConfig,
+  reset: resetClusterConfig,
 };
 
-export const isLoaded = {
-  subscribe: isLoadedStore.subscribe
-};
-
-export const loadError = {
-  subscribe: loadErrorStore.subscribe
-};

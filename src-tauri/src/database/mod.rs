@@ -45,9 +45,14 @@ impl JobDatabase {
                 description TEXT,
                 namd_config_template TEXT NOT NULL,
                 variables TEXT NOT NULL,
-                is_builtin INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+
+            -- Cluster config table - stores ClusterCapabilities as JSON
+            CREATE TABLE IF NOT EXISTS cluster_config (
+                id TEXT PRIMARY KEY,
+                data TEXT NOT NULL
             );
         "#)?;
         Ok(())
@@ -125,14 +130,13 @@ impl JobDatabase {
         let variables_json = serde_json::to_string(&template.variables)?;
 
         conn.execute(
-            "INSERT OR REPLACE INTO templates (id, name, description, namd_config_template, variables, is_builtin, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT OR REPLACE INTO templates (id, name, description, namd_config_template, variables, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             rusqlite::params![
                 &template.id,
                 &template.name,
                 &template.description,
                 &template.namd_config_template,
                 &variables_json,
-                &template.is_builtin,
                 &template.created_at,
                 &template.updated_at,
             ],
@@ -145,7 +149,7 @@ impl JobDatabase {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, namd_config_template, variables, is_builtin, created_at, updated_at FROM templates WHERE id = ?1"
+            "SELECT id, name, description, namd_config_template, variables, created_at, updated_at FROM templates WHERE id = ?1"
         )?;
 
         let mut rows = stmt.query([id])?;
@@ -156,12 +160,10 @@ impl JobDatabase {
             let description: String = row.get(2)?;
             let namd_config_template: String = row.get(3)?;
             let variables_json: String = row.get(4)?;
-            let is_builtin_int: i32 = row.get(5)?;
-            let created_at: String = row.get(6)?;
-            let updated_at: String = row.get(7)?;
+            let created_at: String = row.get(5)?;
+            let updated_at: String = row.get(6)?;
 
             let variables = serde_json::from_str(&variables_json)?;
-            let is_builtin = is_builtin_int != 0;
 
             Ok(Some(Template {
                 id,
@@ -169,7 +171,6 @@ impl JobDatabase {
                 description,
                 namd_config_template,
                 variables,
-                is_builtin,
                 created_at,
                 updated_at,
             }))
@@ -182,16 +183,14 @@ impl JobDatabase {
         let conn = self.conn.lock().unwrap();
 
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, is_builtin FROM templates ORDER BY name"
+            "SELECT id, name, description FROM templates ORDER BY name"
         )?;
 
         let rows = stmt.query_map([], |row| {
-            let is_builtin_int: i32 = row.get(3)?;
             Ok(TemplateSummary {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 description: row.get(2)?,
-                is_builtin: is_builtin_int != 0,
             })
         })?;
 
@@ -227,6 +226,49 @@ impl JobDatabase {
 
         Ok(count)
     }
+
+    // Cluster Config CRUD operations
+
+    pub fn save_cluster_config(&self, config: &crate::cluster::ClusterCapabilities) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Serialize entire ClusterCapabilities to JSON
+        let json_data = serde_json::to_string(config)?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO cluster_config (id, data) VALUES (?1, ?2)",
+            rusqlite::params!["default", &json_data],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn load_cluster_config(&self) -> Result<Option<crate::cluster::ClusterCapabilities>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare("SELECT data FROM cluster_config WHERE id = ?1")?;
+
+        let mut rows = stmt.query(["default"])?;
+
+        if let Some(row) = rows.next()? {
+            let json_data: String = row.get(0)?;
+            let config: crate::cluster::ClusterCapabilities = serde_json::from_str(&json_data)?;
+            Ok(Some(config))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn delete_cluster_config(&self) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        let rows_affected = conn.execute(
+            "DELETE FROM cluster_config WHERE id = ?1",
+            ["default"],
+        )?;
+
+        Ok(rows_affected > 0)
+    }
 }
 
 // Thread-safe global database instance
@@ -241,6 +283,9 @@ lazy_static! {
 
 // Track if we've attempted to load default templates this session
 static DEFAULTS_LOADED: AtomicBool = AtomicBool::new(false);
+
+// Track if we've attempted to load default cluster config this session
+static CLUSTER_CONFIG_LOADED: AtomicBool = AtomicBool::new(false);
 
 /// Get the database file path (development vs production)
 pub fn get_database_path(app_handle: &tauri::AppHandle) -> Result<PathBuf> {
@@ -316,6 +361,9 @@ pub fn reinitialize_database(db_path: &str) -> Result<()> {
     // Reset default templates flag (force reload for new DB)
     DEFAULTS_LOADED.store(false, Ordering::Relaxed);
 
+    // Reset cluster config flag (force reload for new DB)
+    CLUSTER_CONFIG_LOADED.store(false, Ordering::Relaxed);
+
     log_info!(
         category: "Database",
         message: "Database reinitialized successfully"
@@ -382,6 +430,66 @@ fn load_default_templates(db: &JobDatabase) -> Result<()> {
             );
         }
     }
+
+    Ok(())
+}
+
+/// Ensure default cluster config is loaded (idempotent - safe to call multiple times)
+/// Called during app initialization to ensure cluster config exists in database
+/// Uses atomic flag to only attempt loading once per app session
+pub fn ensure_default_cluster_config_loaded() -> Result<()> {
+    // Check if we've already attempted to load defaults this session
+    if CLUSTER_CONFIG_LOADED.load(Ordering::Relaxed) {
+        // Already loaded (or attempted) this session
+        return Ok(());
+    }
+
+    // Mark as attempted (do this first to prevent concurrent loads)
+    CLUSTER_CONFIG_LOADED.store(true, Ordering::Relaxed);
+
+    // Load defaults from JSON file
+    log_info!(
+        category: "ClusterConfig",
+        message: "First app initialization - checking for default cluster config"
+    );
+    with_database(load_default_cluster_config)
+}
+
+/// Load default cluster config embedded in the binary at compile time
+pub fn load_default_cluster_config(db: &JobDatabase) -> Result<()> {
+    // Check if cluster config already exists
+    if db.load_cluster_config()?.is_some() {
+        log_debug!(
+            category: "ClusterConfig",
+            message: "Cluster config already exists, skipping default load"
+        );
+        return Ok(());
+    }
+
+    // Embed cluster config JSON at compile time using include_str!
+    // Path is relative to this file: src-tauri/src/database/mod.rs
+    // Cluster config is at: src-tauri/cluster/
+    const ALPINE_CONFIG: &str = include_str!("../../cluster/alpine.json");
+
+    log_info!(
+        category: "ClusterConfig",
+        message: "Loading default cluster config from embedded data"
+    );
+
+    // Parse cluster config JSON
+    let config: crate::cluster::ClusterCapabilities = serde_json::from_str(ALPINE_CONFIG)
+        .map_err(|e| anyhow!("Failed to parse embedded cluster config: {}", e))?;
+
+    // Save to database
+    db.save_cluster_config(&config)?;
+
+    log_info!(
+        category: "ClusterConfig",
+        message: "Loaded default cluster config",
+        details: "{} partitions, {} QoS options",
+        config.partitions.len(),
+        config.qos_options.len()
+    );
 
     Ok(())
 }

@@ -34,7 +34,7 @@
   }
 </script>
 
-<div class="template-editor-page">
+<div class="template-editor-page namd-page">
   {#if loading}
     <div class="loading">Loading template...</div>
   {:else if error}
@@ -52,8 +52,8 @@
 
 <style>
   .template-editor-page {
-    padding: 2rem;
-    max-width: 1200px;
+    padding: var(--namd-spacing-xl);
+    max-width: var(--namd-max-width-content);
     margin: 0 auto;
     height: 100%;
     overflow-y: auto;

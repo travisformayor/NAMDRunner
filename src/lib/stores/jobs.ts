@@ -4,26 +4,12 @@ import type {
   JobStatus,
   CreateJobParams,
   SyncJobsResult,
-  JobSubmissionData,
   ApiResult
 } from '../types/api';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { sessionActions } from './session';
-
-// Helper: Detect if error indicates connection failure
-// Exported for testing
-export function isConnectionError(errorMessage: string): boolean {
-  const msg = errorMessage.toLowerCase();
-  return msg.includes('timeout') ||
-         msg.includes('timed out') ||
-         msg.includes('not connected') ||
-         msg.includes('connection') ||
-         msg.includes('disconnect') ||
-         msg.includes('broken pipe') ||
-         msg.includes('network') ||
-         msg.includes('ssh');
-}
+import { isConnectionError } from './storeFactory';
 
 // Progress tracking interface
 interface JobProgress {
@@ -64,10 +50,11 @@ function createJobsStore() {
         const result = await invoke<ApiResult<JobInfo[]>>('get_all_jobs');
 
         if (result.success && result.data) {
+          const jobs = result.data;
           update(state => ({
             ...state,
-            jobs: result.data || [],
-            hasEverSynced: !!(result.data && result.data.length > 0)
+            jobs,
+            hasEverSynced: jobs.length > 0
           }));
         }
       } catch (error) {
@@ -77,8 +64,6 @@ function createJobsStore() {
 
     // Sync with backend
     sync: async () => {
-      // Log user action to SSH console
-
       // Set syncing state
       update(state => ({ ...state, isSyncing: true }));
 
@@ -147,18 +132,12 @@ function createJobsStore() {
 
         if (result.success && result.data) {
           // Update progress to completion
+          const newJob = result.data;
           update(state => ({
             ...state,
-            creationProgress: { message: 'Job created successfully!', isActive: false }
+            creationProgress: { message: 'Job created successfully!', isActive: false },
+            jobs: [...state.jobs, newJob]
           }));
-
-          // Add the returned job directly to the store (no second backend call)
-          if (result.data) {
-            update(state => ({
-              ...state,
-              jobs: [...state.jobs, result.data as JobInfo]
-            }));
-          }
 
           return result;
         } else {
@@ -210,28 +189,16 @@ function createJobsStore() {
       });
 
       try {
-        const result = await invoke<ApiResult<JobSubmissionData>>('submit_job', { job_id });
+        const result = await invoke<ApiResult<JobInfo>>('submit_job', { job_id });
 
         if (result.success && result.data) {
           // Update progress to completion
           update(state => ({
             ...state,
             submissionProgress: { message: 'Job submitted successfully!', isActive: false },
-            jobs: state.jobs.map(job => {
-              if (job.job_id === job_id) {
-                const updatedJob: JobInfo = {
-                  ...job,
-                  status: 'PENDING' as JobStatus,
-                  submitted_at: result.data?.submitted_at || new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                };
-                if (result.data?.slurm_job_id) {
-                  updatedJob.slurm_job_id = result.data.slurm_job_id;
-                }
-                return updatedJob;
-              }
-              return job;
-            })
+            jobs: state.jobs.map(job =>
+              job.job_id === job_id ? result.data! : job
+            )
           }));
           return result;
         } else {
@@ -356,9 +323,6 @@ export const lastSyncTime = derived(jobsStore, $store => $store.lastSyncTime);
 export const hasEverSynced = derived(jobsStore, $store => $store.hasEverSynced);
 export const isSyncing = derived(jobsStore, $store => $store.isSyncing);
 
-// Progress tracking stores
-export const creationProgress = derived(jobsStore, $store => $store.creationProgress);
-export const submissionProgress = derived(jobsStore, $store => $store.submissionProgress);
 
 export const jobsByStatus = derived(jobs, $jobs => {
   const grouped = {

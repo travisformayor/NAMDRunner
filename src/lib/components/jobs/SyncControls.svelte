@@ -3,8 +3,6 @@
   import { isConnected } from '../../stores/session';
   import { lastSyncTime, hasEverSynced, isSyncing } from '../../stores/jobs';
 
-  let autoSync = false;
-  let syncInterval = 5;
   let currentTime = new Date();
   let updateTimer: number;
 
@@ -81,30 +79,6 @@
       Sync Now
     </button>
   </div>
-
-  <div class="sync-right">
-    <div class="auto-sync-control">
-      <label class="checkbox-wrapper">
-        <input
-          type="checkbox"
-          bind:checked={autoSync}
-          disabled={!$isConnected}
-        />
-        <span class="checkbox-label">Auto-sync: every</span>
-      </label>
-    </div>
-
-    <input
-      type="number"
-      bind:value={syncInterval}
-      disabled={!autoSync || !$isConnected}
-      min="1"
-      max="60"
-      class="interval-input"
-    />
-
-    <span class="interval-label">min</span>
-  </div>
 </div>
 
 <style>
@@ -112,8 +86,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: var(--namd-font-size-sm);
-    color: var(--namd-text-muted);
+    font-size: var(--namd-font-size-base);
+    color: var(--namd-text-secondary);
   }
 
   .sync-left {
@@ -127,16 +101,16 @@
   }
 
   .status-text.offline {
-    color: var(--namd-text-muted);
+    color: var(--namd-text-secondary);
   }
 
   .sync-button {
     display: flex;
     align-items: center;
-    gap: 0.25rem; /* equivalent to mr-1 in React */
-    padding: 0 0.5rem; /* px-2 */
-    font-size: var(--namd-font-size-sm);
-    height: 2rem; /* h-8 */
+    gap: var(--namd-spacing-xs);
+    padding: 0 var(--namd-spacing-sm);
+    font-size: var(--namd-font-size-base);
+    height: 2rem;
   }
 
   .sync-button:hover:not(:disabled) {
@@ -151,74 +125,11 @@
 
   .sync-icon {
     flex-shrink: 0;
-    transition: transform 0.15s ease;
+    transition: transform var(--namd-transition-fast);
   }
 
   .sync-icon.spinning {
     animation: spin 1s linear infinite;
-  }
-
-  .sync-right {
-    display: flex;
-    align-items: center;
-    gap: var(--namd-spacing-md);
-  }
-
-  .auto-sync-control {
-    display: flex;
-    align-items: center;
-    gap: var(--namd-spacing-sm);
-  }
-
-  .checkbox-wrapper {
-    display: flex;
-    align-items: center;
-    gap: var(--namd-spacing-sm);
-    cursor: pointer;
-  }
-
-  .checkbox-wrapper input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-  }
-
-  .checkbox-wrapper input[type="checkbox"]:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .checkbox-label {
-    font-size: var(--namd-font-size-sm);
-    color: var(--namd-text-secondary);
-    user-select: none;
-  }
-
-  .interval-input {
-    width: 64px;
-    height: 32px;
-    padding: var(--namd-spacing-xs);
-    border: 1px solid var(--namd-border);
-    border-radius: var(--namd-border-radius-sm);
-    background-color: var(--namd-bg-primary);
-    color: var(--namd-text-primary);
-    font-size: var(--namd-font-size-sm);
-    text-align: center;
-  }
-
-  .interval-input:focus {
-    outline: none;
-    border-color: var(--namd-primary);
-  }
-
-  .interval-input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .interval-label {
-    font-size: var(--namd-font-size-sm);
-    color: var(--namd-text-secondary);
   }
 
   @keyframes spin {
@@ -227,12 +138,6 @@
     }
     to {
       transform: rotate(360deg);
-    }
-  }
-
-  @media (max-width: 768px) {
-    .sync-right {
-      display: none;
     }
   }
 </style>

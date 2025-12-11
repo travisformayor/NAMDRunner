@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use crate::{log_info, log_debug};
 use crate::commands::helpers;
+use crate::automations::common;
 use crate::database::with_database;
 use crate::ssh::get_connection_manager;
 
@@ -23,8 +24,7 @@ pub async fn execute_job_deletion(
         if let Some(slurm_job_id) = &job_info.slurm_job_id {
             progress_callback("Cancelling SLURM job...");
 
-            helpers::require_connection("Job Deletion").await?;
-            let username = helpers::get_cluster_username("Job Deletion").await?;
+            let (_connection_manager, username) = common::require_connection_with_username("Job Deletion").await?;
 
             log_debug!(category: "Job Deletion", message: "Cancelling SLURM job", details: "{}", slurm_job_id);
             let slurm_sync = crate::slurm::status::SlurmStatusSync::new(&username);

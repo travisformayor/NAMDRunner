@@ -9,9 +9,23 @@ pub struct Template {
     pub description: String,
     pub namd_config_template: String,  // NAMD config with {{variables}}
     pub variables: HashMap<String, VariableDefinition>,
-    pub is_builtin: bool,  // True for embedded templates, false for user-created
     pub created_at: String,
     pub updated_at: String,
+}
+
+impl Template {
+    /// Get list of FileUpload variable keys from template
+    pub fn get_file_upload_keys(&self) -> Vec<String> {
+        self.variables
+            .iter()
+            .filter_map(|(key, var_def)| {
+                match var_def.var_type {
+                    VariableType::FileUpload { .. } => Some(key.clone()),
+                    _ => None,
+                }
+            })
+            .collect()
+    }
 }
 
 /// Variable definition describes a template variable's type and constraints
@@ -51,5 +65,4 @@ pub struct TemplateSummary {
     pub id: String,
     pub name: String,
     pub description: String,
-    pub is_builtin: bool,
 }

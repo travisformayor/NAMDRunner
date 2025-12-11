@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import type { ApiResult, JobPreset, ValidationResult } from '$lib/types/api';
   import ValidationDisplay from '../ui/ValidationDisplay.svelte';
-  import { jobPresets, partitions, allQosOptions, validateResourceRequest, calculateJobCost, estimateQueueTime, walltimeToHours } from '$lib/stores/clusterConfig';
+  import { jobPresets, partitions, allQosOptions, validateResourceRequest, calculateJobCost, estimateQueueTime } from '$lib/stores/clusterConfig';
   import PreviewModal from '../ui/PreviewModal.svelte';
 
   export let resourceConfig: {
@@ -38,24 +38,23 @@
   }
 
   async function updateCostEstimate() {
-    const walltimeHours = walltimeToHours(resourceConfig.walltime);
-    const partitionSpec = $partitions.find(p => p.id === resourceConfig.partition);
+    const partitionSpec = $partitions.find(p => p.name === resourceConfig.partition);
     const hasGpu = partitionSpec?.gpu_type ? true : false;
     const gpuCount = partitionSpec?.gpu_count || 1;
 
-    const totalCost = await calculateJobCost(resourceConfig.cores, walltimeHours, hasGpu, gpuCount);
+    const totalCost = await calculateJobCost(resourceConfig.cores, resourceConfig.walltime, hasGpu, gpuCount);
     const queueEstimate = await estimateQueueTime(resourceConfig.cores, resourceConfig.partition);
 
     costEstimate = { totalCost, queueEstimate };
   }
 
   function handlePresetSelect(preset: JobPreset) {
-    selectedPresetId = preset.id;
-    resourceConfig.cores = preset.config.cores;
-    resourceConfig.memory = preset.config.memory;
-    resourceConfig.walltime = preset.config.wall_time;
-    resourceConfig.partition = preset.config.partition;
-    resourceConfig.qos = preset.config.qos;
+    selectedPresetId = preset.name;
+    resourceConfig.cores = preset.cores;
+    resourceConfig.memory = preset.memory;
+    resourceConfig.walltime = preset.walltime;
+    resourceConfig.partition = preset.partition;
+    resourceConfig.qos = preset.qos;
   }
 
   async function handleScriptPreview() {
@@ -66,8 +65,8 @@
       cores: resourceConfig.cores,
       memory: resourceConfig.memory,
       walltime: resourceConfig.walltime,
-      partition: resourceConfig.partition || null,
-      qos: resourceConfig.qos || null,
+      partition: resourceConfig.partition,
+      qos: resourceConfig.qos,
     });
 
     if (result.success && result.data) {
@@ -92,11 +91,11 @@
         <button
           type="button"
           class="preset-pill"
-          class:selected={selectedPresetId === preset.id}
+          class:selected={selectedPresetId === preset.name}
           on:click={() => handlePresetSelect(preset)}
         >
           <span class="preset-name">{preset.name}</span>
-          <span class="preset-specs">({preset.config.cores}c, {preset.config.memory}, {preset.config.wall_time})</span>
+          <span class="preset-specs">({preset.cores}c, {preset.memory}, {preset.walltime})</span>
         </button>
       {/each}
     </div>
@@ -104,10 +103,10 @@
 
   <!-- Manual Configuration -->
   <div class="namd-section">
-    <details>
+    <details open>
       <summary class="manual-config-summary">Advanced: Manual Configuration</summary>
       <div class="resource-grid">
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="cores">Cores *</label>
           <input
             class="namd-input"
@@ -115,7 +114,7 @@
             type="number"
             bind:value={resourceConfig.cores}
             min="1"
-            max={parseInt($partitions.find(p => p.id === resourceConfig.partition)?.cores_per_node ?? '64')}
+            max={$partitions.find(p => p.name === resourceConfig.partition)?.max_cores ?? 64}
             class:error={errors.cores}
           />
           {#if errors.cores}
@@ -123,7 +122,7 @@
           {/if}
         </div>
 
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="memory">Memory *</label>
           <input
             class="namd-input"
@@ -138,7 +137,7 @@
           {/if}
         </div>
 
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="walltime">Wall Time *</label>
           <input
             class="namd-input"
@@ -153,7 +152,7 @@
           {/if}
         </div>
 
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="partition">Partition *</label>
           <select
             class="namd-input"
@@ -162,7 +161,7 @@
             class:error={errors.partition}
           >
             {#each $partitions as partition}
-              <option value={partition.id}>{partition.name} - {partition.title}</option>
+              <option value={partition.name}>{partition.title}</option>
             {/each}
           </select>
           {#if errors.partition}
@@ -170,7 +169,7 @@
           {/if}
         </div>
 
-        <div class="field-group">
+        <div class="namd-field-group">
           <label class="namd-label" for="qos">QoS *</label>
           <select
             class="namd-input"
@@ -179,7 +178,7 @@
             class:error={errors.qos}
           >
             {#each $allQosOptions as qos}
-              <option value={qos.id}>{qos.name} - {qos.description}</option>
+              <option value={qos.name}>{qos.title}</option>
             {/each}
           </select>
           {#if errors.qos}
@@ -243,7 +242,7 @@
   .section-description {
     color: var(--namd-text-secondary);
     margin: 0;
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
   }
 
   .preset-pills {
@@ -256,7 +255,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--namd-spacing-xs);
     padding: var(--namd-spacing-md);
     background: var(--namd-bg-primary);
     border: 2px solid var(--namd-border);
@@ -274,8 +273,13 @@
 
   .preset-pill.selected {
     border-color: var(--namd-primary);
-    background-color: rgba(59, 130, 246, 0.05);
-    box-shadow: var(--namd-shadow-md);
+    border-width: 3px;
+    background-color: var(--namd-primary-bg);
+    box-shadow: var(--namd-shadow-lg);
+  }
+
+  .preset-pill.selected .preset-name {
+    color: var(--namd-primary);
   }
 
   .preset-name {
@@ -303,12 +307,6 @@
     margin-top: var(--namd-spacing-md);
   }
 
-  .field-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--namd-spacing-xs);
-  }
-
   .error-text {
     color: var(--namd-error);
     font-size: var(--namd-font-size-xs);
@@ -329,12 +327,12 @@
 
   .validation-bar.valid {
     border-color: var(--namd-success);
-    background: rgba(46, 125, 50, 0.05);
+    background: var(--namd-success-bg);
   }
 
   .validation-bar.invalid {
     border-color: var(--namd-error);
-    background: rgba(220, 38, 38, 0.05);
+    background: var(--namd-error-bg);
   }
 
   .validation-status {
@@ -358,7 +356,7 @@
   }
 
   .stat-item {
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-secondary);
     font-family: var(--namd-font-mono);
   }

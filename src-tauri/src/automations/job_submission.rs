@@ -1,12 +1,23 @@
 use anyhow::{Result, anyhow};
-use tauri::AppHandle;
 use chrono::Utc;
 
-use crate::types::{JobStatus, response_data::JobSubmissionData};
-use crate::validation::paths;
+use crate::types::{JobInfo, JobStatus};
+use crate::ssh::paths;
 use crate::database::with_database;
 use crate::{log_info, log_debug, log_error};
 use crate::automations::common;
+
+/// Validate that a job is in a valid state for submission
+/// Returns Ok(()) if valid, Err with descriptive message if invalid
+pub fn validate_job_submission_state(job: &JobInfo) -> Result<()> {
+    if !matches!(job.status, JobStatus::Created | JobStatus::Failed) {
+        return Err(anyhow!(
+            "Job cannot be submitted because it is currently {:?}. Only Created or Failed jobs can be submitted.",
+            job.status
+        ));
+    }
+    Ok(())
+}
 
 /// Simplified job submission automation that follows NAMDRunner's direct function patterns.
 /// Provides progress reporting through callbacks.
@@ -14,10 +25,9 @@ use crate::automations::common;
 /// Key functionality: Creates scratch directories, copies files from project to scratch,
 /// submits to SLURM, and updates job status. This maintains proper workflow separation.
 pub async fn execute_job_submission_with_progress(
-    _app_handle: AppHandle,
     job_id: String,
     progress_callback: impl Fn(&str),
-) -> Result<JobSubmissionData> {
+) -> Result<JobInfo> {
     progress_callback("Loading job information...");
     log_info!(category: "Job Submission", message: "Starting job submission", details: "{}", job_id);
 
@@ -35,10 +45,9 @@ pub async fn execute_job_submission_with_progress(
     log_debug!(category: "Job Submission", message: "Loaded job", details: "{} (status: {:?})", job_id, job_info.status);
 
     // Validate job is in correct state for submission
-    if !matches!(job_info.status, JobStatus::Created | JobStatus::Failed) {
+    validate_job_submission_state(&job_info).inspect_err(|_e| {
         log_error!(category: "Job Submission", message: "Job cannot be submitted", details: "{} - status: {:?}", job_id, job_info.status);
-        return Err(anyhow!("Job cannot be submitted because it is currently {:?}. Only Created or Failed jobs can be submitted.", job_info.status));
-    }
+    })?;
 
     progress_callback("Validating connection...");
 
@@ -58,7 +67,7 @@ pub async fn execute_job_submission_with_progress(
     // Note: source must end with / to sync contents, destination should NOT end with / to create/sync into it
     let source_with_slash = common::ensure_trailing_slash(project_dir);
 
-    connection_manager.sync_directory_rsync(&source_with_slash, &scratch_dir).await
+    connection_manager.mirror_directory(&source_with_slash, &scratch_dir).await
         .map_err(|e| {
             log_error!(category: "Job Submission", message: "Failed to mirror directory to scratch", details: "{}", e);
             anyhow!("Failed to mirror job directory to scratch: {}", e)
@@ -115,10 +124,98 @@ pub async fn execute_job_submission_with_progress(
     progress_callback("Job submission completed successfully");
     log_info!(category: "Job Submission", message: "Job submitted successfully", details: "SLURM job ID: {}", slurm_job_id, show_toast: true);
 
-    Ok(JobSubmissionData {
-        job_id,
-        slurm_job_id,
-        submitted_at,
-    })
+    Ok(job_info)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn create_test_job(status: JobStatus) -> JobInfo {
+        JobInfo {
+            job_id: "test_job_123".to_string(),
+            job_name: "test_job".to_string(),
+            status,
+            created_at: Utc::now().to_rfc3339(),
+            updated_at: None,
+            submitted_at: None,
+            completed_at: None,
+            slurm_job_id: None,
+            project_dir: Some("/projects/testuser/namdrunner_jobs/test_job_123".to_string()),
+            scratch_dir: None,
+            error_info: None,
+            slurm_stdout: None,
+            slurm_stderr: None,
+            template_id: "test_template".to_string(),
+            template_values: HashMap::new(),
+            slurm_config: crate::types::SlurmConfig {
+                cores: 4,
+                memory: "16GB".to_string(),
+                walltime: "02:00:00".to_string(),
+                partition: "amilan".to_string(),
+                qos: "normal".to_string(),
+            },
+            input_files: vec![],
+            output_files: vec![],
+        }
+    }
+
+    #[test]
+    fn test_validate_job_submission_state_created() {
+        let job = create_test_job(JobStatus::Created);
+        let result = validate_job_submission_state(&job);
+        assert!(result.is_ok(), "Created jobs should be submittable");
+    }
+
+    #[test]
+    fn test_validate_job_submission_state_failed() {
+        let job = create_test_job(JobStatus::Failed);
+        let result = validate_job_submission_state(&job);
+        assert!(result.is_ok(), "Failed jobs should be resubmittable");
+    }
+
+    #[test]
+    fn test_validate_job_submission_state_pending() {
+        let job = create_test_job(JobStatus::Pending);
+        let result = validate_job_submission_state(&job);
+        assert!(result.is_err(), "Pending jobs should not be submittable");
+        assert!(result.unwrap_err().to_string().contains("Pending"));
+    }
+
+    #[test]
+    fn test_validate_job_submission_state_running() {
+        let job = create_test_job(JobStatus::Running);
+        let result = validate_job_submission_state(&job);
+        assert!(result.is_err(), "Running jobs should not be submittable");
+        assert!(result.unwrap_err().to_string().contains("Running"));
+    }
+
+    #[test]
+    fn test_validate_job_submission_state_completed() {
+        let job = create_test_job(JobStatus::Completed);
+        let result = validate_job_submission_state(&job);
+        assert!(result.is_err(), "Completed jobs should not be submittable");
+        assert!(result.unwrap_err().to_string().contains("Completed"));
+    }
+
+    #[test]
+    fn test_validate_job_submission_state_cancelled() {
+        let job = create_test_job(JobStatus::Cancelled);
+        let result = validate_job_submission_state(&job);
+        assert!(result.is_err(), "Cancelled jobs should not be submittable");
+        assert!(result.unwrap_err().to_string().contains("Cancelled"));
+    }
+
+    #[test]
+    fn test_validate_job_submission_error_message() {
+        let job = create_test_job(JobStatus::Running);
+        let result = validate_job_submission_state(&job);
+        assert!(result.is_err());
+
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("cannot be submitted"));
+        assert!(error_msg.contains("Created or Failed"));
+    }
 }
 

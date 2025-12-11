@@ -1,8 +1,7 @@
 <script lang="ts">
   import type { JobInfo } from '../../types/api';
   import OverviewTab from './tabs/OverviewTab.svelte';
-  import InputFilesTab from './tabs/InputFilesTab.svelte';
-  import OutputFilesTab from './tabs/OutputFilesTab.svelte';
+  import FileListTab from './tabs/FileListTab.svelte';
   import SlurmLogsTab from './tabs/SlurmLogsTab.svelte';
 
   export let job: JobInfo;
@@ -38,9 +37,9 @@
     {#if activeTab === 'overview'}
       <OverviewTab {job} />
     {:else if activeTab === 'input-files'}
-      <InputFilesTab {job} />
+      <FileListTab {job} type="input" />
     {:else if activeTab === 'output-files'}
-      <OutputFilesTab {job} />
+      <FileListTab {job} type="output" />
     {:else if activeTab === 'slurm-logs'}
       <SlurmLogsTab {job} />
     {/if}

@@ -1,10 +1,13 @@
 <script lang="ts">
   import { isConnected, connectionState, sessionActions, lastError } from '../../stores/session';
+  import { clusterConfig } from '../../stores/clusterConfig';
 
   let isOpen = false;
-  let host = 'login.rc.colorado.edu'; // Pre-populated default value
   let username = '';
   let password = '';
+
+  // Reactive: update host when cluster config changes
+  $: host = $clusterConfig?.default_host || '';
   let isConnecting = false;
   let connectionError = '';
 
@@ -16,8 +19,7 @@
         return {
           label: 'Connected',
           color: 'namd-connection-connected',
-          dotColor: 'namd-connection-dot-connected',
-          since: '10:30 AM'
+          dotColor: 'namd-connection-dot-connected'
         };
       case 'Connecting':
         return {
@@ -62,7 +64,7 @@
       const success = await sessionActions.connect(host, username, password);
       if (success) {
         closeDropdown();
-        password = ''; // Clear password on successful connection
+        password = '';
       } else {
         // Connection failed, checking for error message
         // Get detailed error from session store instead of generic message
@@ -115,19 +117,18 @@
         <!-- Connected state -->
         <div class="connected-info">
           <div class="status-line">
-            <svg class="status-dot fill-green-600" width="8" height="8" viewBox="0 0 8 8">
+            <svg class="status-dot namd-connection-dot-connected" width="8" height="8" viewBox="0 0 8 8">
               <circle cx="4" cy="4" r="4" />
             </svg>
-            <span class="text-green-600">Connected</span>
+            <span class="namd-connection-connected">Connected</span>
           </div>
 
           <div class="connection-details">
             <div>Host: {host}</div>
             <div>User: {username}</div>
-            <div>Since: {statusInfo.since}</div>
           </div>
 
-          <button class="disconnect-button" on:click={handleDisconnect}>
+          <button class="namd-button namd-button--secondary" on:click={handleDisconnect}>
             Disconnect
           </button>
         </div>
@@ -145,6 +146,7 @@
             <div class="field-group">
               <label for="host">Host</label>
               <input
+                class="namd-input"
                 id="host"
                 type="text"
                 bind:value={host}
@@ -155,6 +157,7 @@
             <div class="field-group">
               <label for="username">Username</label>
               <input
+                class="namd-input"
                 id="username"
                 type="text"
                 bind:value={username}
@@ -165,6 +168,7 @@
             <div class="field-group">
               <label for="password">Password</label>
               <input
+                class="namd-input"
                 id="password"
                 type="password"
                 bind:value={password}
@@ -179,7 +183,7 @@
             {/if}
 
             <button
-              class="connect-button"
+              class="namd-button namd-button--primary"
               on:click={handleConnect}
               disabled={!host || !username || !password || isConnecting}
             >
@@ -206,8 +210,8 @@
     cursor: pointer;
     padding: var(--namd-spacing-sm);
     border-radius: var(--namd-border-radius-sm);
-    transition: background-color 0.15s ease;
-    font-size: var(--namd-font-size-sm);
+    transition: background-color var(--namd-transition-fast);
+    font-size: var(--namd-font-size-base);
   }
 
   .connection-trigger:hover {
@@ -218,45 +222,13 @@
     flex-shrink: 0;
   }
 
-  .status-dot.fill-green-600 {
-    fill: #059669;
-  }
-
-  .status-dot.fill-red-600 {
-    fill: #dc2626;
-  }
-
-  .status-dot.fill-yellow-600 {
-    fill: #d97706;
-  }
-
-  .status-dot.fill-gray-600 {
-    fill: #4b5563;
-  }
-
   .status-label {
     font-weight: var(--namd-font-weight-medium);
   }
 
-  .status-label.text-green-600 {
-    color: #059669;
-  }
-
-  .status-label.text-red-600 {
-    color: #dc2626;
-  }
-
-  .status-label.text-yellow-600 {
-    color: #d97706;
-  }
-
-  .status-label.text-gray-600 {
-    color: #4b5563;
-  }
-
   .chevron {
     flex-shrink: 0;
-    color: var(--namd-text-muted);
+    color: var(--namd-text-secondary);
   }
 
   .connection-dropdown-content {
@@ -267,10 +239,10 @@
     background-color: var(--namd-bg-primary);
     border: 1px solid var(--namd-border);
     border-radius: var(--namd-border-radius);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--namd-shadow-md);
     padding: var(--namd-spacing-md);
     margin-top: var(--namd-spacing-sm);
-    z-index: 50;
+    z-index: var(--namd-z-dropdown);
   }
 
   .connected-info {
@@ -291,15 +263,11 @@
     gap: var(--namd-spacing-sm);
   }
 
-  .text-green-600 {
-    color: #059669;
-  }
-
   .connection-details {
     display: flex;
     flex-direction: column;
     gap: var(--namd-spacing-xs);
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-primary);
   }
 
@@ -316,68 +284,22 @@
   }
 
   .field-group label {
-    font-size: var(--namd-font-size-sm);
+    font-size: var(--namd-font-size-base);
     font-weight: var(--namd-font-weight-medium);
     color: var(--namd-text-primary);
   }
 
-  .field-group input {
-    padding: var(--namd-spacing-sm);
-    border: 1px solid var(--namd-border);
-    border-radius: var(--namd-border-radius-sm);
-    background-color: var(--namd-bg-primary);
-    color: var(--namd-text-primary);
-    font-size: var(--namd-font-size-sm);
-  }
-
-  .field-group input:focus {
-    outline: none;
-    border-color: var(--namd-primary);
-  }
-
-  .disconnect-button,
-  .connect-button {
-    padding: var(--namd-spacing-sm) var(--namd-spacing-md);
-    border-radius: var(--namd-border-radius-sm);
-    font-size: var(--namd-font-size-sm);
-    font-weight: var(--namd-font-weight-medium);
-    cursor: pointer;
-    transition: all 0.15s ease;
+  .namd-button {
     width: 100%;
-  }
-
-  .disconnect-button {
-    background-color: transparent;
-    border: 1px solid var(--namd-border);
-    color: var(--namd-text-primary);
-  }
-
-  .disconnect-button:hover {
-    background-color: var(--namd-bg-muted);
-  }
-
-  .connect-button {
-    background-color: var(--namd-primary);
-    border: 1px solid var(--namd-primary);
-    color: var(--namd-primary-fg);
-  }
-
-  .connect-button:hover:not(:disabled) {
-    background-color: var(--namd-primary-hover);
-  }
-
-  .connect-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .connection-error {
     padding: var(--namd-spacing-sm);
-    background-color: rgba(220, 38, 38, 0.1);
-    border: 1px solid rgba(220, 38, 38, 0.3);
+    background-color: var(--namd-error-bg);
+    border: 1px solid var(--namd-error-border);
     border-radius: var(--namd-border-radius-sm);
-    color: #dc2626;
-    font-size: var(--namd-font-size-sm);
+    color: var(--namd-error);
+    font-size: var(--namd-font-size-base);
     text-align: center;
   }
 </style>

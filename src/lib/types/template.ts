@@ -4,7 +4,6 @@ export interface TemplateSummary {
   id: string;
   name: string;
   description: string;
-  is_builtin: boolean;
 }
 
 export interface Template {
@@ -13,7 +12,6 @@ export interface Template {
   description: string;
   namd_config_template: string;
   variables: Record<string, VariableDefinition>;
-  is_builtin: boolean;
   created_at: string;
   updated_at: string;
 }

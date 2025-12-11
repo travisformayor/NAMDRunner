@@ -15,11 +15,13 @@ pub struct FileTransferProgress {
     pub total_bytes: u64,
     pub percentage: f32,
     pub transfer_rate: f64, // bytes per second
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
 }
 
 /// File information from SFTP
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct RemoteFileInfo {
+pub struct SftpFileEntry {
     pub name: String,
     pub path: String,
     pub size: u64,
@@ -92,6 +94,7 @@ impl<'a> SFTPOperations<'a> {
             total_bytes: file_size,
             percentage: 100.0,
             transfer_rate,
+            file_name: None,
         })
     }
 
@@ -114,7 +117,7 @@ impl<'a> SFTPOperations<'a> {
         let file_size = local_file.metadata()?.len();
         let file_name = local_path.file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or("unknown")
+            .ok_or_else(|| SSHError::FileTransferError(format!("Failed to extract filename from path: {:?}", local_path)))?
             .to_string();
 
         let mut reader = BufReader::with_capacity(CHUNK_SIZE, local_file);
@@ -186,6 +189,7 @@ impl<'a> SFTPOperations<'a> {
             total_bytes: file_size,
             percentage: (bytes_transferred as f32 / file_size as f32) * 100.0,
             transfer_rate,
+            file_name: None,
         })
     }
 
@@ -202,7 +206,10 @@ impl<'a> SFTPOperations<'a> {
         let stat = sftp.stat(Path::new(remote_path))
             .map_err(|e| SSHError::FileTransferError(format!("Failed to stat remote file: {}", e)))?;
 
-        let file_size = stat.size.unwrap_or(0);
+        let file_size = stat.size.ok_or_else(|| {
+            crate::log_error!(category: "SFTP", message: "File size unavailable", details: "File: {}", remote_path);
+            SSHError::FileTransferError(format!("File size not available for: {}", remote_path))
+        })?;
 
         // Open remote file
         let mut remote_file = sftp.open(Path::new(remote_path))
@@ -250,11 +257,12 @@ impl<'a> SFTPOperations<'a> {
             total_bytes: file_size,
             percentage: (bytes_transferred as f32 / file_size as f32) * 100.0,
             transfer_rate,
+            file_name: None,
         })
     }
 
     /// List files in a directory
-    pub fn list_directory(&self, remote_path: &str) -> Result<Vec<RemoteFileInfo>> {
+    pub fn list_directory(&self, remote_path: &str) -> Result<Vec<SftpFileEntry>> {
         let sftp = self.get_sftp()?;
 
         let mut files = Vec::new();
@@ -264,55 +272,30 @@ impl<'a> SFTPOperations<'a> {
         for (path, stat) in entries {
             let name = path.file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("unknown")
+                .ok_or_else(|| SSHError::FileTransferError(format!("Failed to extract filename from path: {:?}", path)))?
                 .to_string();
 
-            files.push(RemoteFileInfo {
-                name: name.clone(),
-                path: path.to_string_lossy().to_string(),
-                size: stat.size.unwrap_or(0),
-                is_directory: stat.is_dir(),
-                permissions: stat.perm.unwrap_or(0),
-                modified_time: stat.mtime,
-            });
-        }
-
-        Ok(files)
-    }
-
-    /// List files in a directory with metadata formatted for OutputFile
-    /// Only returns regular files (not directories)
-    pub fn list_files_with_metadata(&self, remote_path: &str) -> Result<Vec<crate::types::OutputFile>> {
-        let sftp = self.get_sftp()?;
-
-        let mut files = Vec::new();
-        let entries = sftp.readdir(Path::new(remote_path))
-            .map_err(|e| SSHError::FileTransferError(format!("Failed to list directory: {}", e)))?;
-
-        for (path, stat) in entries {
-            // Only include regular files, skip directories
-            if !stat.is_file() {
-                continue;
-            }
-
-            let name = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-
-            // Format timestamp as RFC3339 string
-            let modified_at = if let Some(mtime) = stat.mtime {
-                chrono::DateTime::from_timestamp(mtime as i64, 0)
-                    .map(|dt| dt.to_rfc3339())
-                    .unwrap_or_else(|| "unknown".to_string())
+            let size = if stat.is_dir() {
+                0
             } else {
-                "unknown".to_string()
+                stat.size.ok_or_else(|| {
+                    crate::log_error!(category: "SFTP", message: "File size unavailable", details: "File: {:?}", path);
+                    SSHError::FileTransferError(format!("File size not available for: {:?}", path))
+                })?
             };
 
-            files.push(crate::types::OutputFile {
-                name,
-                size: stat.size.unwrap_or(0),
-                modified_at,
+            let permissions = stat.perm.ok_or_else(|| {
+                crate::log_error!(category: "SFTP", message: "File permissions unavailable", details: "File: {:?}", path);
+                SSHError::FileTransferError(format!("File permissions not available for: {:?}", path))
+            })?;
+
+            files.push(SftpFileEntry {
+                name: name.clone(),
+                path: path.to_string_lossy().to_string(),
+                size,
+                is_directory: stat.is_dir(),
+                permissions,
+                modified_time: stat.mtime,
             });
         }
 
@@ -357,7 +340,7 @@ impl<'a> SFTPOperations<'a> {
     }
 
     /// Get file or directory information
-    pub fn stat(&self, remote_path: &str) -> Result<RemoteFileInfo> {
+    pub fn stat(&self, remote_path: &str) -> Result<SftpFileEntry> {
         let sftp = self.get_sftp()?;
 
         let stat = sftp.stat(Path::new(remote_path))
@@ -366,15 +349,29 @@ impl<'a> SFTPOperations<'a> {
         let name = Path::new(remote_path)
             .file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or("unknown")
+            .ok_or_else(|| SSHError::FileTransferError(format!("Failed to extract filename from path: {}", remote_path)))?
             .to_string();
 
-        Ok(RemoteFileInfo {
+        let size = if stat.is_dir() {
+            0
+        } else {
+            stat.size.ok_or_else(|| {
+                crate::log_error!(category: "SFTP", message: "File size unavailable", details: "File: {}", remote_path);
+                SSHError::FileTransferError(format!("File size not available for: {}", remote_path))
+            })?
+        };
+
+        let permissions = stat.perm.ok_or_else(|| {
+            crate::log_error!(category: "SFTP", message: "File permissions unavailable", details: "File: {}", remote_path);
+            SSHError::FileTransferError(format!("File permissions not available for: {}", remote_path))
+        })?;
+
+        Ok(SftpFileEntry {
             name,
             path: remote_path.to_string(),
-            size: stat.size.unwrap_or(0),
+            size,
             is_directory: stat.is_dir(),
-            permissions: stat.perm.unwrap_or(0),
+            permissions,
             modified_time: stat.mtime,
         })
     }
@@ -406,6 +403,7 @@ mod tests {
             total_bytes: 10000,
             percentage: 50.0,
             transfer_rate: 1000.0,
+            file_name: None,
         };
 
         assert_eq!(progress.bytes_transferred, 5000);
@@ -416,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_remote_file_info() {
-        let info = RemoteFileInfo {
+        let info = SftpFileEntry {
             name: "test.txt".to_string(),
             path: "/home/user/test.txt".to_string(),
             size: 1024,
@@ -458,6 +456,7 @@ mod tests {
             total_bytes: 10000,
             percentage: 10.0,
             transfer_rate: 500.0, // 500 bytes/sec
+            file_name: None,
         };
 
         let fast_transfer = FileTransferProgress {
@@ -465,6 +464,7 @@ mod tests {
             total_bytes: 10000,
             percentage: 50.0,
             transfer_rate: 2048.0, // 2KB/sec
+            file_name: None,
         };
 
         // Verify our rate calculations make sense
@@ -478,6 +478,7 @@ mod tests {
             total_bytes: 1000,
             percentage: 10.0,
             transfer_rate: 0.0,
+            file_name: None,
         };
         assert_eq!(stalled_transfer.transfer_rate, 0.0);
     }
