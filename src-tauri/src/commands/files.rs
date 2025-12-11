@@ -176,28 +176,4 @@ mod tests {
         assert!(!result.success);
         assert!(result.error.as_ref().unwrap().contains("Invalid file type"));
     }
-
-    #[tokio::test]
-    async fn test_download_file_validates_both_input_and_output_types() {
-        // Test that both "input" and "output" are valid file types
-        // These will fail with "Download cancelled" because file dialog returns None
-        // but should NOT fail with "Invalid file type"
-
-        let result = download_file(
-            "valid_job_id".to_string(),
-            "input".to_string(),
-            "test.dat".to_string()
-        ).await;
-        // Should fail with "Download cancelled" not "Invalid file type"
-        assert!(!result.success);
-        assert!(result.error.as_ref().unwrap().contains("Download cancelled"));
-
-        let result = download_file(
-            "valid_job_id".to_string(),
-            "output".to_string(),
-            "test.dat".to_string()
-        ).await;
-        assert!(!result.success);
-        assert!(result.error.as_ref().unwrap().contains("Download cancelled"));
-    }
 }

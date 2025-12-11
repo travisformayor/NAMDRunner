@@ -1,7 +1,7 @@
 use crate::types::*;
 use crate::types::commands::ValidateJobConfigParams;
-use crate::validation::input;
-use crate::validation::job_validation::ValidationResult;
+use crate::security::input;
+use crate::validation::job::ValidationResult;
 use crate::database::with_database;
 use crate::commands::helpers;
 use crate::automations;
@@ -201,5 +201,5 @@ pub async fn preview_slurm_script(
 /// Checks job name, template selection, template values, and resource configuration
 #[tauri::command(rename_all = "snake_case")]
 pub async fn validate_job_config(params: ValidateJobConfigParams) -> ValidationResult {
-    crate::validation::job_validation::validate_job_config(params).await
+    crate::validation::job::validate_job_config(params).await
 }

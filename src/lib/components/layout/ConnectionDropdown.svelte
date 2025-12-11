@@ -3,9 +3,11 @@
   import { clusterConfig } from '../../stores/clusterConfig';
 
   let isOpen = false;
-  let host = $clusterConfig?.default_host; // Pre-populated from cluster config
   let username = '';
   let password = '';
+
+  // Reactive: update host when cluster config changes
+  $: host = $clusterConfig?.default_host || '';
   let isConnecting = false;
   let connectionError = '';
 

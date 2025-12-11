@@ -168,8 +168,12 @@
   }
 
   .info-value {
-    font-size: var(--namd-font-size-md);
+    font-size: var(--namd-font-size-base);
     color: var(--namd-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .template-values {

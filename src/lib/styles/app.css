@@ -279,6 +279,7 @@ html, body {
   font-size: var(--namd-font-size-lg);
   font-weight: var(--namd-font-weight-semibold);
   color: var(--namd-text-primary);
+  line-height: 1.2;
 }
 
 .dialog-icon {
@@ -649,6 +650,14 @@ html, body {
 
 .namd-section:last-child {
   margin-bottom: 0;
+}
+
+/* Text Truncation Utility */
+.namd-text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 /* Form Field Utilities */

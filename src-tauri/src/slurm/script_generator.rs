@@ -148,7 +148,7 @@ impl SlurmScriptGenerator {
         Ok(())
     }
 
-    // See crate::templates::validation for template-based validation
+    // See crate::validation::template for template-based validation
 }
 
 #[cfg(test)]

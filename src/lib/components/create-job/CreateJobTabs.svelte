@@ -106,6 +106,10 @@
       <ResourcesTab bind:resourceConfig {errors} />
     {:else if activeTab === 'configure'}
       <ConfigureTab bind:jobName bind:templateId bind:templateValues bind:template {errors} />
+      <!-- Configuration validation feedback (job name, template fields) -->
+      <div class="namd-section">
+        <ValidationDisplay validation={validationResult} />
+      </div>
     {:else if activeTab === 'review'}
       <ReviewTab
         {jobName}
@@ -121,7 +125,4 @@
       />
     {/if}
   </div>
-
-  <!-- General validation feedback -->
-  <ValidationDisplay validation={validationResult} />
 </div>

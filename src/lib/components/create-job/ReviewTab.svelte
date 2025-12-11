@@ -243,6 +243,10 @@
     color: var(--namd-text-primary);
     font-family: var(--namd-font-mono);
     flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .error-indicator {

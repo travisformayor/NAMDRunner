@@ -37,8 +37,8 @@
   onMount(async () => {
     // Set defaults from backend
     if (defaultPartition && defaultQos) {
-      resourceConfig.partition = defaultPartition.id;
-      resourceConfig.qos = defaultQos.id;
+      resourceConfig.partition = defaultPartition.name;
+      resourceConfig.qos = defaultQos.name;
     }
 
     // Listen for file upload progress

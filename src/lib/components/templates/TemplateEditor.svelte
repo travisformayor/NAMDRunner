@@ -6,10 +6,10 @@
   import type { ApiResult } from '$lib/types/api';
   import { getVariableTypeName } from '$lib/types/template';
   import { extractVariablesFromTemplate, generateLabel } from '$lib/utils/template-utils';
-  import VariableEditor from './VariableEditor.svelte';
+  import VariableForm from './VariableForm.svelte';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import PreviewModal from '../ui/PreviewModal.svelte';
-  import Dialog from '../ui/Dialog.svelte';
+  import EditDialog from '../ui/EditDialog.svelte';
 
   // Props
   export let template: Template | null = null;
@@ -69,6 +69,7 @@
   let showVariableEditor = false;
   let editingVariable: any = null;
   let editingVariableKey: string | null = null;
+  let variableFormRef: VariableForm;
 
   // Test template state
   let showTestPreview = false;
@@ -146,8 +147,10 @@
     showVariableEditor = true;
   }
 
-  function handleVariableSaved(event: CustomEvent) {
-    const varDef = event.detail;
+  function handleVariableSave() {
+    if (!variableFormRef) return;
+
+    const varDef = variableFormRef.getVariableDefinition();
 
     // If editing existing variable and key changed, delete old key
     if (editingVariableKey && editingVariableKey !== varDef.key) {
@@ -314,18 +317,16 @@
 </div>
 
 <!-- Variable Editor Modal -->
-<Dialog open={showVariableEditor} size="md" onClose={handleVariableCancel}>
-  <svelte:fragment slot="header">
-    <h2 class="dialog-title">Variable Editor</h2>
+<EditDialog
+  isOpen={showVariableEditor}
+  title="Variable Editor"
+  onSave={handleVariableSave}
+  onClose={handleVariableCancel}
+>
+  <svelte:fragment slot="form">
+    <VariableForm bind:this={variableFormRef} bind:variable={editingVariable} />
   </svelte:fragment>
-  <svelte:fragment slot="body">
-    <VariableEditor
-      variable={editingVariable}
-      on:save={handleVariableSaved}
-      on:cancel={handleVariableCancel}
-    />
-  </svelte:fragment>
-</Dialog>
+</EditDialog>
 
 <!-- Test Template Preview -->
 <PreviewModal

@@ -38,7 +38,7 @@
   }
 
   async function updateCostEstimate() {
-    const partitionSpec = $partitions.find(p => p.id === resourceConfig.partition);
+    const partitionSpec = $partitions.find(p => p.name === resourceConfig.partition);
     const hasGpu = partitionSpec?.gpu_type ? true : false;
     const gpuCount = partitionSpec?.gpu_count || 1;
 
@@ -49,12 +49,12 @@
   }
 
   function handlePresetSelect(preset: JobPreset) {
-    selectedPresetId = preset.id;
-    resourceConfig.cores = preset.config.cores;
-    resourceConfig.memory = preset.config.memory;
-    resourceConfig.walltime = preset.config.wall_time;
-    resourceConfig.partition = preset.config.partition;
-    resourceConfig.qos = preset.config.qos;
+    selectedPresetId = preset.name;
+    resourceConfig.cores = preset.cores;
+    resourceConfig.memory = preset.memory;
+    resourceConfig.walltime = preset.walltime;
+    resourceConfig.partition = preset.partition;
+    resourceConfig.qos = preset.qos;
   }
 
   async function handleScriptPreview() {
@@ -91,11 +91,11 @@
         <button
           type="button"
           class="preset-pill"
-          class:selected={selectedPresetId === preset.id}
+          class:selected={selectedPresetId === preset.name}
           on:click={() => handlePresetSelect(preset)}
         >
           <span class="preset-name">{preset.name}</span>
-          <span class="preset-specs">({preset.config.cores}c, {preset.config.memory}, {preset.config.wall_time})</span>
+          <span class="preset-specs">({preset.cores}c, {preset.memory}, {preset.walltime})</span>
         </button>
       {/each}
     </div>
@@ -103,7 +103,7 @@
 
   <!-- Manual Configuration -->
   <div class="namd-section">
-    <details>
+    <details open>
       <summary class="manual-config-summary">Advanced: Manual Configuration</summary>
       <div class="resource-grid">
         <div class="namd-field-group">
@@ -114,7 +114,7 @@
             type="number"
             bind:value={resourceConfig.cores}
             min="1"
-            max={parseInt($partitions.find(p => p.id === resourceConfig.partition)?.cores_per_node ?? '64')}
+            max={$partitions.find(p => p.name === resourceConfig.partition)?.max_cores ?? 64}
             class:error={errors.cores}
           />
           {#if errors.cores}
@@ -161,7 +161,7 @@
             class:error={errors.partition}
           >
             {#each $partitions as partition}
-              <option value={partition.id}>{partition.name} - {partition.title}</option>
+              <option value={partition.name}>{partition.title}</option>
             {/each}
           </select>
           {#if errors.partition}
@@ -178,7 +178,7 @@
             class:error={errors.qos}
           >
             {#each $allQosOptions as qos}
-              <option value={qos.id}>{qos.name} - {qos.description}</option>
+              <option value={qos.name}>{qos.title}</option>
             {/each}
           </select>
           {#if errors.qos}
@@ -273,8 +273,13 @@
 
   .preset-pill.selected {
     border-color: var(--namd-primary);
+    border-width: 3px;
     background-color: var(--namd-primary-bg);
-    box-shadow: var(--namd-shadow-md);
+    box-shadow: var(--namd-shadow-lg);
+  }
+
+  .preset-pill.selected .preset-name {
+    color: var(--namd-primary);
   }
 
   .preset-name {

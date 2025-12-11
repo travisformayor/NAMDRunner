@@ -2,11 +2,21 @@
   import { consoleOpen, uiStore } from '../../stores/ui';
   import { onMount } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
+  import { invoke } from '@tauri-apps/api/core';
 
   interface ConsoleEntry {
     timestamp: string;
     type: 'ssh-command' | 'ssh-output' | 'app-debug';
     content: string;
+  }
+
+  interface AppLogMessage {
+    level: string;
+    category: string;
+    message: string;
+    details?: string;
+    show_toast: boolean;
+    timestamp: string;
   }
 
   let consoleEntries: ConsoleEntry[] = [];
@@ -20,30 +30,45 @@
     addEntry('app-debug', content);
   }
 
+  function formatLogMessage(logData: AppLogMessage): string {
+    const logLevel = logData.level?.toLowerCase() || 'info';
+    const messageText = logData.details || logData.message;
+    const formattedMessage = `[${logLevel.toUpperCase()}] [${logData.category}] ${messageText}`;
+
+    // Add emoji based on log level
+    if (logLevel === 'error') {
+      return `🔴 ${formattedMessage}`;
+    } else if (logLevel === 'warn') {
+      return `🟡 ${formattedMessage}`;
+    } else if (logLevel === 'info') {
+      return `🔵 ${formattedMessage}`;
+    } else if (logLevel === 'debug') {
+      return `⚪ ${formattedMessage}`;
+    } else {
+      return formattedMessage;
+    }
+  }
+
   // Listen for backend logs via Tauri events
   onMount(() => {
-    // Listen for Rust logs from the backend (async setup)
     let unlisten: (() => void) | undefined;
 
     (async () => {
-      unlisten = await listen('app-log', (event: any) => {
-        const logData = event.payload;
-        const logLevel = logData.level?.toLowerCase() || 'info';
-        const messageText = logData.details || logData.message;
-        const formattedMessage = `[${logLevel.toUpperCase()}] [${logData.category}] ${messageText}`;
-
-        // Add to console with appropriate styling based on log level
-        if (logLevel === 'error') {
-          addDebugEntry(`🔴 ${formattedMessage}`);
-        } else if (logLevel === 'warn') {
-          addDebugEntry(`🟡 ${formattedMessage}`);
-        } else if (logLevel === 'info') {
-          addDebugEntry(`🔵 ${formattedMessage}`);
-        } else if (logLevel === 'debug') {
-          addDebugEntry(`⚪ ${formattedMessage}`);
-        } else {
-          addDebugEntry(formattedMessage);
+      // STEP 1: Fetch historical logs first (event sourcing)
+      try {
+        const historicalLogs = await invoke<AppLogMessage[]>('get_recent_logs');
+        // Populate console with historical logs
+        for (const log of historicalLogs) {
+          addDebugEntry(formatLogMessage(log));
         }
+      } catch (error) {
+        console.error('Failed to fetch historical logs:', error);
+      }
+
+      // STEP 2: Then attach event listener for real-time logs
+      unlisten = await listen('app-log', (event: any) => {
+        const logData = event.payload as AppLogMessage;
+        addDebugEntry(formatLogMessage(logData));
       });
     })();
 
