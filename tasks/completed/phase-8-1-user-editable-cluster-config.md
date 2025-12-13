@@ -12,30 +12,28 @@ Move hardcoded cluster settings from Rust constants to database, allowing users 
 
 ## Implementation Plan
 
-### Implementation Complete
+### Database Schema & Seeding
+- [x] Add `cluster_config` table to `database/mod.rs` schema (single row, JSON document)
+- [x] Create `src-tauri/cluster/alpine.json` with default `ClusterCapabilities`
+- [x] Add `CLUSTER_CONFIG_LOADED: AtomicBool` flag
+- [x] Implement `ensure_default_cluster_config_loaded()` following template pattern
+- [x] Add `save_cluster_config()`, `load_cluster_config()`, `delete_cluster_config()` database methods
+- [x] Call seeding from `initialize_app()` in `commands/app.rs`
 
-- [x] **Database Schema & Seeding**
-  - [x] Add `cluster_config` table to `database/mod.rs` schema (single row, JSON document)
-  - [x] Create `src-tauri/cluster/alpine.json` with default `ClusterCapabilities`
-  - [x] Add `CLUSTER_CONFIG_LOADED: AtomicBool` flag
-  - [x] Implement `ensure_default_cluster_config_loaded()` following template pattern
-  - [x] Add `save_cluster_config()`, `load_cluster_config()`, `delete_cluster_config()` database methods
-  - [x] Call seeding from `initialize_app()` in `commands/app.rs`
+### Type Refactoring (Rust)
+- [x] Delete unused types: `PartitionCategory`, `QosPriority`, `PartitionLimits`, `JobPresetConfig`
+- [x] Delete hardcoded functions: `alpine_capabilities()`, `get_alpine_partitions()`, `get_alpine_qos()`, `get_alpine_presets()`, `get_partition_limits()`
+- [x] Update `PartitionSpec`: remove 7 display fields; add `max_cores`, `max_memory_per_core_gb`
+- [x] Update `QosSpec`: remove 4 unused fields; add `min_memory_gb`
+- [x] Simplify `JobPreset`: merge `JobPresetConfig` fields, remove 6 metadata fields
+- [x] Add `default_host: String` field to `ClusterCapabilities`
 
-- [x] **Type Refactoring (Rust)**
-  - [x] Delete unused types: `PartitionCategory`, `QosPriority`, `PartitionLimits`, `JobPresetConfig`
-  - [x] Delete hardcoded functions: `alpine_capabilities()`, `get_alpine_partitions()`, `get_alpine_qos()`, `get_alpine_presets()`, `get_partition_limits()`
-  - [x] Update `PartitionSpec`: remove 7 display fields; add `max_cores`, `max_memory_per_core_gb`
-  - [x] Update `QosSpec`: remove 4 unused fields; add `min_memory_gb`
-  - [x] Simplify `JobPreset`: merge `JobPresetConfig` fields, remove 6 metadata fields
+### Type Refactoring (TypeScript)
+- [x] Update `src/lib/types/api.ts` to match new Rust types exactly
+- [x] Remove `PartitionCategory` and `QosPriority` types
+- [x] Update all interfaces to match simplified structs
 
-- [x] **Type Refactoring (TypeScript)**
-  - [x] Update `src/lib/types/api.ts` to match new Rust types exactly
-  - [x] Remove `PartitionCategory` and `QosPriority` types
-  - [x] Update all interfaces to match simplified structs
-
-### Core Functionality
-- [x] **Cluster Config Loading (Fail-Fast, No Fallbacks)**
+### Cluster Config Loading (Fail-Fast, No Fallbacks)
   - [x] Modify `get_cluster_capabilities()` to load from cache (panics if cache empty)
   - [x] Add `CLUSTER_CONFIG_CACHE` with RwLock for thread-safe access
   - [x] Update cache when config saved
@@ -83,38 +81,78 @@ Move hardcoded cluster settings from Rust constants to database, allowing users 
   - [x] Fix `CreateJobPage.svelte`: change `.id` to `.name` for partition/QoS defaults
   - [x] Fix `calculate_job_cost()`: read billing rates from cache instead of hardcoded
 
-- [x] **Code Quality Improvements**
-  - [x] Created `EditDialog.svelte` reusable component (eliminates dialog boilerplate)
-  - [x] Eliminated ~912 lines of code (unused types + hardcoded data)
-  - [x] Fail-fast architecture with no silent fallbacks
+### Command Architecture
+- [x] Create `commands/cluster.rs` with command wrappers
+- [x] Create `commands/validation.rs` with validation command wrappers
+- [x] Move all Tauri commands out of business logic modules into `commands/`
+- [x] Update lib.rs registrations to use `commands::cluster::*` and `commands::validation::*`
+
+### Module Restructuring
+- [x] Reorganize `validation.rs` into `validation/` directory (`job.rs`, `template.rs`)
+- [x] Reorganize `security.rs` into `security/` directory (`credentials.rs`, `input.rs`, `shell.rs`)
+- [x] Create `ssh/paths.rs` for path utilities
+- [x] Update all imports across codebase (14+ files)
+
+### Settings Page UI
+- [x] Add collapsible subsections: Default Host, Job Presets, Partitions, QoS, Billing
+- [x] Sections start collapsed by default
+- [x] Add default host configuration subsection
+- [x] Implement exclusive default selection (radio-button behavior with checkboxes)
+- [x] Add dynamic "Default" badges on cards
+- [x] Use `ConfirmDialog` for delete operations (not window.confirm)
+
+### Component Architecture
+- [x] Create `EditDialog.svelte` reusable wrapper component
+- [x] Rename `VariableEditor.svelte` to `VariableForm.svelte`
+- [x] Update `Dialog.svelte` to always render header/body/footer (no conditionals)
+- [x] Unify dialog header spacing (reduce padding)
+
+### Logging System
+- [x] Implement log buffer in `logging.rs` (500 entry limit)
+- [x] Create `get_recent_logs()` command for event sourcing
+- [x] Update LogsPanel to fetch historical logs on mount
+- [x] Fix race condition where startup logs were lost
+
+### Bug Fixes
+- [x] Fix `ResourcesTab.svelte`: change `cores_per_node` parsing to use `max_cores`
+- [x] Fix `CreateJobPage.svelte`: change `.id` to `.name` for partition/QoS defaults
+- [x] Fix `calculate_job_cost()`: read billing rates from cache instead of hardcoded
+- [x] Fix validation command registration (move to commands/, remove rename conflict)
+
+### Code Quality
+- [x] Eliminated ~912 lines of code (unused types + hardcoded data)
+- [x] Fail-fast architecture with no silent fallbacks
+- [x] All commands in `commands/` directory (clean separation)
+- [x] cluster.rs: 807→483 lines (-40%)
 
 ## Success Criteria
 
 ### Functional Success
-- [ ] User can view all cluster configuration in Settings page
-- [ ] User can edit partition properties (name, title, description, max_cores, max_memory_per_core_gb, GPU settings, is_default)
-- [ ] User can add new partitions
-- [ ] User can delete partitions (with cascade to presets)
-- [ ] User can edit QoS properties (name, title, description, max_walltime_hours, valid_partitions, min_memory_gb, is_default)
-- [ ] User can add new QoS options
-- [ ] User can delete QoS options (with cascade to presets)
-- [ ] User can edit job presets
-- [ ] User can add/delete job presets
-- [ ] User can edit billing rates
-- [ ] User can reset all config to defaults
-- [ ] Job creation workflow still works with edited config
-- [ ] Resource validation uses edited config values
+- [x] User can view all cluster configuration in Settings page
+- [x] User can edit partition properties (name, title, description, max_cores, max_memory_per_core_gb, GPU settings, is_default)
+- [x] User can add new partitions
+- [x] User can delete partitions (with cascade to presets)
+- [x] User can edit QoS properties (name, title, description, max_walltime_hours, valid_partitions, min_memory_gb, is_default)
+- [x] User can add new QoS options
+- [x] User can delete QoS options (with cascade to presets)
+- [x] User can edit job presets
+- [x] User can add/delete job presets
+- [x] User can edit billing rates
+- [x] User can edit default host
+- [x] User can reset all config to defaults
+- [x] Job creation workflow still works with edited config
+- [x] Resource validation uses edited config values
 
 ### Technical Success
-- [ ] No hardcoded cluster values used at runtime (only for initial seeding)
-- [ ] Config persists across app restarts
-- [ ] Existing jobs unaffected by config changes
-- [ ] All validation happens in backend
+- [x] No hardcoded cluster values used at runtime (only for initial seeding)
+- [x] Config persists across app restarts
+- [x] Existing jobs unaffected by config changes
+- [x] All validation happens in backend
 
 ### Quality Success
-- [ ] All new validation functions have unit tests
-- [ ] Build passes with no warnings
-- [ ] Code follows existing patterns (no duplicate types or parallel implementations)
+- [x] All new validation functions have unit tests
+- [x] Build passes with no warnings
+- [x] Code follows existing patterns (no duplicate types or parallel implementations)
 
 ## Key Technical Decisions
 
@@ -226,11 +264,6 @@ cluster::reset_cluster_config
 
 ## Completion Process
 After implementation and testing:
-- [ ] Run code review using `.claude/agents/review-refactor.md`
-- [ ] Implement recommended refactoring improvements
-- [ ] Update and archive task to `tasks/completed/phase-8-1-user-editable-cluster-config.md`
-- [ ] Update `tasks/roadmap.md` progress
-- [ ] Update `docs/ARCHITECTURE.md` with implementation details
-
-## Open Questions
-None - all decisions locked in during design phase.
+- [x] Run code review using `.claude/agents/review-refactor.md`
+- [x] Implement recommended refactoring improvements
+- [x] Update and archive task to `tasks/completed/phase-8-1-user-editable-cluster-config.md`

@@ -1,36 +1,32 @@
 # Database & Data Schemas
 
-This document defines all data persistence patterns for NAMDRunner, including SQLite storage, JSON metadata formats, validation rules, and data management strategies.
+**Data persistence patterns, SQLite storage, JSON metadata, and validation rules.**
 
-## Table of Contents
-- [Database Architecture](#database-architecture)
-- [Database Location](#database-location)
-- [SQLite Schema](#sqlite-schema)
-- [Database Management](#database-management)
-- [JSON Metadata Schema](#json-metadata-schema)
-  - [job_info.json (Server-Side)](#job_infojson-server-side)
-  - [Template Schema](#template-schema)
-  - [Template Values Schema](#template-values-schema)
-  - [OutputFile Schema](#outputfile-schema)
-- [File Organization](#file-organization)
-- [Validation Rules](#validation-rules)
-- [Data Type Mappings](#data-type-mappings)
-- [Best Practices](#best-practices)
+> See project README for project overview.
+>
+> **Related Docs:**
+>
+> - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture
+> - [API.md](API.md) - Type definitions
 
 ## Database Architecture
 
-**Design Philosophy**: Simple storage for job caching and template management. No complex schema, no migrations, minimal manual serialization.
+**Design Philosophy**: Simple storage for job caching, template management, and cluster configuration. No complex schema, no migrations, minimal manual serialization.
 
 ### Key Principles
+
 1. **Job Document Storage**: Entire `JobInfo` struct serialized as JSON in `jobs` table
 2. **Template Storage**: Templates stored with structured columns for easy querying, but variables serialized as JSON
-3. **No Schema Coupling**: Adding fields to Rust struct = automatic DB support via serde
-4. **Zero Migrations**: No backward compatibility needed - users can delete old DB
-5. **Performance**: SQLite operations are fast enough for desktop use (< 100 jobs typical)
+3. **Cluster Config Storage**: ClusterCapabilities serialized as JSON in `cluster_config` table
+4. **No Schema Coupling**: Adding fields to Rust struct = automatic DB support via serde
+5. **Zero Migrations**: No backward compatibility needed - users can delete old DB
+6. **Performance**: SQLite operations are fast enough for desktop use (< 100 jobs typical)
 
 ### When Data is Stored
+
 - **Local SQLite Jobs Table**: Job caching only - enables offline viewing of job list
 - **Local SQLite Templates Table**: Template definitions - embedded defaults loaded on first use, custom templates added by users
+- **Local SQLite Cluster Config Table**: Cluster capabilities - seeded from alpine.json, user-editable via Settings page
 - **Cluster (job_info.json)**: Single source of truth for job metadata (includes template_id and template_values)
 - **Sync Pattern**: Download from cluster → cache in SQLite → display in UI
 
@@ -39,11 +35,13 @@ This document defines all data persistence patterns for NAMDRunner, including SQ
 Database initialization occurs during app startup in the `.setup()` hook, where the `AppHandle` is available for platform-specific path resolution.
 
 **Development Builds:**
+
 - Path: `./namdrunner_dev.db` (current working directory)
 - Detected via `cfg!(debug_assertions)`
 - Allows easy inspection during development
 
 **Production Builds:**
+
 - Path resolved via Tauri's `app_data_dir()` API
 - Linux: `~/.local/share/namdrunner/namdrunner.db`
 - Windows: `%APPDATA%\namdrunner\namdrunner.db`
@@ -51,6 +49,7 @@ Database initialization occurs during app startup in the `.setup()` hook, where 
 - Directory created automatically if missing
 
 **Path Resolution:**
+
 ```rust
 pub fn get_database_path(app_handle: &tauri::AppHandle) -> Result<PathBuf> {
     if cfg!(debug_assertions) {
@@ -65,7 +64,7 @@ pub fn get_database_path(app_handle: &tauri::AppHandle) -> Result<PathBuf> {
 
 ## SQLite Schema
 
-**Two tables: jobs (document store) and templates (structured storage):**
+**Three tables: jobs (document store), templates (structured storage), and cluster_config (cluster capabilities):**
 
 ```sql
 -- Simple document store for job caching
@@ -88,11 +87,19 @@ CREATE TABLE IF NOT EXISTS templates (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- Cluster configuration - stores ClusterCapabilities as JSON
+CREATE TABLE IF NOT EXISTS cluster_config (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL
+);
 ```
 
 ### Why This Works
+
 - **Jobs table**: Document store pattern - serde handles serialization, no manual column mapping
 - **Templates table**: Structured columns for common fields (id, name, description) enable efficient listing, while variables serialized as JSON for flexibility
+- **Cluster config table**: Single-row document store for ClusterCapabilities - seeded from alpine.json on first run, user-editable via Settings page
 - **Easy to extend**: Add fields to Rust types, serde handles the rest
 - **JSON functions**: SQLite can query JSON directly (e.g., status index on jobs, template_id lookup)
 
@@ -112,6 +119,10 @@ let summaries = db.list_templates()?;                           // List all (id,
 db.delete_template("custom_template_v1")?;                      // Delete template
 let count = db.count_jobs_using_template("vacuum_optimization_v1")?;  // Count jobs using template
 
+// Cluster config operations
+db.save_cluster_config(&cluster_config)?;   // Save/update cluster config
+let config = db.load_cluster_config()?;     // Load cluster config
+
 // Embedded template loading (automatic on first use)
 ensure_default_templates_loaded()?;  // Idempotent - loads defaults if not already loaded
 ```
@@ -125,17 +136,20 @@ The application provides built-in database management operations accessible thro
 ### Operations
 
 **Get Database Info:**
+
 - Returns current database file path and size
 - Used for display in Settings UI
 - Path determined during app initialization
 
 **Backup Database:**
+
 - Opens OS file save dialog for user to choose backup location
 - Uses SQLite Backup API (`rusqlite::backup::Backup`) for safe online backups
 - Creates consistent snapshot even while database is in use
 - No application restart required
 
 **Restore Database:**
+
 - Opens OS file dialog for user to select backup file
 - Validates source file is a valid SQLite database
 - Closes current connection, replaces database file, reopens connection
@@ -144,6 +158,7 @@ The application provides built-in database management operations accessible thro
 - No application restart required
 
 **Reset Database:**
+
 - Deletes current database file
 - Reinitializes with fresh schema
 - Atomic operation - holds `DATABASE` lock throughout
@@ -179,15 +194,10 @@ pub fn reinitialize_database(db_path: &str) -> Result<()> {
 }
 ```
 
-**Key Points:**
-- Connection reinitializiation is safe - proper locking prevents concurrent access
-- All operations atomic (connection closed before file operation, reopened after)
-- Backup uses SQLite Backup API for consistency (no file-level copy during active use)
-- Frontend state reloads automatically after restore/reset
-
 ## JSON Metadata Schema
 
 ### job_info.json (Server-Side)
+
 This file is created in each job directory on the cluster and contains all job metadata. The schema is generated by serializing the `JobInfo` struct from `src-tauri/src/types/core.rs`.
 
 ```json
@@ -305,6 +315,7 @@ interface TemplateSummary {
 ```
 
 **Embedded Templates:**
+
 - Default templates are embedded in the binary using `include_str!` macro
 - Located in `src-tauri/templates/` directory (JSON files)
 - Loaded automatically on first `list_templates()` call
@@ -336,6 +347,7 @@ interface TemplateValues {
 ```
 
 **Template Rendering:**
+
 - During job submission, template values are substituted into `{{variable}}` placeholders in the NAMD config template
 - All variables are implicitly required - rendering fails if any placeholder is missing a value
 - FileUpload variables: filenames get "input_files/" prepended automatically (e.g., "hextube.psf" → "input_files/hextube.psf")
@@ -354,6 +366,7 @@ interface OutputFile {
 ```
 
 **When populated:**
+
 - Created during automatic job completion (when job reaches terminal state)
 - Backend does single batch SFTP readdir in project directory's outputs/
 - All output files queried at once (no per-file round trips)
@@ -366,6 +379,7 @@ The `input_files` field stores the list of uploaded input file names for the job
 **TypeScript:** `input_files: string[]`
 
 **Always populated:**
+
 - Set during job creation (empty array if no files uploaded)
 - Contains just filenames (e.g., `["structure.pdb", "parameters.prm"]`)
 - Used by InputFilesTab for display and download operations
@@ -374,6 +388,7 @@ The `input_files` field stores the list of uploaded input file names for the job
 ## File Organization
 
 ### Directory Structure
+
 ```
 /projects/$USER/namdrunner_jobs/
 └── {job_id}/
@@ -410,12 +425,14 @@ The `input_files` field stores the list of uploaded input file names for the job
 ```
 
 **Key Points:**
+
 - **Project directory**: Permanent storage, survives job completion
 - **Scratch directory**: Fast local storage during job run, auto-purged after 90 days
 - **Automatic rsync**: On job completion, scratch → project (data preservation)
 - **Metadata fetching**: Input file sizes fetched after upload, output file sizes fetched after job completion
 
 ### File Naming Conventions
+
 - **SLURM script**: `job.sbatch` (in job root)
 - **NAMD config**: `config.namd` (in job root)
 - **Job metadata**: `job_info.json` (in job root)
@@ -427,11 +444,13 @@ The `input_files` field stores the list of uploaded input file names for the job
 ## Validation Rules
 
 ### Job ID Format
+
 - **Pattern**: `{job_name}_{timestamp_millis}`
 - **Examples**: `test-1_1760733363035078`, `sim_alpha_1760040523960286`
 - **Globally unique** (timestamp component ensures uniqueness)
 
 ### File Path Validation
+
 - **No directory traversal** (`../`)
 - **Allowed file extensions**: `.pdb`, `.psf`, `.prm`, `.exb`, `.extra`, `.namd`, `.sbatch`, `.out`, `.err`, `.log`, `.dcd`, `.coor`, `.vel`, `.xsc`
 - **Size limits**: 1GB per file (configurable)
@@ -439,12 +458,14 @@ The `input_files` field stores the list of uploaded input file names for the job
 ### Parameter Ranges
 
 **Template Variables:**
+
 - Validation constraints are defined per-template in the `VariableDefinition.var_type` field
 - Number type variables include min/max/default constraints
 - FileUpload type variables include allowed file extensions
 - See Template Schema for details
 
 **SLURM Resources:**
+
 ```typescript
 interface SlurmValidation {
   cores: { min: 1, max: 64 };           // Single-node limit
@@ -456,6 +477,7 @@ interface SlurmValidation {
 ## Data Type Mappings
 
 ### TypeScript ↔ Rust
+
 ```rust
 // Core types
 pub type JobId = String;          // {name}_{timestamp}
@@ -496,6 +518,7 @@ pub enum NAMDFileType {
 ```
 
 ### SQLite JSON ↔ Rust
+
 ```rust
 // Save: serde_json::to_string(&job_info)
 // Load: serde_json::from_str::<JobInfo>(&json_data)
@@ -506,6 +529,7 @@ pub enum NAMDFileType {
 ## Best Practices
 
 ### Database Operations
+
 1. **Always use `with_database()` wrapper** for access
 2. **Synchronous is fine** - SQLite operations are microseconds, no async overhead needed
 3. **No connection pooling** - single-threaded desktop app, one connection is enough
@@ -514,29 +538,28 @@ pub enum NAMDFileType {
 6. **Use SQLite Backup API** - for consistent snapshots during active use
 
 ### Database Management
+
 1. **Backup before major changes** - users can backup via Settings page
-2. **Reset is safe** - sync auto-discovers jobs from cluster, templates can be recreated
+2. **Reset is safe** - sync auto-discovers from cluster metadata
 3. **Restore is atomic** - holds lock throughout operation, prevents concurrent access
 4. **No app restart needed** - connection reinitializes cleanly after restore/reset
 
 ### Schema Changes
+
 1. **No migrations** - users delete old DB file or use Reset feature
 2. **Add fields freely** - serde handles missing fields with `#[serde(default)]`
 3. **Breaking changes OK** - development phase, no backward compatibility burden
 
 ### Performance
+
 - **Typical dataset**: ~100 jobs cached locally
 - **Query time**: < 1ms for load_all_jobs()
 - **JSON parsing**: Negligible overhead for this data size
 - **Status index**: Fast filtering by job status
 
 ### Data Integrity
+
 1. **Server is source of truth** - SQLite is just a cache
 2. **Sync resolves conflicts** - download from server overwrites local
 3. **No complex sync logic** - simple replace-on-sync pattern
 4. **User can always re-sync** - if local DB corrupt, just sync or reset
-
----
-
-*For IPC interfaces and API contracts, see [`docs/API.md`](API.md).*
-*For cluster-specific file system details, see [`docs/reference/alpine-cluster-reference.md`](reference/alpine-cluster-reference.md).*

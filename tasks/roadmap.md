@@ -83,7 +83,7 @@ User-configurable cluster settings and application module management.
 
 **Why**: Cluster admins change configuration over time. User-editable settings prevent app breakage and eliminate need for code changes/rebuilds.
 
-**Implementation**: See detailed task plan in `tasks/active/phase-8-1-user-editable-cluster-config.md`
+**Implementation**: See detailed task plan in `tasks/completed/phase-8-1-user-editable-cluster-config.md`
 
 #### Milestone 8.2: App/Module Discovery and Management
 
