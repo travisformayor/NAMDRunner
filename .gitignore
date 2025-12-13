@@ -2,6 +2,7 @@
 .DS_Store
 
 # Development
+screenshots/unused/
 
 # Dependencies
 node_modules
